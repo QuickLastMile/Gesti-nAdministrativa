@@ -9,6 +9,7 @@
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
   /* ───── RESET & BASE ───── */
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -712,6 +713,11 @@
   .permission-tile input { width: auto; }
   .point-list { display: flex; flex-wrap: wrap; gap: 6px; }
   .point-chip { border: 1px solid rgba(245,197,24,.28); background: rgba(245,197,24,.08); color: var(--text-1); padding: 5px 8px; border-radius: 999px; font-size: 11px; }
+  .subtabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+  .subtab { height: 34px; border-radius: 10px; border: 1px solid var(--border); background: var(--card-bg); color: var(--text-2); padding: 0 12px; font-weight: 800; }
+  .subtab.on { color: #0b0b0b; background: linear-gradient(135deg,#F5C518,#C9A200); border-color: transparent; }
+  .dropzone { border: 1px dashed rgba(245,197,24,.45); border-radius: 16px; padding: 14px; background: rgba(245,197,24,.07); display: grid; gap: 8px; }
+  .dropzone input { max-width: 420px; }
   .light-mode .map-side { background: rgba(255,255,255,.88); }
   .light-mode .leaflet-map { border-color: rgba(18,18,18,.38); }
   @media (max-width: 980px) { .map-layout { grid-template-columns: 1fr; } .map-side { max-height: none; } .permission-grid { grid-template-columns: 1fr; } }
@@ -762,10 +768,10 @@
     </div>
 
     <div class="sb-section">Principal</div>
-    <div class="nav-item active" onclick="nav('dashboard',this)">
+    <div class="nav-item" onclick="nav('dashboard',this)">
       <i class="ti ti-layout-dashboard"></i> Dashboard
     </div>
-    <div class="nav-item" onclick="nav('mallas',this)">
+    <div class="nav-item active" onclick="nav('mallas',this)">
       <i class="ti ti-calendar-event"></i> Mallas
       <span class="nbadge">3</span>
     </div>
@@ -782,14 +788,14 @@
       <i class="ti ti-ticket"></i> Tickets
       <span class="nbadge">4</span>
     </div>
-    <div class="nav-item" onclick="nav('evidencias',this)">
-      <i class="ti ti-photo"></i> Evidencias
-    </div>
     <div class="nav-item" onclick="nav('quickers',this)">
       <i class="ti ti-users"></i> Quickers
     </div>
-    <div class="nav-item" onclick="nav('mensajero',this)">
-      <i class="ti ti-device-mobile"></i> App Mensajero
+    <div class="nav-item" onclick="nav('matriz',this)">
+      <i class="ti ti-table-import"></i> Matriz Activos
+    </div>
+    <div class="nav-item" onclick="nav('hsq',this)">
+      <i class="ti ti-shield-check"></i> HSQ / Alertas
     </div>
 
     <div class="sb-section">Administración</div>
@@ -798,9 +804,6 @@
     </div>
     <div class="nav-item" onclick="nav('reportes',this)">
       <i class="ti ti-chart-bar"></i> Reportes
-    </div>
-    <div class="nav-item" onclick="nav('bd',this)">
-      <i class="ti ti-database"></i> Modelo de Datos
     </div>
 
     <div class="sb-bottom">
@@ -820,8 +823,8 @@
   <!-- ═══ MAIN ═══ -->
   <div id="main">
     <div id="topbar">
-      <span class="tb-title" id="tb-title">Dashboard</span>
-      <span class="tb-crumb" id="tb-crumb">/ Inicio</span>
+      <span class="tb-title" id="tb-title">Mallas</span>
+      <span class="tb-crumb" id="tb-crumb">/ Operaciones</span>
       <div class="tb-spacer"></div>
       <div class="tb-search"><i class="ti ti-search"></i><input id="global-search" placeholder="Buscar módulo o Quicker..."></div>
       <button class="dev-btn primary" id="quick-create"><i class="ti ti-plus"></i> Nuevo registro</button>
@@ -840,7 +843,7 @@
     <div id="content">
 
       <!-- ════════════════════ DASHBOARD ════════════════════ -->
-      <div class="page active" id="page-dashboard">
+      <div class="page" id="page-dashboard">
         <div class="kpi-row">
           <div class="kpi-card q-accent">
             <i class="ti ti-run kpi-icon"></i>
@@ -973,7 +976,7 @@
       </div>
 
       <!-- ════════════════════ MALLAS ════════════════════ -->
-      <div class="page" id="page-mallas">
+      <div class="page active" id="page-mallas">
         <div class="kpi-row">
           <div class="kpi-card q-accent"><i class="ti ti-calendar kpi-icon"></i><div class="kpi-label">Mallas esta semana</div><div class="kpi-value yellow">14</div><div class="kpi-delta"><i class="ti ti-building"></i> 4 clientes activos</div></div>
           <div class="kpi-card grad-purple"><i class="ti ti-clock kpi-icon"></i><div class="kpi-label">Pendientes validar</div><div class="kpi-value">3</div><div class="kpi-delta"><i class="ti ti-alert-circle"></i> Requieren atención</div></div>
@@ -1164,6 +1167,20 @@
               <tr><td class="link">PE5541</td><td>Pedro Estrada</td><td>Distribución</td><td>Laura Ríos</td><td><span class="b b-red">SOAT vencido</span></td><td><span class="b b-red">Suspendido</span></td></tr>
             </tbody>
           </table>
+        </div>
+      </div>
+
+      <!-- ════════════════════ MATRIZ ACTIVOS ════════════════════ -->
+      <div class="page" id="page-matriz">
+        <div class="card">
+          <div class="card-head"><div><div class="card-title">Matriz de activos</div><div class="card-sub">Base maestra para autocompletar Quickers por cédula</div></div></div>
+        </div>
+      </div>
+
+      <!-- ════════════════════ HSQ / ALERTAS ════════════════════ -->
+      <div class="page" id="page-hsq">
+        <div class="card">
+          <div class="card-head"><div><div class="card-title">HSQ / Seguridad y calidad</div><div class="card-sub">SOAT, capacitaciones, comparendos y llamados de atención</div></div></div>
         </div>
       </div>
 
@@ -1367,12 +1384,11 @@ const pageInfo = {
   mapa:       ['Mapa en Vivo',   '/ Operaciones'],
   novedades:  ['Novedades',      '/ Operaciones'],
   tickets:    ['Tickets',        '/ Operaciones'],
-  evidencias: ['Evidencias',     '/ Operaciones'],
   quickers:   ['Quickers',       '/ Operaciones'],
-  mensajero:  ['App Mensajero',   '/ Operación móvil'],
+  matriz:     ['Matriz Activos',  '/ Administración'],
+  hsq:        ['HSQ / Alertas',   '/ Seguridad'],
   casos:      ['Casos Admin',    '/ Administración'],
   reportes:   ['Reportes',       '/ Administración'],
-  bd:         ['Modelo de Datos','/ Referencia técnica'],
   config:     ['Configuración',  '/ Sistema'],
 };
 
@@ -1401,12 +1417,12 @@ function toggleMode() {
 /* ───── MVP LOCAL: DATA, CRUD, STATE & EXPORTS ───── */
 (() => {
   const STORAGE_KEY = 'quick_lastmile_mvp_state_v1';
-  let activeModule = 'dashboard';
+  let activeModule = 'mallas';
 
   const seed = {
     clients: [
-      { id: 'CLI-001', idProyecto: 'CC-1024', name: 'Farmacias Andina', delayRule: 30, lunch: 'Si', approval: 'Activa', evidenceRule: 'Inicio 2 fotos / cierre 1 foto', alerts: 'KML + permanencia 30m', points: ['Santa Bárbara', 'Chapinero'], lat: 4.687, lng: -74.050 },
-      { id: 'CLI-002', idProyecto: 'CC-2032', name: 'Retail Express', delayRule: 120, lunch: 'No', approval: 'No aplica', evidenceRule: 'Foto cierre opcional', alerts: 'Retardo + no colocado', points: ['Portal 80'], lat: 4.710, lng: -74.110 }
+      { id: 'CLI-001', idProyecto: 'CC-1024', name: 'Farmacias Andina', delayRule: 30, lunch: 'Si', approval: 'Activa', evidenceRule: 'Ingreso 2 fotos / salida 2 fotos', alerts: 'KML + permanencia 30m', points: [{ name: 'Santa Bárbara', city: 'Bogotá', address: 'Santa Bárbara', lunch: 'Si', approval: 'Si', hasKml: 'Si', photosIn: 2, photosOut: 2, extraPhotos: '' }, { name: 'Chapinero', city: 'Bogotá', address: 'Chapinero', lunch: 'Si', approval: 'Si', hasKml: 'Si', photosIn: 2, photosOut: 2, extraPhotos: '' }], lat: 4.687, lng: -74.050 },
+      { id: 'CLI-002', idProyecto: 'CC-2032', name: 'Retail Express', delayRule: 120, lunch: 'No', approval: 'No aplica', evidenceRule: 'Ingreso 2 fotos / salida 2 fotos', alerts: 'Retardo + no colocado', points: [{ name: 'Portal 80', city: 'Bogotá', address: 'Portal 80', lunch: 'No', approval: 'No', hasKml: 'No', photosIn: 2, photosOut: 2, extraPhotos: '' }], lat: 4.710, lng: -74.110 }
     ],
     users: [
       { id: 'USR-001', name: 'Diana Gómez', email: 'diana.gomez@quick.com.co', phone: '3000000001', username: 'diana.coord', password: 'Coord2026!', profile: 'Coordinador', scope: 'Farmacias Andina', client: 'Farmacias Andina', point: '', permissions: [] },
@@ -1421,9 +1437,9 @@ function toggleMode() {
       { id: 'QK-1003', cedula: '79999123', name: 'Andrés Silva', phone: '3105550103', email: 'andres.silva@mail.com', client: 'Farmacias Andina', point: 'Chapinero', zone: 'KML Sur', docName: 'Tecnomecánica', docExpires: '2026-06-15', status: 'Bloqueado', lat: 4.6464, lng: -74.0631 }
     ],
     availabilities: [
-      { id: 'DIS-001', date: '2026-06-17', client: 'Farmacias Andina', point: 'Santa Bárbara', quicker: 'Carlos Mejía', plannedStart: '08:00', plannedEnd: '18:00', realStart: '08:03', realEnd: '', serviceType: 'Fijo', approval: 'Pendiente punto', evidencePhoto: 'inicio_carlos.jpg', status: 'Iniciado', custom: {} },
-      { id: 'DIS-002', date: '2026-06-17', client: 'Retail Express', point: 'Portal 80', quicker: 'Lina Torres', plannedStart: '09:00', plannedEnd: '19:00', realStart: '09:41', realEnd: '', serviceType: 'Adicional', approval: 'No aplica', evidencePhoto: 'retardo_lina.jpg', status: 'Con novedad', custom: {} },
-      { id: 'DIS-003', date: '2026-06-17', client: 'Farmacias Andina', point: 'Chapinero', quicker: 'Andrés Silva', plannedStart: '07:00', plannedEnd: '17:00', realStart: '', realEnd: '', serviceType: 'Colaborativo', approval: 'Pendiente', evidencePhoto: '', status: 'No colocado', custom: {} }
+      { id: 'DIS-001', date: '2026-06-17', city: 'Bogotá', client: 'Farmacias Andina', point: 'Santa Bárbara', cedula: '1018456789', quicker: 'Carlos Mejía', plannedStart: '08:00', plannedEnd: '18:00', schedule: '08:00 - 18:00', type: 'Fijo', idGo: 'GO-001', statusId: 'Activo', observations: '', absenceReport: 'En turno', realStart: '08:03', realEnd: '', serviceType: 'Fijo', approval: 'Pendiente punto', evidencePhoto: 'inicio_carlos.jpg', status: 'Iniciado', custom: {} },
+      { id: 'DIS-002', date: '2026-06-17', city: 'Bogotá', client: 'Retail Express', point: 'Portal 80', cedula: '1020456123', quicker: 'Lina Torres', plannedStart: '09:00', plannedEnd: '19:00', schedule: '09:00 - 19:00', type: 'Adicional', idGo: 'GO-002', statusId: 'Activo', observations: 'Retardo operativo', absenceReport: 'En turno', realStart: '09:41', realEnd: '', serviceType: 'Adicional', approval: 'No aplica', evidencePhoto: 'retardo_lina.jpg', status: 'Con novedad', custom: {} },
+      { id: 'DIS-003', date: '2026-06-17', city: 'Bogotá', client: 'Farmacias Andina', point: 'Chapinero', cedula: '79999123', quicker: 'Andrés Silva', plannedStart: '07:00', plannedEnd: '17:00', schedule: '07:00 - 17:00', type: 'Colaborativo', idGo: 'GO-003', statusId: 'Activo', observations: '', absenceReport: 'Ausencia injustificada', realStart: '', realEnd: '', serviceType: 'Colaborativo', approval: 'Pendiente', evidencePhoto: '', status: 'No colocado', custom: {} }
     ],
     novelties: [
       { id: 'NOV-001', type: 'Retardo', origin: 'Sistema', ref: 'DIS-002', severity: 'Media', status: 'En validación', note: 'Llegada 41 minutos después del plan.' },
@@ -1447,8 +1463,12 @@ function toggleMode() {
     ],
     parkingReports: [],
     locationPings: [],
+    assetMatrix: [],
+    hsqReports: [
+      { id: 'HSQ-001', type: 'SOAT vencido', client: 'Farmacias Andina', point: 'Santa Bárbara', quicker: 'Carlos Mejía', cedula: '1018456789', status: 'Reportado', note: 'Alerta documental de ejemplo.' }
+    ],
     prefs: {
-      mallaColumns: ['date', 'cedula', 'quicker', 'client', 'point', 'planned', 'executed', 'evidence', 'approval', 'status', 'actions'],
+      mallaColumns: ['date', 'city', 'point', 'cedula', 'quicker', 'schedule', 'type', 'idGo', 'statusId', 'observations', 'status', 'evidence', 'absenceReport', 'actions'],
       customMallaColumns: [],
       sortMallas: 'date-desc',
       mapStyle: 'satellite',
@@ -1480,7 +1500,11 @@ function toggleMode() {
     const next = { ...JSON.parse(JSON.stringify(seed)), ...(value || {}) };
     next.clients = (value?.clients || seed.clients).map(c => {
       const base = seed.clients.find(s => s.name === c.name) || {};
-      return { ...c, points: Array.isArray(c.points) ? c.points : (base.points || []), lat: c.lat || base.lat || 4.711, lng: c.lng || base.lng || -74.072 };
+      const rawPoints = Array.isArray(c.points) ? c.points : (base.points || []);
+      const points = rawPoints.map(p => typeof p === 'string'
+        ? { name: p, city: c.city || 'Bogotá', address: p, lunch: c.lunch || 'No', approval: c.approval === 'Activa' ? 'Si' : 'No', hasKml: 'No', photosIn: 2, photosOut: 2, extraPhotos: '' }
+        : { name: p.name || p.point || '', city: p.city || 'Bogotá', address: p.address || '', lunch: p.lunch || c.lunch || 'No', approval: p.approval || (c.approval === 'Activa' ? 'Si' : 'No'), hasKml: p.hasKml || 'No', photosIn: p.photosIn || 2, photosOut: p.photosOut || 2, extraPhotos: p.extraPhotos || '' });
+      return { ...c, points, lat: c.lat || base.lat || 4.711, lng: c.lng || base.lng || -74.072 };
     });
     next.users = value?.users || seed.users;
     next.quickers = value?.quickers || seed.quickers;
@@ -1492,7 +1516,11 @@ function toggleMode() {
     next.logs = value?.logs || seed.logs;
     next.parkingReports = value?.parkingReports || [];
     next.locationPings = value?.locationPings || [];
+    next.assetMatrix = value?.assetMatrix || [];
+    next.hsqReports = value?.hsqReports || seed.hsqReports || [];
     next.prefs = { ...seed.prefs, ...(value?.prefs || {}) };
+    const requiredMallaCols = seed.prefs.mallaColumns;
+    next.prefs.mallaColumns = [...requiredMallaCols, ...(next.prefs.mallaColumns || []).filter(col => !requiredMallaCols.includes(col) && col !== 'planned' && col !== 'executed' && col !== 'approval' && col !== 'serviceType')];
     next.session = null;
     const missingUsers = seed.users.filter(seedUser => !next.users.some(u => u.username === seedUser.username));
     next.users = [...next.users, ...missingUsers].map((u, i) => {
@@ -1507,9 +1535,17 @@ function toggleMode() {
         permissions: Array.isArray(u.permissions) ? u.permissions : []
       };
     });
-    next.quickers = next.quickers.map((q, i) => ({ cedula: q.cedula || `100000000${i + 1}`, lat: q.lat || (4.66 + i * .018), lng: q.lng || (-74.07 - i * .022), ...q }));
+    next.quickers = next.quickers.map((q, i) => ({ cedula: q.cedula || `100000000${i + 1}`, lat: q.lat || (4.66 + i * .018), lng: q.lng || (-74.07 - i * .022), paymentEnabled: q.paymentEnabled || 'No', paymentTypes: Array.isArray(q.paymentTypes) ? q.paymentTypes : ['Parqueaderos'], ...q }));
     next.availabilities = next.availabilities.map((d, i) => ({
       date: d.date || '2026-06-17',
+      city: d.city || (((next.clients.find(c => c.name === d.client) || {}).points || []).find(p => (typeof p === 'string' ? p : p.name) === d.point)?.city) || 'Bogotá',
+      cedula: d.cedula || next.quickers.find(q => q.name === d.quicker)?.cedula || '',
+      schedule: d.schedule || `${d.plannedStart || ''} - ${d.plannedEnd || ''}`.trim(),
+      type: d.type || d.serviceType || 'Fijo',
+      idGo: d.idGo || '',
+      statusId: d.statusId || 'Activo',
+      observations: d.observations || '',
+      absenceReport: d.absenceReport || 'En turno',
       evidencePhoto: d.evidencePhoto || (i === 0 ? 'foto_inicio.jpg' : ''),
       custom: d.custom || {},
       ...d
@@ -1567,17 +1603,69 @@ function toggleMode() {
     return `<button class="mini-action" type="button" data-action="${actionName}" data-id="${id}">${label}</button>`;
   }
 
+  function pointName(point) {
+    return typeof point === 'string' ? point : (point?.name || '');
+  }
+
+  function pointInfo(clientName, pointNameValue) {
+    const client = state?.clients?.find(c => c.name === clientName) || {};
+    return (client.points || []).find(p => pointName(p) === pointNameValue) || {};
+  }
+
+  const absenceOptions = {
+    'En turno': [],
+    'Permiso no remunerado': ['Inasistencia'],
+    'Permiso remunerado': ['Inasistencia'],
+    'Incapacidad': ['Inasistencia'],
+    'Ausencia injustificada': ['Inasistencia'],
+    'Calamidad': ['Inasistencia'],
+    'Licencia por luto': ['Inasistencia'],
+    'Licencia paternidad': ['Inasistencia'],
+    'Acta de compromiso': ['Proceso disciplinario/acta'],
+    'Proceso disciplinario': ['Proceso disciplinario/acta'],
+    'Proceso seguridad': ['Proceso disciplinario/acta'],
+    'Renuncia': ['Desvinculación'],
+    'Terminación de contrato': ['Desvinculación'],
+    'Periodo de prueba': ['Desvinculación'],
+    'Traslado horizontal': ['Otro sí'],
+    'Cambio de centro de costos': ['Otro sí'],
+    'Cambio de rodamiento': ['Otro sí'],
+    'Cambio de ciudad': ['Otro sí'],
+    'Pérdida de medicamento': ['Descuento'],
+    'Pérdida de dinero': ['Descuento'],
+    'Daño de mercancía': ['Descuento'],
+    'Robo': ['Descuento'],
+    'Accidente dentro de turno': ['Accidente'],
+    'Accidente fuera de turno': ['Accidente']
+  };
+
+  const noveltyFormFields = {
+    'Inasistencia': ['Canal', 'Nombre quien reporta', 'Ciudad', 'Causal', 'Fecha inicio', 'Fecha fin', 'Cédula mensajero', 'Nombre mensajero', 'Observación', 'Documento o soporte'],
+    'Proceso disciplinario/acta': ['Canal', 'Nombre quien reporta', 'Ciudad', 'Motivo', 'Cédula', 'Nombre Quicker', 'Fecha del evento', 'Descripción de la falta cometida', 'Cómo afectó lo sucedido a la operación', 'Falta cometida según reglamento interno', 'Evidencias fotográficas o documento acta'],
+    'Desvinculación': ['Canal', 'Nombre quien reporta', 'Ciudad', 'Motivo', 'Fecha de ingreso', 'Fecha último día laborado', 'Cédula mensajero', 'Nombre mensajero', 'Observación', 'Documento', 'Archivo horas extras', 'Archivo productividad', 'Archivo adicionales'],
+    'Otro sí': ['Canal', 'Nombre quien reporta', 'Ciudad', 'Motivo', 'Fecha nuevas condiciones', 'Nueva operación', 'Cargo', 'Cédula', 'Nombre Quicker otro sí', 'Observación'],
+    'Descuento': ['Canal', 'Nombre quien reporta', 'Fecha novedad', 'Motivo', 'Ciudad', 'Cargo', 'Cédula', 'Nombre Quicker', 'Valor', 'Descripción novedad', 'Evidencia o soporte novedad'],
+    'Accidente': ['Canal', 'Nombre quien reporta', 'Ciudad', 'Tipo accidente', 'Fecha evento', 'Cédula', 'Nombre Quicker', 'Descripción', 'Soporte']
+  };
+
   function mallaColumnLabels() {
     const base = {
       date: 'Fecha',
+      city: 'Ciudad',
       cedula: 'Cédula',
-      quicker: 'Mensajero',
+      quicker: 'Nombre y apellidos',
       client: 'Cliente',
       point: 'Punto',
+      schedule: 'Horario',
+      type: 'Tipo',
+      idGo: 'ID GO',
+      statusId: 'Estado ID',
+      observations: 'Observaciones',
       planned: 'Planeado',
       executed: 'Ejecutado',
       serviceType: 'Servicio',
-      evidence: 'Evidencia foto',
+      evidence: 'Evidencia de ingreso',
+      absenceReport: 'Reporte de inasistencia',
       approval: 'Aprobación',
       status: 'Estado',
       actions: 'Gestión'
@@ -1605,6 +1693,11 @@ function toggleMode() {
 
   function currentUser() {
     return state.users.find(u => u.id === state.session?.id || u.username === state.session?.username) || state.session || {};
+  }
+
+  function hasPermission(permission) {
+    const user = currentUser();
+    return user.profile === 'Administrador' || permissionsFor(user.profile, user).includes(permission);
   }
 
   function inUserScope(scope) {
@@ -1651,6 +1744,11 @@ function toggleMode() {
     }
     const type = col.type === 'numero' ? 'number' : col.type === 'fecha' ? 'date' : 'text';
     return `<input class="mini-action" style="min-width:120px" type="${type}" value="${escapeHTML(value)}" data-custom-cell="${d.id}" data-custom-key="${col.key}">`;
+  }
+
+  function absenceCell(d) {
+    const options = Object.keys(absenceOptions);
+    return `<select class="mini-action" data-absence-report="${d.id}" style="min-width:190px">${options.map(o => `<option value="${escapeHTML(o)}" ${o === (d.absenceReport || 'En turno') ? 'selected' : ''}>${escapeHTML(o)}</option>`).join('')}</select>`;
   }
 
   function panel(pageId, title, subtitle, actions, body) {
@@ -1700,14 +1798,21 @@ function toggleMode() {
       const q = state.quickers.find(item => item.name === d.quicker) || {};
       const values = {
         date: escapeHTML(d.date),
-        cedula: escapeHTML(q.cedula || 'Sin cédula'),
+        city: escapeHTML(d.city || pointInfo(d.client, d.point).city || 'Bogotá'),
+        cedula: escapeHTML(d.cedula || q.cedula || 'Sin cédula'),
         quicker: escapeHTML(d.quicker),
         client: escapeHTML(d.client),
         point: escapeHTML(d.point),
+        schedule: escapeHTML(d.schedule || `${d.plannedStart || ''} - ${d.plannedEnd || ''}`),
+        type: escapeHTML(d.type || d.serviceType || 'Fijo'),
+        idGo: escapeHTML(d.idGo || ''),
+        statusId: escapeHTML(d.statusId || 'Activo'),
+        observations: escapeHTML(d.observations || ''),
         planned: `${escapeHTML(d.plannedStart)} - ${escapeHTML(d.plannedEnd)}`,
         executed: `${escapeHTML(d.realStart || 'Sin inicio')} - ${escapeHTML(d.realEnd || 'En curso')}`,
         serviceType: escapeHTML(d.serviceType),
         evidence: evidenceCell(d),
+        absenceReport: absenceCell(d),
         approval: pill(d.approval),
         status: pill(d.status),
         actions: `<div class="row-actions">${action('Gestionar', 'manageMalla', d.id)}${action('Duplicar rango', 'duplicateMalla', d.id)}</div>`
@@ -1716,8 +1821,9 @@ function toggleMode() {
       return row(visibleMallaColumns().map(key => values[key] ?? ''));
     });
     const headers = visibleMallaColumns().map(key => headerCell(key));
+    const canEditTitles = hasPermission('perm:editarTitulosMalla');
     panel('mallas', 'Gestión real de mallas y turnos', 'Crea disponibilidades y cambia estados. Los cambios quedan guardados en localStorage.',
-      `<button class="dev-btn primary" data-open="malla"><i class="ti ti-plus"></i> Nueva malla</button><button class="dev-btn" data-add-column="mallas"><i class="ti ti-columns"></i> Agregar título</button><button class="dev-btn" data-reset-columns="mallas"><i class="ti ti-refresh"></i> Reset columnas</button><button class="dev-btn" data-export="availabilities">Exportar CSV</button>`,
+      `<button class="dev-btn primary" data-open="malla"><i class="ti ti-plus"></i> Nueva malla</button>${canEditTitles ? '<button class="dev-btn" data-add-column="mallas"><i class="ti ti-columns"></i> Agregar título</button><button class="dev-btn" data-reset-columns="mallas"><i class="ti ti-refresh"></i> Reset columnas</button>' : ''}<button class="dev-btn" data-export="availabilities">Exportar CSV</button>`,
       `<div class="toolbar-line"><span class="fp-sub">Ordenar:</span><select data-sort-mallas><option value="date-desc">Fecha mayor a menor</option><option value="date-asc">Fecha menor a mayor</option><option value="quicker-asc">Mensajero A-Z</option><option value="client-asc">Cliente A-Z</option><option value="status-asc">Estado A-Z</option></select></div>` +
       table(headers, rows)
     );
@@ -1841,14 +1947,44 @@ function toggleMode() {
       .slice(0, 80);
   }
 
+  function normalizeAssetRow(row) {
+    return {
+      cedula: row.ClientId || row.Cedula || row.CEDULA || row.cedula || '',
+      name: row.ClientName || row.Nombre || row['NOMBRE Y APELLIDOS'] || row.nombre || '',
+      city: row.Ciudad || row.CIUDAD || '',
+      salary: row.Salary || row.Salario || '',
+      rodamiento: row.Rodamientos || row.Rodamiento || '',
+      projectId: row.ProjectId || row.Proyecto || '',
+      projectName: row.ProjectName || row['Nombre proyecto'] || '',
+      dateIngress: String(row.DateIngress || row['Fecha ingreso'] || '').slice(0, 10),
+      phone: row.Phone || row.Telefono || '',
+      cellPhone: row.CelPhone || row.Celular || '',
+      email: row.Email || row.Correo || ''
+    };
+  }
+
+  function parseAssetMatrix(file) {
+    if (!window.XLSX) { toast('No cargó la librería XLSX. Revisa conexión a internet.'); return; }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const wb = XLSX.read(reader.result, { type: 'array', cellDates: false });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
+      state.assetMatrix = rows.map(normalizeAssetRow).filter(r => r.cedula && r.name);
+      log('Matriz activos', 'Cargó matriz', `${state.assetMatrix.length} registros`);
+      saveState('Matriz cargada');
+    };
+    reader.readAsArrayBuffer(file);
+  }
+
   function renderNovedades() {
     const rows = state.novelties.map(n => row([
-      escapeHTML(n.id), escapeHTML(n.type), escapeHTML(n.origin), escapeHTML(n.ref), pill(n.severity), pill(n.status), escapeHTML(n.note),
+      escapeHTML(n.id), escapeHTML(n.type), escapeHTML(n.subtype || ''), escapeHTML(n.origin), escapeHTML(n.ref), escapeHTML(n.cedula || ''), escapeHTML(n.quicker || ''), pill(n.severity), pill(n.status), escapeHTML(n.note),
       `<div class="row-actions">${action('Aprobar', 'approveNovelty', n.id)}${action('Cerrar', 'closeNovelty', n.id)}${action('Ticket', 'ticketFromNovelty', n.id)}</div>`
     ]));
     panel('novedades', 'Novedades con aprobación del coordinador', 'El cliente o punto reporta, pero el coordinador valida y aprueba.',
       `<button class="dev-btn primary" data-open="novedad"><i class="ti ti-plus"></i> Nueva novedad</button><button class="dev-btn" data-export="novelties">Exportar CSV</button>`,
-      table(['ID', 'Tipo', 'Origen', 'Ref.', 'Severidad', 'Estado', 'Nota', 'Acciones'], rows)
+      table(['ID', 'Tipo', 'Subtipo', 'Origen', 'Ref.', 'Cédula', 'Quicker', 'Severidad', 'Estado', 'Nota', 'Acciones'], rows)
     );
   }
 
@@ -1879,6 +2015,28 @@ function toggleMode() {
     panel('quickers', 'Maestra funcional de Quickers', 'Usuarios, contacto, cliente/punto, zona KML y alertas de documentos.',
       `<button class="dev-btn primary" data-open="quicker"><i class="ti ti-user-plus"></i> Nuevo Quicker</button><button class="dev-btn" data-export="quickers">Exportar CSV</button>`,
       table(['ID', 'Nombre', 'Teléfono', 'Correo', 'Cliente', 'Punto', 'Zona', 'Documento', 'Estado', 'Acciones'], rows)
+    );
+  }
+
+  function renderMatriz() {
+    const rows = state.assetMatrix.slice(0, 80).map(a => row([
+      escapeHTML(a.cedula), escapeHTML(a.name), escapeHTML(a.city), escapeHTML(a.projectId), escapeHTML(a.projectName),
+      escapeHTML(a.salary), escapeHTML(a.rodamiento), escapeHTML(a.dateIngress), escapeHTML(a.phone || a.cellPhone), escapeHTML(a.email)
+    ]));
+    panel('matriz', 'Matriz de activos', 'Carga la base de personal para autocompletar usuarios mensajeros por cédula.',
+      `<label class="dev-btn"><i class="ti ti-file-spreadsheet"></i> Adjuntar matriz XLSX<input type="file" accept=".xlsx,.xls,.csv" data-asset-matrix-input style="display:none"></label><button class="dev-btn" data-export="assetMatrix">Exportar matriz</button>`,
+      `<div class="dropzone"><strong>Columnas detectadas de la matriz Cafam</strong><span class="fp-sub">ClientId = cédula, ClientName = nombre, Salary = salario, Rodamientos = rodamiento, ProjectId/ProjectName = proyecto, DateIngress = fecha ingreso, Ciudad, Phone/CelPhone y Email.</span><span class="fp-sub">Registros cargados: ${state.assetMatrix.length}</span></div>
+      <div style="margin-top:12px">${table(['Cédula', 'Nombre', 'Ciudad', 'Proyecto', 'Nombre proyecto', 'Salario', 'Rodamiento', 'Fecha ingreso', 'Teléfono', 'Correo'], rows)}</div>`
+    );
+  }
+
+  function renderHSQ() {
+    const rows = scopedItems(state.hsqReports || [], h => ({ client: h.client, point: h.point, quicker: h.quicker })).map(h => row([
+      escapeHTML(h.id), escapeHTML(h.type), escapeHTML(h.client), escapeHTML(h.point || 'Todos'), escapeHTML(h.cedula || ''), escapeHTML(h.quicker || ''), pill(h.status), escapeHTML(h.note || '')
+    ]));
+    panel('hsq', 'HSQ / Seguridad y calidad', 'Reporta SOAT vencidos, capacitaciones, comparendos, alertas de tránsito o llamados de atención por operación.',
+      `<button class="dev-btn primary" data-open="hsq"><i class="ti ti-shield-plus"></i> Nueva alerta HSQ</button><button class="dev-btn" data-export="hsqReports">Exportar CSV</button>`,
+      table(['ID', 'Tipo', 'Cliente', 'Punto', 'Cédula', 'Quicker', 'Estado', 'Detalle'], rows)
     );
   }
 
@@ -1948,9 +2106,10 @@ function toggleMode() {
   }
 
   function renderConfig() {
+    const tab = state.prefs.configTab || 'clientes';
     const clients = state.clients.map(c => row([
       escapeHTML(c.idProyecto), escapeHTML(c.name), `${escapeHTML(c.delayRule)} min`, escapeHTML(c.lunch), escapeHTML(c.approval),
-      `<div class="point-list">${(c.points || []).map(p => `<span class="point-chip">${escapeHTML(p)}</span>`).join('') || '<span class="fp-sub">Sin puntos</span>'}</div>`,
+      `<div class="point-list">${(c.points || []).map(p => `<span class="point-chip">${escapeHTML(pointName(p))} · ${escapeHTML(p.city || '')}</span>`).join('') || '<span class="fp-sub">Sin puntos</span>'}</div>`,
       escapeHTML(c.alerts),
       `<div class="row-actions">${action('Editar', 'editClient', c.id)}${action('Punto', 'addPoint', c.id)}${action('Eliminar', 'deleteClient', c.id)}</div>`
     ]));
@@ -1958,17 +2117,27 @@ function toggleMode() {
       escapeHTML(u.name), escapeHTML(u.email), escapeHTML(u.phone), escapeHTML(u.username), pill(u.profile), escapeHTML(u.client || u.scope || ''), escapeHTML(u.point || ''),
       `<div class="row-actions">${action('Editar', 'editUser', u.id)}${action('Permisos', 'permissionsUser', u.id)}${action('Eliminar', 'deleteUser', u.id)}</div>`
     ]));
+    const quickers = state.quickers.map(q => row([
+      escapeHTML(q.cedula), escapeHTML(q.name), escapeHTML(q.phone), escapeHTML(q.email), escapeHTML(q.client), escapeHTML(q.point), escapeHTML(q.paymentEnabled || 'No'), escapeHTML((q.paymentTypes || []).join(', ')),
+      `<div class="row-actions">${action('Seguimiento', 'followQuicker', q.id)}${action('Bloquear', 'blockQuicker', q.id)}</div>`
+    ]));
     const existing = state.users.map(u => `<option value="${escapeHTML(u.id)}">${escapeHTML(u.name)} · ${escapeHTML(u.username)}</option>`).join('');
+    const configActions = `${hasPermission('perm:crearClientes') ? '<button class="dev-btn primary" data-open="cliente"><i class="ti ti-building-plus"></i> Cliente</button>' : ''}${hasPermission('perm:crearUsuarios') ? '<button class="dev-btn" data-open="usuario"><i class="ti ti-user-plus"></i> Usuario</button><button class="dev-btn" data-open="messengerUser"><i class="ti ti-user-bolt"></i> Mensajero</button>' : ''}`;
     panel('config', 'Configuración funcional', 'Parametriza clientes, reglas por cliente y usuarios base del sistema.',
-      `<button class="dev-btn primary" data-open="cliente"><i class="ti ti-building-plus"></i> Cliente</button><button class="dev-btn" data-open="usuario"><i class="ti ti-user-plus"></i> Usuario</button>`,
-      `<div class="config-split">
-        <section>
+      configActions,
+      `<div class="subtabs"><button class="subtab ${tab === 'clientes' ? 'on' : ''}" data-config-tab="clientes">Clientes</button><button class="subtab ${tab === 'usuarios' ? 'on' : ''}" data-config-tab="usuarios">Usuarios</button><button class="subtab ${tab === 'mensajeros' ? 'on' : ''}" data-config-tab="mensajeros">Mensajeros</button></div>
+      <div class="config-split">
+        <section style="${tab === 'clientes' ? '' : 'display:none'}">
           <div class="fp-title" style="margin-bottom:8px">Clientes, reglas y puntos de venta</div>
           ${table(['ID Proyecto', 'Cliente', 'Retardo', 'Almuerzo', 'Aprobación', 'Puntos de venta', 'Alertas', 'Acciones'], clients)}
         </section>
-        <section>
+        <section style="${tab === 'usuarios' ? '' : 'display:none'}">
           <div class="toolbar-line"><span class="fp-title">Usuarios y accesos</span><select data-edit-user-select><option value="">Editar usuario existente...</option>${existing}</select><button class="dev-btn" data-edit-selected-user>Editar seleccionado</button></div>
           ${table(['Nombre', 'Correo', 'Teléfono', 'Usuario', 'Perfil', 'Cliente asignado', 'Punto asignado', 'Acciones'], users)}
+        </section>
+        <section style="${tab === 'mensajeros' ? '' : 'display:none'}">
+          <div class="toolbar-line"><span class="fp-title">Usuarios mensajeros desde matriz</span><button class="dev-btn primary" data-open="messengerUser"><i class="ti ti-user-plus"></i> Crear mensajero</button></div>
+          ${table(['Cédula', 'Nombre', 'Teléfono', 'Correo', 'Cliente', 'Punto', 'Pagos adicionales', 'Tipos pago', 'Acciones'], quickers)}
         </section>
       </div>`
     );
@@ -1992,13 +2161,12 @@ function toggleMode() {
     renderMapa();
     renderNovedades();
     renderTickets();
-    renderEvidencias();
     renderQuickers();
-    renderMensajero();
+    renderMatriz();
+    renderHSQ();
     renderCasos();
     renderReportes();
     renderConfig();
-    renderBD();
   }
 
   const schemas = {
@@ -2007,15 +2175,20 @@ function toggleMode() {
       subtitle: 'Crea un turno planeado y lo deja listo para ejecución.',
       fields: [
         ['date', 'Fecha', 'date'],
+        ['city', 'Ciudad', 'text'],
         ['client', 'Cliente', 'select', state.clients.map(c => c.name)],
         ['point', 'Punto de venta', 'text'],
+        ['cedula', 'Cédula', 'text'],
         ['quicker', 'Quicker', 'select', state.quickers.map(q => q.name)],
         ['plannedStart', 'Inicio planeado', 'time'],
         ['plannedEnd', 'Fin planeado', 'time'],
-        ['serviceType', 'Tipo de servicio', 'select', ['Fijo', 'Adicional', 'Colaborativo']]
+        ['type', 'Tipo', 'select', ['Fijo', 'Adicional', 'Colaborativo']],
+        ['idGo', 'ID GO', 'text'],
+        ['statusId', 'Estado ID', 'text'],
+        ['observations', 'Observaciones', 'textarea']
       ],
       submit: data => {
-        const item = { id: uid('DIS'), ...data, realStart: '', realEnd: '', approval: 'Pendiente', evidencePhoto: '', status: 'Creado', custom: {} };
+        const item = { id: uid('DIS'), ...data, schedule: `${data.plannedStart} - ${data.plannedEnd}`, serviceType: data.type, absenceReport: 'En turno', realStart: '', realEnd: '', approval: 'Pendiente', evidencePhoto: '', status: 'Programado', custom: {} };
         state.availabilities.unshift(item);
         log('Disponibilidad', 'Creó malla', item.id);
       }
@@ -2078,6 +2251,23 @@ function toggleMode() {
         log('CasoAdmin', 'Creó caso', item.id);
       }
     },
+    hsq: {
+      title: 'Nueva alerta HSQ',
+      subtitle: 'Registra alerta de seguridad/calidad y define a qué cliente o usuario se refleja.',
+      fields: [
+        ['type', 'Tipo alerta', 'select', ['SOAT vencido', 'Capacitación', 'Comparendo', 'Llamado de atención', 'Alerta de tránsito', 'Seguridad vial']],
+        ['client', 'Cliente', 'select', state.clients.map(c => c.name)],
+        ['point', 'Punto de venta', 'text'],
+        ['cedula', 'Cédula', 'text'],
+        ['quicker', 'Quicker', 'select', state.quickers.map(q => q.name)],
+        ['note', 'Detalle', 'textarea']
+      ],
+      submit: data => {
+        const item = { id: uid('HSQ'), ...data, status: 'Reportado' };
+        state.hsqReports.unshift(item);
+        log('HSQ', 'Creó alerta', `${item.type} · ${item.quicker}`);
+      }
+    },
     cliente: {
       title: 'Nuevo cliente',
       subtitle: 'Crea cliente con ID Proyecto y reglas operativas.',
@@ -2098,7 +2288,7 @@ function toggleMode() {
       subtitle: 'Crea usuario base con correo, teléfono, usuario y perfil.',
       fields: [
         ['name', 'Nombre', 'text'], ['email', 'Correo', 'email'], ['phone', 'Teléfono', 'tel'],
-        ['username', 'Usuario', 'text'], ['password', 'Contraseña inicial', 'password'], ['profile', 'Perfil', 'select', ['Administrador', 'Coordinador', 'Quicker', 'Cliente Admin', 'Usuario Punto', 'Gerencia']],
+        ['username', 'Usuario', 'text'], ['password', 'Contraseña inicial', 'password'], ['profile', 'Perfil', 'select', ['Administrador', 'Coordinador', 'Quicker', 'Cliente Admin', 'Usuario Punto', 'Gerencia', 'HSQ']],
         ['scope', 'Alcance', 'text']
       ],
       submit: data => {
@@ -2128,6 +2318,13 @@ function toggleMode() {
     }
     if (type === 'caso') {
       current.fields = current.fields.map(field => field[0] === 'quicker' ? ['quicker', 'Quicker', 'select', state.quickers.map(q => q.name)] : field);
+    }
+    if (type === 'hsq') {
+      current.fields = current.fields.map(field => {
+        if (field[0] === 'client') return ['client', 'Cliente', 'select', state.clients.map(c => c.name)];
+        if (field[0] === 'quicker') return ['quicker', 'Quicker', 'select', state.quickers.map(q => q.name)];
+        return field;
+      });
     }
     return current;
   }
@@ -2249,7 +2446,7 @@ function toggleMode() {
 
   function exportCSV(collection) {
     const datasets = collection === 'all'
-      ? { clients: state.clients, users: state.users, quickers: state.quickers, availabilities: state.availabilities, novelties: state.novelties, tickets: state.tickets, cases: state.cases, evidences: state.evidences, parkingReports: state.parkingReports, logs: state.logs }
+      ? { clients: state.clients, users: state.users, quickers: state.quickers, availabilities: state.availabilities, novelties: state.novelties, tickets: state.tickets, cases: state.cases, hsqReports: state.hsqReports, assetMatrix: state.assetMatrix, evidences: state.evidences, parkingReports: state.parkingReports, logs: state.logs }
       : { [collection]: state[collection] || [] };
     const chunks = Object.entries(datasets).map(([name, rows]) => {
       if (!rows.length) return `${name}\n`;
@@ -2268,7 +2465,7 @@ function toggleMode() {
   }
 
   function defaultFormForPage() {
-    return ({ dashboard: 'ticket', mallas: 'malla', mapa: 'novedad', novedades: 'novedad', tickets: 'ticket', quickers: 'quicker', mensajero: 'novedad', casos: 'caso', config: 'cliente' })[activeModule] || 'ticket';
+    return ({ dashboard: 'ticket', mallas: 'malla', mapa: 'novedad', novedades: 'novedad', tickets: 'ticket', quickers: 'quicker', matriz: 'messengerUser', hsq: 'hsq', casos: 'caso', config: 'cliente' })[activeModule] || 'ticket';
   }
 
   function toast(message) {
@@ -2391,9 +2588,77 @@ function toggleMode() {
     document.getElementById('app-modal').classList.add('open');
   }
 
+  function openAbsenceNoveltyForm(availabilityId, subtype) {
+    const item = state.availabilities.find(d => d.id === availabilityId);
+    if (!item || subtype === 'En turno') return;
+    const type = (absenceOptions[subtype] || ['Inasistencia'])[0];
+    const fields = noveltyFormFields[type] || noveltyFormFields['Inasistencia'];
+    const form = document.getElementById('modal-form');
+    document.getElementById('modal-title').textContent = `${type} · ${subtype}`;
+    document.getElementById('modal-subtitle').textContent = `${item.date} · ${item.city || ''} · ${item.point} · ${item.quicker}`;
+    const defaults = {
+      'Canal': item.client,
+      'Nombre quien reporta': state.session?.name || '',
+      'Ciudad': item.city || 'Bogotá',
+      'Causal': subtype,
+      'Motivo': subtype,
+      'Tipo accidente': subtype,
+      'Fecha inicio': item.date,
+      'Fecha fin': item.date,
+      'Fecha novedad': item.date,
+      'Fecha del evento': item.date,
+      'Fecha evento': item.date,
+      'Fecha de ingreso': state.assetMatrix.find(a => String(a.cedula) === String(item.cedula))?.dateIngress || '',
+      'Cédula mensajero': item.cedula,
+      'Cédula': item.cedula,
+      'Nombre mensajero': item.quicker,
+      'Nombre Quicker': item.quicker,
+      'Nombre Quicker otro sí': item.quicker,
+      'Cargo': 'Quicker - Mensajero',
+      'Observación': item.observations || '',
+      'Observaciones': item.observations || ''
+    };
+    const html = fields.map(label => {
+      const lower = label.toLowerCase();
+      const value = defaults[label] || '';
+      if (/documento|archivo|evidencia|soporte|fotograf/i.test(label)) {
+        return `<div class="form-field full"><label>${escapeHTML(label)}</label><input name="${escapeHTML(label)}" type="file"></div>`;
+      }
+      if (/descripción|observaci|afecto|falta cometida/i.test(lower)) {
+        return `<div class="form-field full"><label>${escapeHTML(label)}</label><textarea name="${escapeHTML(label)}">${escapeHTML(value)}</textarea></div>`;
+      }
+      const typeAttr = /fecha/i.test(label) ? 'date' : /valor/i.test(label) ? 'number' : 'text';
+      return `<div class="form-field"><label>${escapeHTML(label)}</label><input name="${escapeHTML(label)}" type="${typeAttr}" value="${escapeHTML(value)}"></div>`;
+    }).join('');
+    form.innerHTML = `<div class="form-grid">${html}</div><div class="modal-foot"><button class="dev-btn" type="button" id="cancel-form">Cancelar</button><button class="dev-btn primary" type="submit">Registrar novedad</button></div>`;
+    form.onsubmit = event => {
+      event.preventDefault();
+      const data = {};
+      [...form.elements].forEach(el => {
+        if (!el.name) return;
+        data[el.name] = el.type === 'file' ? (el.files?.[0]?.name || '') : el.value;
+      });
+      item.absenceReport = subtype;
+      item.status = subtype === 'En turno' ? item.status : 'Con novedad';
+      state.novelties.unshift({
+        id: uid('NOV'), type, subtype, origin: 'Malla', ref: item.id, cedula: item.cedula, quicker: item.quicker,
+        severity: /robo|desvinculación|terminación|ausencia injustificada|accidente|proceso/i.test(subtype) ? 'Alta' : 'Media',
+        status: 'Reportada', note: data['Observación'] || data['Descripción novedad'] || item.observations || subtype, formData: data
+      });
+      if (!/Descuento|Accidente/i.test(type)) {
+        state.cases.unshift({ id: uid('CAS'), type, quicker: item.quicker, period: item.date, status: 'Creado desde malla', owner: state.session?.name || 'Coordinador' });
+      }
+      closeModal();
+      log('Malla', `Registró ${type}`, `${subtype} · ${item.quicker}`);
+      saveState('Novedad registrada');
+    };
+    document.getElementById('cancel-form').onclick = closeModal;
+    document.getElementById('app-modal').classList.add('open');
+  }
+
   function pointOptionsFor(clientName, selected = '') {
     const client = state.clients.find(c => c.name === clientName) || {};
-    const points = client.points?.length ? client.points : ['Todos'];
+    const points = client.points?.length ? client.points.map(pointName) : ['Todos'];
     return [''].concat(points).map(p => `<option value="${escapeHTML(p)}" ${p === selected ? 'selected' : ''}>${p ? escapeHTML(p) : 'Todos los puntos'}</option>`).join('');
   }
 
@@ -2410,12 +2675,14 @@ function toggleMode() {
       <div class="form-field"><label>Aprobación punto</label><select name="approval"><option ${item.approval === 'Activa' ? 'selected' : ''}>Activa</option><option ${item.approval === 'No aplica' ? 'selected' : ''}>No aplica</option></select></div>
       <div class="form-field"><label>Alertas</label><input name="alerts" value="${escapeHTML(item.alerts)}" placeholder="KML, permanencia 30m, salida de zona"></div>
       <div class="form-field full"><label>Regla evidencias</label><input name="evidenceRule" value="${escapeHTML(item.evidenceRule)}" placeholder="Inicio 2 fotos / cierre 1 foto"></div>
-      <div class="form-field full"><label>Puntos de venta separados por coma</label><input name="points" value="${escapeHTML((item.points || []).join(', '))}" placeholder="Santa Bárbara, Chapinero"></div>
+      <div class="form-field full"><label>Puntos de venta separados por coma</label><input name="points" value="${escapeHTML((item.points || []).map(pointName).join(', '))}" placeholder="Santa Bárbara, Chapinero"></div>
     </div><div class="modal-foot"><button class="dev-btn" type="button" id="cancel-form">Cancelar</button><button class="dev-btn primary" type="submit">Guardar cliente</button></div>`;
     form.onsubmit = event => {
       event.preventDefault();
       const data = Object.fromEntries(new FormData(form).entries());
-      const payload = { ...item, id: item.id || uid('CLI'), ...data, points: data.points.split(',').map(p => p.trim()).filter(Boolean) };
+      const previous = item.points || [];
+      const points = data.points.split(',').map(p => p.trim()).filter(Boolean).map(name => previous.find(old => pointName(old) === name) || { name, city: 'Bogotá', address: '', lunch: data.lunch, approval: data.approval === 'Activa' ? 'Si' : 'No', hasKml: 'No', photosIn: 2, photosOut: 2, extraPhotos: '' });
+      const payload = { ...item, id: item.id || uid('CLI'), ...data, points };
       if (id) state.clients = state.clients.map(c => c.id === id ? payload : c);
       else state.clients.unshift(payload);
       closeModal();
@@ -2436,13 +2703,21 @@ function toggleMode() {
     form.innerHTML = `<div class="form-grid">
       <div class="form-field full"><label>Nombre punto de venta</label><input name="point" placeholder="Ej: Sede Norte"></div>
       <div class="form-field full"><label>Tomar nombre desde KML cargado</label><select name="fromKml"><option value="">No usar KML</option>${kmlNames.map(n => `<option value="${escapeHTML(n)}">${escapeHTML(n)}</option>`).join('')}</select></div>
+      <div class="form-field"><label>Ciudad</label><input name="city" value="Bogotá"></div>
+      <div class="form-field"><label>Dirección</label><input name="address"></div>
+      <div class="form-field"><label>Marca almuerzo</label><select name="lunch"><option>Si</option><option>No</option></select></div>
+      <div class="form-field"><label>Aprobación del punto</label><select name="approval"><option>Si</option><option>No</option></select></div>
+      <div class="form-field"><label>Cuenta con KML</label><select name="hasKml"><option>Si</option><option>No</option></select></div>
+      <div class="form-field"><label>Fotos ingreso</label><input name="photosIn" type="number" min="0" value="2"></div>
+      <div class="form-field"><label>Fotos salida</label><input name="photosOut" type="number" min="0" value="2"></div>
+      <div class="form-field full"><label>Fotos adicionales requeridas</label><input name="extraPhotos" placeholder="Ej: fachada, paquete, planilla firmada"></div>
     </div><div class="modal-foot"><button class="dev-btn" type="button" id="cancel-form">Cancelar</button><button class="dev-btn primary" type="submit">Guardar punto</button></div>`;
     form.onsubmit = event => {
       event.preventDefault();
       const data = Object.fromEntries(new FormData(form).entries());
       const point = (data.point || data.fromKml || '').trim();
       if (!point) { toast('Escribe un punto o selecciona uno del KML'); return; }
-      client.points = [...new Set([...(client.points || []), point])];
+      client.points = [...(client.points || []).filter(p => pointName(p) !== point), { name: point, city: data.city, address: data.address, lunch: data.lunch, approval: data.approval, hasKml: data.hasKml, photosIn: data.photosIn, photosOut: data.photosOut, extraPhotos: data.extraPhotos }];
       closeModal();
       log('Cliente', 'Agregó punto de venta', `${client.name} · ${point}`);
       saveState('Punto agregado');
@@ -2463,7 +2738,7 @@ function toggleMode() {
       <div class="form-field"><label>Teléfono</label><input name="phone" value="${escapeHTML(item.phone)}" required></div>
       <div class="form-field"><label>Usuario</label><input name="username" value="${escapeHTML(item.username)}" required></div>
       <div class="form-field"><label>Contraseña</label><input name="password" type="text" value="${escapeHTML(item.password)}" placeholder="Define la contraseña" required></div>
-      <div class="form-field"><label>Perfil base</label><select name="profile"><option>Administrador</option><option>Coordinador</option><option>Quicker</option><option>Cliente Admin</option><option>Usuario Punto</option><option>Gerencia</option></select></div>
+      <div class="form-field"><label>Perfil base</label><select name="profile"><option>Administrador</option><option>Coordinador</option><option>Quicker</option><option>Cliente Admin</option><option>Usuario Punto</option><option>Gerencia</option><option>HSQ</option></select></div>
       <div class="form-field"><label>Cliente a cargo</label><select name="client" id="user-client">${clients.map(c => `<option value="${escapeHTML(c)}" ${c === (item.client || item.scope) ? 'selected' : ''}>${escapeHTML(c)}</option>`).join('')}</select></div>
       <div class="form-field"><label>Punto de venta</label><select name="point" id="user-point">${pointOptionsFor(item.client || item.scope, item.point)}</select></div>
     </div><div class="modal-foot"><button class="dev-btn" type="button" id="cancel-form">Cancelar</button><button class="dev-btn primary" type="submit">Guardar usuario</button></div>`;
@@ -2485,10 +2760,65 @@ function toggleMode() {
     document.getElementById('app-modal').classList.add('open');
   }
 
+  function findAssetByCedula(cedula) {
+    return state.assetMatrix.find(a => String(a.cedula || '').trim() === String(cedula || '').trim()) || null;
+  }
+
+  function openMessengerUserForm() {
+    const form = document.getElementById('modal-form');
+    document.getElementById('modal-title').textContent = 'Crear usuario mensajero';
+    document.getElementById('modal-subtitle').textContent = 'Busca por cédula en la matriz de activos y crea el Quicker + usuario de ingreso.';
+    const clients = state.clients.map(c => c.name);
+    form.innerHTML = `<div class="form-grid">
+      <div class="form-field"><label>Cédula</label><input name="cedula" id="messenger-cedula" required></div>
+      <div class="form-field" style="align-self:end"><button class="dev-btn" type="button" id="lookup-asset"><i class="ti ti-search"></i> Buscar matriz</button></div>
+      <div class="form-field"><label>Nombre completo</label><input name="name" id="messenger-name" required></div>
+      <div class="form-field"><label>Teléfono</label><input name="phone" id="messenger-phone"></div>
+      <div class="form-field"><label>Correo / usuario ingreso</label><input name="email" id="messenger-email" type="email" required></div>
+      <div class="form-field"><label>Contraseña</label><input name="password" type="text" placeholder="Define contraseña" required></div>
+      <div class="form-field"><label>Proyecto matriz</label><input name="projectName" id="messenger-project"></div>
+      <div class="form-field"><label>Fecha contratación</label><input name="dateIngress" id="messenger-date"></div>
+      <div class="form-field"><label>Cliente asignado</label><select name="client" id="messenger-client">${clients.map(c => `<option>${escapeHTML(c)}</option>`).join('')}</select></div>
+      <div class="form-field"><label>Punto de venta</label><select name="point" id="messenger-point">${pointOptionsFor(clients[0] || '')}</select></div>
+      <div class="form-field"><label>Reporta pagos adicionales</label><select name="paymentEnabled"><option>No</option><option>Si</option></select></div>
+      <div class="form-field"><label>Tipos de pago habilitados</label><input name="paymentTypes" value="Parqueaderos, Periferias, Transferencias"></div>
+    </div><div class="modal-foot"><button class="dev-btn" type="button" id="cancel-form">Cancelar</button><button class="dev-btn primary" type="submit">Crear mensajero</button></div>`;
+    document.getElementById('messenger-client').onchange = event => {
+      document.getElementById('messenger-point').innerHTML = pointOptionsFor(event.target.value);
+    };
+    document.getElementById('lookup-asset').onclick = () => {
+      const asset = findAssetByCedula(document.getElementById('messenger-cedula').value);
+      if (!asset) { toast('No encontré esa cédula en la matriz cargada'); return; }
+      document.getElementById('messenger-name').value = asset.name || '';
+      document.getElementById('messenger-phone').value = asset.cellPhone || asset.phone || '';
+      document.getElementById('messenger-email').value = asset.email || '';
+      document.getElementById('messenger-project').value = asset.projectName || '';
+      document.getElementById('messenger-date').value = asset.dateIngress || '';
+      toast('Datos cargados desde matriz');
+    };
+    form.onsubmit = event => {
+      event.preventDefault();
+      const data = Object.fromEntries(new FormData(form).entries());
+      const q = {
+        id: uid('QK'), cedula: data.cedula, name: data.name, phone: data.phone, email: data.email,
+        client: data.client, point: data.point, zone: '', docName: 'Documentos base', docExpires: '', status: 'Activo',
+        projectName: data.projectName, dateIngress: data.dateIngress, paymentEnabled: data.paymentEnabled,
+        paymentTypes: data.paymentTypes.split(',').map(v => v.trim()).filter(Boolean)
+      };
+      state.quickers.unshift(q);
+      state.users.unshift({ id: uid('USR'), name: data.name, email: data.email, phone: data.phone, username: data.email, password: data.password, profile: 'Quicker', scope: data.name, client: data.client, point: data.point, permissions: ['mensajero'] });
+      closeModal();
+      log('Usuario', 'Creó usuario mensajero', data.email);
+      saveState('Mensajero creado');
+    };
+    document.getElementById('cancel-form').onclick = closeModal;
+    document.getElementById('app-modal').classList.add('open');
+  }
+
   function openPermissionsForm(userId) {
     const user = state.users.find(u => u.id === userId);
     if (!user) return;
-    const modules = ['dashboard', 'mallas', 'mapa', 'novedades', 'tickets', 'evidencias', 'quickers', 'mensajero', 'casos', 'reportes', 'bd', 'config'];
+    const modules = ['dashboard', 'mallas', 'mapa', 'novedades', 'tickets', 'quickers', 'matriz', 'hsq', 'casos', 'reportes', 'config', 'perm:editarTitulosMalla', 'perm:crearUsuarios', 'perm:crearClientes'];
     const active = new Set(user.permissions?.length ? user.permissions : permissionsFor(user.profile, user));
     const form = document.getElementById('modal-form');
     document.getElementById('modal-title').textContent = `Permisos · ${user.name}`;
@@ -2511,7 +2841,13 @@ function toggleMode() {
     if (open) {
       if (open.dataset.open === 'cliente') openClientForm();
       else if (open.dataset.open === 'usuario') openUserForm();
+      else if (open.dataset.open === 'messengerUser') openMessengerUserForm();
       else openForm(open.dataset.open);
+    }
+    const cfgTab = event.target.closest('[data-config-tab]');
+    if (cfgTab) {
+      state.prefs.configTab = cfgTab.dataset.configTab;
+      saveState('Pestaña actualizada');
     }
     const editSelected = event.target.closest('[data-edit-selected-user]');
     if (editSelected) {
@@ -2564,6 +2900,10 @@ function toggleMode() {
         saveState('KML adjuntado');
       }
     }
+    if (event.target.matches('[data-asset-matrix-input]')) {
+      const file = event.target.files?.[0];
+      if (file) parseAssetMatrix(file);
+    }
     if (event.target.matches('[data-custom-cell]')) {
       const id = event.target.dataset.customCell;
       const key = event.target.dataset.customKey;
@@ -2574,16 +2914,30 @@ function toggleMode() {
         saveState('Campo actualizado');
       }
     }
+    if (event.target.matches('[data-absence-report]')) {
+      const id = event.target.dataset.absenceReport;
+      const item = state.availabilities.find(d => d.id === id);
+      if (!item) return;
+      const value = event.target.value;
+      if (value === 'En turno') {
+        item.absenceReport = value;
+        log('Malla', 'Actualizó reporte de inasistencia', `${id} · En turno`);
+        saveState('Malla actualizada');
+      } else {
+        openAbsenceNoveltyForm(id, value);
+      }
+    }
   });
 
   document.getElementById('quick-create')?.addEventListener('click', () => {
     const type = defaultFormForPage();
     if (type === 'cliente') openClientForm();
     else if (type === 'usuario') openUserForm();
+    else if (type === 'messengerUser') openMessengerUserForm();
     else openForm(type);
   });
   document.getElementById('export-current')?.addEventListener('click', () => {
-    const map = { mallas: 'availabilities', mapa: 'availabilities', novedades: 'novelties', tickets: 'tickets', evidencias: 'evidences', quickers: 'quickers', mensajero: 'availabilities', casos: 'cases', config: 'clients' };
+    const map = { mallas: 'availabilities', mapa: 'availabilities', novedades: 'novelties', tickets: 'tickets', quickers: 'quickers', matriz: 'assetMatrix', hsq: 'hsqReports', casos: 'cases', config: 'clients' };
     exportCSV(map[activeModule] || 'all');
   });
   document.getElementById('modal-close')?.addEventListener('click', closeModal);
@@ -2622,11 +2976,12 @@ function toggleMode() {
   function permissionsFor(profile, user = null) {
     if (user?.permissions?.length) return user.permissions;
     if (profile === 'Quicker') return ['mensajero'];
-    if (profile === 'Cliente Admin') return ['dashboard', 'mallas', 'novedades', 'evidencias', 'reportes'];
-    if (profile === 'Usuario Punto') return ['mallas', 'evidencias'];
+    if (profile === 'Cliente Admin') return ['dashboard', 'mallas', 'novedades', 'reportes'];
+    if (profile === 'Usuario Punto') return ['mallas'];
     if (profile === 'Gerencia') return ['dashboard', 'mapa', 'reportes'];
-    if (profile === 'Coordinador') return ['dashboard', 'mallas', 'mapa', 'novedades', 'tickets', 'evidencias', 'quickers', 'mensajero', 'casos', 'reportes'];
-    return ['dashboard', 'mallas', 'mapa', 'novedades', 'tickets', 'evidencias', 'quickers', 'mensajero', 'casos', 'reportes', 'bd', 'config'];
+    if (profile === 'Coordinador') return ['dashboard', 'mallas', 'mapa', 'novedades', 'tickets', 'quickers', 'casos', 'reportes'];
+    if (profile === 'HSQ') return ['hsq', 'quickers', 'mallas'];
+    return ['dashboard', 'mallas', 'mapa', 'novedades', 'tickets', 'quickers', 'matriz', 'hsq', 'casos', 'reportes', 'config', 'perm:editarTitulosMalla', 'perm:crearUsuarios', 'perm:crearClientes'];
   }
 
   function initials(name) {
