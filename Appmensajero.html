@@ -5,19 +5,21 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Quick Mensajero</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <style>
-    :root{--q:#F5C518;--bg:#070707;--card:#15130f;--line:rgba(255,255,255,.12);--text:#fff;--muted:rgba(255,255,255,.62);--ok:#22C55E;--bad:#EF4444}
-    *{box-sizing:border-box} body{margin:0;min-height:100vh;background:radial-gradient(circle at 90% 0,rgba(245,197,24,.35),transparent 28%),linear-gradient(160deg,#050505,#15110a);font-family:"Aptos Narrow","Abadi","Segoe UI",Arial,sans-serif;color:var(--text)}
-    .app{width:min(440px,100%);margin:0 auto;min-height:100vh;padding:18px 14px 32px}
-    .card{border:1px solid var(--line);background:rgba(16,14,10,.86);border-radius:24px;padding:16px;box-shadow:0 22px 60px rgba(0,0,0,.45);backdrop-filter:blur(18px);margin-bottom:14px}
-    .brand{display:flex;align-items:center;gap:12px;margin-bottom:18px}.logo{width:46px;height:46px;border-radius:16px;background:linear-gradient(135deg,var(--q),#C9A200);display:grid;place-items:center;color:#000;font-weight:900}.brand h1{font-size:26px;margin:0}.brand span{color:var(--muted);font-size:13px}
-    label{display:block;color:var(--muted);font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.8px;margin:12px 0 6px}
-    input,textarea,button{font:inherit} input,textarea{width:100%;border:1px solid var(--line);background:rgba(255,255,255,.06);color:#fff;border-radius:14px;padding:13px;outline:0} textarea{min-height:76px;resize:vertical}
-    .btn{width:100%;border:0;border-radius:16px;padding:14px 16px;background:linear-gradient(135deg,var(--q),#C9A200);color:#070707;font-weight:850;margin-top:10px}.btn.ghost{background:rgba(255,255,255,.06);color:#fff;border:1px solid var(--line)}.btn.bad{background:rgba(239,68,68,.18);color:#ff9b9b;border:1px solid rgba(239,68,68,.25)}
+    :root{--q:#F5C518;--bg:#070707;--card:#15130f;--line:rgba(255,255,255,.12);--text:#fff;--muted:rgba(255,255,255,.62);--ok:#22C55E;--bad:#EF4444;--warn:#F59E0B}
+    *{box-sizing:border-box} body{margin:0;min-height:100vh;background:radial-gradient(circle at 90% 0,rgba(245,197,24,.32),transparent 28%),linear-gradient(160deg,#050505,#15110a);font-family:"Aptos Narrow","Abadi","Segoe UI",Arial,sans-serif;color:var(--text)}
+    .app{width:min(460px,100%);margin:0 auto;min-height:100vh;padding:16px 14px 92px}.card{border:1px solid var(--line);background:rgba(16,14,10,.88);border-radius:24px;padding:16px;box-shadow:0 22px 60px rgba(0,0,0,.45);backdrop-filter:blur(18px);margin-bottom:14px}
+    .brand{display:flex;align-items:center;gap:12px;margin-bottom:16px}.logo{width:46px;height:46px;border-radius:16px;background:linear-gradient(135deg,var(--q),#C9A200);display:grid;place-items:center;color:#000;font-weight:900}.brand h1{font-size:26px;margin:0}.brand span{color:var(--muted);font-size:13px}
+    label{display:block;color:var(--muted);font-size:11px;font-weight:850;text-transform:uppercase;letter-spacing:.8px;margin:12px 0 6px} input,textarea,select,button{font:inherit} input,textarea,select{width:100%;border:1px solid var(--line);background:rgba(255,255,255,.06);color:#fff;border-radius:14px;padding:13px;outline:0} select option{color:#111;background:#fff} textarea{min-height:76px;resize:vertical}
+    .btn{width:100%;border:0;border-radius:16px;padding:14px 16px;background:linear-gradient(135deg,var(--q),#C9A200);color:#070707;font-weight:850;margin-top:10px}.btn.ghost{background:rgba(255,255,255,.06);color:#fff;border:1px solid var(--line)}.btn.bad{background:rgba(239,68,68,.18);color:#ff9b9b;border:1px solid rgba(239,68,68,.25)}.btn.small{padding:10px 12px;border-radius:12px;font-size:13px}
     .password-wrap{position:relative}.password-wrap input{padding-right:50px}.eye{position:absolute;right:8px;top:50%;transform:translateY(-50%);width:36px;height:36px;border:0;border-radius:12px;background:rgba(255,255,255,.08);color:#fff}
-    .hidden{display:none}.pill{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;background:rgba(245,197,24,.12);color:var(--q);font-size:12px;font-weight:800}.muted{color:var(--muted);font-size:13px;line-height:1.4}.turn h2{margin:12px 0 4px;font-size:24px}.meta{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:14px 0}.meta div{border:1px solid var(--line);background:rgba(255,255,255,.05);border-radius:16px;padding:12px}.meta small{display:block;color:var(--muted);font-size:11px}.meta strong{font-size:16px}.photo{border:1px dashed rgba(245,197,24,.45);border-radius:16px;padding:12px;margin-top:10px;background:rgba(245,197,24,.06)}
-    .map{height:150px;border-radius:18px;margin:14px 0;background:linear-gradient(135deg,#162110,#0c1116);position:relative;overflow:hidden;border:1px solid var(--line)}.zone{position:absolute;left:18%;top:18%;width:62%;height:58%;border:2px dashed var(--q);border-radius:45%;background:rgba(245,197,24,.08)}.dot{position:absolute;left:50%;top:50%;width:18px;height:18px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 12px rgba(34,197,94,.14)}
-    .row{display:flex;justify-content:space-between;gap:10px;border-bottom:1px solid var(--line);padding:10px 0}.row:last-child{border-bottom:0}.toast{position:fixed;left:14px;right:14px;bottom:16px;background:#111;border:1px solid rgba(245,197,24,.3);padding:13px;border-radius:16px;opacity:0;transform:translateY(10px);transition:.2s}.toast.on{opacity:1;transform:none}
+    .hidden{display:none}.pill{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;background:rgba(245,197,24,.12);color:var(--q);font-size:12px;font-weight:850}.muted{color:var(--muted);font-size:13px;line-height:1.4}.turn h2{margin:12px 0 4px;font-size:24px}.meta{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:14px 0}.meta div{border:1px solid var(--line);background:rgba(255,255,255,.05);border-radius:16px;padding:12px}.meta small{display:block;color:var(--muted);font-size:11px}.meta strong{font-size:16px}
+    .camera{border:1px dashed rgba(245,197,24,.45);border-radius:18px;padding:12px;margin-top:10px;background:rgba(245,197,24,.06)} video,.snapshot{width:100%;border-radius:14px;background:#050505;min-height:190px;object-fit:cover;border:1px solid var(--line)}.snapshot{display:none}.cam-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+    .map{height:360px;border-radius:20px;overflow:hidden;border:1px solid var(--line);background:#111}.map-tools{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}
+    .row{display:flex;justify-content:space-between;gap:10px;border-bottom:1px solid var(--line);padding:10px 0}.row:last-child{border-bottom:0}.toast{position:fixed;left:14px;right:14px;bottom:82px;background:#111;border:1px solid rgba(245,197,24,.3);padding:13px;border-radius:16px;opacity:0;transform:translateY(10px);transition:.2s;z-index:20}.toast.on{opacity:1;transform:none}
+    .tabs{position:fixed;left:0;right:0;bottom:0;background:rgba(9,8,6,.94);border-top:1px solid var(--line);backdrop-filter:blur(16px);display:grid;grid-template-columns:repeat(4,1fr);z-index:10}.tab{height:66px;border:0;background:transparent;color:var(--muted);display:grid;place-items:center;font-size:11px;font-weight:800}.tab .ti{font-size:20px}.tab.on{color:var(--q)}.screen{display:none}.screen.on{display:block}
   </style>
 </head>
 <body>
@@ -28,50 +30,83 @@
         <label>Usuario</label><input id="user" value="carlos.qk" required>
         <label>Contraseña</label><div class="password-wrap"><input id="pass" type="password" required><button class="eye" id="eye" type="button"><i class="ti ti-eye"></i></button></div>
         <button class="btn">Ingresar</button>
-        <p class="muted" style="margin-bottom:0">Acceso inicial de prueba: <strong>carlos.qk</strong> / <strong>Mensajero2026!</strong>. Luego el administrador crea cada usuario y contraseña.</p>
+        <p class="muted" style="margin-bottom:0">El usuario y la contraseña los crea el administrador. Prueba: <strong>carlos.qk</strong> / <strong>Mensajero2026!</strong>.</p>
       </form>
     </section>
 
     <section id="home" class="hidden">
       <div class="brand"><div class="logo">Q</div><div><h1 id="hello">Hola</h1><span id="todayLabel"></span></div></div>
-      <div class="card turn">
-        <span class="pill" id="turnStatus">Turno asignado</span>
-        <h2 id="client">Cliente</h2><p class="muted" id="point">Punto</p>
-        <div class="meta"><div><small>Horario</small><strong id="schedule"></strong></div><div><small>Almuerzo</small><strong id="lunch"></strong></div></div>
-        <div class="map"><div class="zone"></div><div class="dot"></div></div>
-        <p class="muted" id="gpsText">GPS pendiente. La ubicación se toma automáticamente, el mensajero no la selecciona.</p>
-        <div class="photo"><label>Foto de evidencia</label><input id="photo" type="file" accept="image/*" capture="environment"></div>
-        <button class="btn" data-turn-action="inicio">Iniciar turno</button>
-        <button class="btn ghost" data-turn-action="almuerzo_inicio" id="lunchStart">Iniciar almuerzo</button>
-        <button class="btn ghost" data-turn-action="almuerzo_fin" id="lunchEnd">Finalizar almuerzo</button>
-        <button class="btn bad" data-turn-action="cierre">Finalizar turno</button>
-      </div>
-      <div class="card">
-        <h3 style="margin:0 0 8px">Reportar parqueadero</h3>
-        <label>Valor</label><input id="parkingAmount" type="number" placeholder="Ej: 8000">
-        <label>Soporte</label><input id="parkingFile" type="file" accept="image/*,.pdf" capture="environment">
-        <label>Comentario</label><textarea id="parkingNote" placeholder="Detalle del cobro"></textarea>
-        <button class="btn ghost" id="parkingBtn">Enviar parqueadero</button>
-      </div>
-      <div class="card"><h3 style="margin:0 0 8px">Mi malla</h3><div id="scheduleList"></div></div>
-      <button class="btn ghost" id="logout">Cerrar sesión</button>
+      <section class="screen on" id="screen-turno">
+        <div class="card turn">
+          <span class="pill" id="turnStatus">Turno asignado</span>
+          <h2 id="client">Cliente</h2><p class="muted" id="point">Punto</p>
+          <div class="meta"><div><small>Horario</small><strong id="schedule"></strong></div><div><small>Almuerzo</small><strong id="lunch"></strong></div></div>
+          <p class="muted" id="gpsText">GPS pendiente. La ubicación se toma automáticamente.</p>
+          <div class="camera">
+            <label>Cámara en tiempo real</label>
+            <video id="camera" autoplay playsinline muted></video>
+            <img id="snapshot" class="snapshot" alt="Foto capturada">
+            <div class="cam-actions"><button class="btn ghost small" id="startCamera" type="button">Abrir cámara</button><button class="btn ghost small" id="capturePhoto" type="button">Tomar foto</button></div>
+          </div>
+          <button class="btn" data-turn-action="inicio">Iniciar turno</button>
+          <button class="btn ghost" data-turn-action="almuerzo_inicio" id="lunchStart">Iniciar almuerzo</button>
+          <button class="btn ghost" data-turn-action="almuerzo_fin" id="lunchEnd">Finalizar almuerzo</button>
+          <button class="btn bad" data-turn-action="cierre">Finalizar turno</button>
+        </div>
+      </section>
+      <section class="screen" id="screen-mapa">
+        <div class="card">
+          <div class="map-tools"><select id="mapStyle"><option value="satellite">Satelital</option><option value="road">Normal</option></select><button class="btn ghost small" id="refreshGps" type="button">Actualizar GPS</button></div>
+          <div id="messengerMap" class="map"></div>
+          <p class="muted" id="zoneText">Visualización de zona KML y ubicación actual.</p>
+        </div>
+      </section>
+      <section class="screen" id="screen-parqueadero">
+        <div class="card">
+          <h3 style="margin:0 0 8px">Reportar parqueadero</h3>
+          <label>Valor</label><input id="parkingAmount" type="number" placeholder="Ej: 8000">
+          <label>Comentario</label><textarea id="parkingNote" placeholder="Detalle del cobro"></textarea>
+          <p class="muted">Usa la foto capturada en la pestaña Turno como soporte del cobro.</p>
+          <button class="btn ghost" id="parkingBtn">Enviar parqueadero</button>
+        </div>
+      </section>
+      <section class="screen" id="screen-malla">
+        <div class="card"><h3 style="margin:0 0 8px">Mi malla</h3><div id="scheduleList"></div></div>
+        <button class="btn ghost" id="logout">Cerrar sesión</button>
+      </section>
     </section>
   </main>
+  <nav class="tabs hidden" id="tabs">
+    <button class="tab on" data-tab="turno"><i class="ti ti-clock"></i><span>Turno</span></button>
+    <button class="tab" data-tab="mapa"><i class="ti ti-map"></i><span>Mapa</span></button>
+    <button class="tab" data-tab="parqueadero"><i class="ti ti-receipt"></i><span>Gastos</span></button>
+    <button class="tab" data-tab="malla"><i class="ti ti-calendar"></i><span>Malla</span></button>
+  </nav>
   <div class="toast" id="toast"></div>
   <script>
     const KEY='quick_lastmile_mvp_state_v1';
-    const fallback={users:[{name:'Carlos Mejía',username:'carlos.qk',password:'Mensajero2026!',profile:'Quicker',scope:'Carlos Mejía'}],clients:[{name:'Farmacias Andina',lunch:'Si'}],availabilities:[{id:'DIS-001',date:'2026-06-17',client:'Farmacias Andina',point:'Santa Bárbara',quicker:'Carlos Mejía',plannedStart:'08:00',plannedEnd:'18:00',realStart:'',realEnd:'',status:'Creado',evidencePhoto:'',custom:{}}],evidences:[],novelties:[],parkingReports:[],locationPings:[]};
-    let state=load(), session=null, current=null, lastGps=null;
+    const fallback={users:[{name:'Carlos Mejía',username:'carlos.qk',password:'Mensajero2026!',profile:'Quicker',scope:'Carlos Mejía'}],clients:[{name:'Farmacias Andina',lunch:'Si'}],quickers:[{name:'Carlos Mejía',client:'Farmacias Andina',point:'Santa Bárbara',lat:4.6872,lng:-74.0488}],availabilities:[{id:'DIS-001',date:'2026-06-17',client:'Farmacias Andina',point:'Santa Bárbara',quicker:'Carlos Mejía',plannedStart:'08:00',plannedEnd:'18:00',realStart:'',realEnd:'',status:'Creado',evidencePhoto:'',custom:{}}],evidences:[],novelties:[],parkingReports:[],locationPings:[],prefs:{}};
+    let state=load(), session=null, current=null, lastGps=null, capturedPhoto='', stream=null, map=null;
     function load(){try{return {...fallback,...(JSON.parse(localStorage.getItem(KEY))||{})}}catch{return fallback}}
     function save(msg){localStorage.setItem(KEY,JSON.stringify(state));toast(msg)}
     function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('on');setTimeout(()=>t.classList.remove('on'),1800)}
     function today(){return new Date().toISOString().slice(0,10)}
-    function locate(cb){if(!navigator.geolocation){cb(null);return}navigator.geolocation.getCurrentPosition(pos=>{lastGps={lat:pos.coords.latitude,lng:pos.coords.longitude,time:new Date().toLocaleString('es-CO')};cb(lastGps)},()=>cb(null),{enableHighAccuracy:true,timeout:8000})}
+    function locate(cb){if(!navigator.geolocation){cb(null);return}navigator.geolocation.getCurrentPosition(pos=>{lastGps={lat:pos.coords.latitude,lng:pos.coords.longitude,time:new Date().toLocaleString('es-CO')};cb(lastGps)},()=>cb(null),{enableHighAccuracy:true,timeout:9000})}
+    function initials(name){return String(name||'Q').split(' ').map(p=>p[0]).join('').slice(0,2).toUpperCase()}
     document.getElementById('eye').onclick=()=>{const p=document.getElementById('pass'),i=document.querySelector('#eye .ti');const show=p.type==='password';p.type=show?'text':'password';i.className=show?'ti ti-eye-off':'ti ti-eye'}
-    document.getElementById('loginForm').onsubmit=e=>{e.preventDefault();const u=document.getElementById('user').value.trim(),p=document.getElementById('pass').value;const found=(state.users||[]).find(x=>x.username===u&&x.password===p&&x.profile==='Quicker');if(!found){toast('Usuario o contraseña incorrectos');return}session=found;renderHome()}
-    function renderHome(){document.getElementById('login').classList.add('hidden');document.getElementById('home').classList.remove('hidden');document.getElementById('hello').textContent=`Hola, ${session.name.split(' ')[0]}`;document.getElementById('todayLabel').textContent=new Date().toLocaleDateString('es-CO',{weekday:'long',day:'numeric',month:'long'});const list=(state.availabilities||[]).filter(d=>d.quicker===session.name).sort((a,b)=>a.date.localeCompare(b.date));current=list.find(d=>d.date===today())||list[0];if(!current){toast('No tienes turnos asignados');return}const client=(state.clients||[]).find(c=>c.name===current.client)||{};document.getElementById('client').textContent=current.client;document.getElementById('point').textContent=current.point;document.getElementById('schedule').textContent=`${current.plannedStart} - ${current.plannedEnd}`;document.getElementById('lunch').textContent=client.lunch==='Si'?'Debe marcar':'No aplica';document.getElementById('lunchStart').style.display=client.lunch==='Si'?'block':'none';document.getElementById('lunchEnd').style.display=client.lunch==='Si'?'block':'none';document.getElementById('turnStatus').textContent=current.status||'Creado';document.getElementById('scheduleList').innerHTML=list.map(d=>`<div class="row"><span>${d.date}<br><small class="muted">${d.client} · ${d.point}</small></span><strong>${d.status}</strong></div>`).join('')}
-    document.querySelectorAll('[data-turn-action]').forEach(btn=>btn.onclick=()=>{if(!current)return;locate(gps=>{const action=btn.dataset.turnAction;const file=document.getElementById('photo').files[0];const stamp=new Date().toLocaleString('es-CO');if(action==='inicio'){current.realStart=new Date().toTimeString().slice(0,5);current.status='En turno'}if(action==='cierre'){current.realEnd=new Date().toTimeString().slice(0,5);current.status='Finalizado'}if(action==='almuerzo_inicio')current.lunchStart=new Date().toTimeString().slice(0,5);if(action==='almuerzo_fin')current.lunchEnd=new Date().toTimeString().slice(0,5);current.evidencePhoto=file?file.name:current.evidencePhoto;state.evidences=state.evidences||[];state.evidences.unshift({id:`EVI-${Date.now()}`,availability:current.id,quicker:session.name,stage:action,type:'Foto/GPS',required:'Si',status:'Cargada',file:file?file.name:'Sin foto',address:gps?`${gps.lat.toFixed(6)}, ${gps.lng.toFixed(6)}`:'GPS no disponible',time:stamp});state.locationPings=state.locationPings||[];if(gps)state.locationPings.unshift({quicker:session.name,availability:current.id,...gps});document.getElementById('gpsText').textContent=gps?`Marcado en ${gps.lat.toFixed(6)}, ${gps.lng.toFixed(6)} · ${stamp}`:'No fue posible tomar GPS';save('Registro enviado');renderHome()})});
-    document.getElementById('parkingBtn').onclick=()=>{if(!current)return;locate(gps=>{const file=document.getElementById('parkingFile').files[0];const amount=document.getElementById('parkingAmount').value;state.parkingReports=state.parkingReports||[];state.parkingReports.unshift({id:`PK-${Date.now()}`,availability:current.id,quicker:session.name,client:current.client,point:current.point,amount,file:file?file.name:'',note:document.getElementById('parkingNote').value,status:'Pendiente aprobación',address:gps?`${gps.lat.toFixed(6)}, ${gps.lng.toFixed(6)}`:'GPS no disponible',time:new Date().toLocaleString('es-CO')});state.novelties=state.novelties||[];state.novelties.unshift({id:`NOV-${Date.now()}`,type:'Parqueadero',origin:'Quicker',ref:`${current.date} · ${session.name}`,severity:'Baja',status:'Reportada',note:`Parqueadero por $${amount}`});save('Parqueadero enviado para aprobación')})}
+    document.getElementById('loginForm').onsubmit=e=>{e.preventDefault();const u=document.getElementById('user').value.trim(),p=document.getElementById('pass').value;const found=(state.users||[]).find(x=>x.username===u&&x.password===p&&x.profile==='Quicker');if(!found){toast('Usuario o contraseña incorrectos');return}session=found;renderHome();startCamera()}
+    function renderHome(){document.getElementById('login').classList.add('hidden');document.getElementById('home').classList.remove('hidden');document.getElementById('tabs').classList.remove('hidden');document.getElementById('hello').textContent=`Hola, ${session.name.split(' ')[0]}`;document.getElementById('todayLabel').textContent=new Date().toLocaleDateString('es-CO',{weekday:'long',day:'numeric',month:'long'});const list=(state.availabilities||[]).filter(d=>d.quicker===session.name).sort((a,b)=>a.date.localeCompare(b.date));current=list.find(d=>d.date===today())||list[0];if(!current){toast('No tienes turnos asignados');return}const client=(state.clients||[]).find(c=>c.name===current.client)||{};document.getElementById('client').textContent=current.client;document.getElementById('point').textContent=current.point;document.getElementById('schedule').textContent=`${current.plannedStart} - ${current.plannedEnd}`;document.getElementById('lunch').textContent=client.lunch==='Si'?'Debe marcar':'No aplica';document.getElementById('lunchStart').style.display=client.lunch==='Si'?'block':'none';document.getElementById('lunchEnd').style.display=client.lunch==='Si'?'block':'none';document.getElementById('turnStatus').textContent=current.status||'Creado';document.getElementById('scheduleList').innerHTML=list.map(d=>`<div class="row"><span>${d.date}<br><small class="muted">${d.client} · ${d.point}</small></span><strong>${d.status}</strong></div>`).join('');setTimeout(initMap,0)}
+    async function startCamera(){try{stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'},audio:false});document.getElementById('camera').srcObject=stream}catch{toast('Cámara no disponible. Usa HTTPS o localhost para habilitarla.')}}
+    document.getElementById('startCamera').onclick=startCamera;
+    document.getElementById('capturePhoto').onclick=()=>{const v=document.getElementById('camera'),img=document.getElementById('snapshot');if(!v.videoWidth){toast('Abre la cámara primero');return}const c=document.createElement('canvas');c.width=v.videoWidth;c.height=v.videoHeight;c.getContext('2d').drawImage(v,0,0);capturedPhoto=c.toDataURL('image/jpeg',.82);img.src=capturedPhoto;img.style.display='block';toast('Foto capturada')};
+    document.querySelectorAll('[data-turn-action]').forEach(btn=>btn.onclick=()=>registerTurn(btn.dataset.turnAction));
+    function registerTurn(action){if(!current)return;if(!capturedPhoto)toast('Toma una foto antes de enviar');locate(gps=>{const stamp=new Date().toLocaleString('es-CO');if(action==='inicio'){current.realStart=new Date().toTimeString().slice(0,5);current.status='En turno'}if(action==='cierre'){current.realEnd=new Date().toTimeString().slice(0,5);current.status='Finalizado'}if(action==='almuerzo_inicio')current.lunchStart=new Date().toTimeString().slice(0,5);if(action==='almuerzo_fin')current.lunchEnd=new Date().toTimeString().slice(0,5);current.evidencePhoto=capturedPhoto?'captura_tiempo_real.jpg':current.evidencePhoto;state.evidences=state.evidences||[];state.evidences.unshift({id:`EVI-${Date.now()}`,availability:current.id,quicker:session.name,stage:action,type:'Foto/GPS',required:'Si',status:'Cargada',file:'captura_tiempo_real.jpg',photoData:capturedPhoto,address:gps?`${gps.lat.toFixed(6)}, ${gps.lng.toFixed(6)}`:'GPS no disponible',time:stamp});state.locationPings=state.locationPings||[];if(gps)state.locationPings.unshift({quicker:session.name,availability:current.id,client:current.client,point:current.point,...gps});document.getElementById('gpsText').textContent=gps?`Marcado en ${gps.lat.toFixed(6)}, ${gps.lng.toFixed(6)} · ${stamp}`:'No fue posible tomar GPS';save('Registro enviado');renderHome()})}
+    document.getElementById('parkingBtn').onclick=()=>{if(!current)return;locate(gps=>{const amount=document.getElementById('parkingAmount').value;state.parkingReports=state.parkingReports||[];state.parkingReports.unshift({id:`PK-${Date.now()}`,availability:current.id,quicker:session.name,client:current.client,point:current.point,amount,file:capturedPhoto?'foto_parqueadero.jpg':'',photoData:capturedPhoto,note:document.getElementById('parkingNote').value,status:'Pendiente aprobación',address:gps?`${gps.lat.toFixed(6)}, ${gps.lng.toFixed(6)}`:'GPS no disponible',time:new Date().toLocaleString('es-CO')});state.novelties=state.novelties||[];state.novelties.unshift({id:`NOV-${Date.now()}`,type:'Parqueadero',origin:'Quicker',ref:`${current.date} · ${session.name}`,severity:'Baja',status:'Reportada',note:`Parqueadero por $${amount}`});save('Parqueadero enviado para aprobación')})}
+    document.querySelectorAll('[data-tab]').forEach(btn=>btn.onclick=()=>{document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('on',b===btn));document.querySelectorAll('.screen').forEach(s=>s.classList.remove('on'));document.getElementById(`screen-${btn.dataset.tab}`).classList.add('on');if(btn.dataset.tab==='mapa')setTimeout(initMap,0)});
+    document.getElementById('refreshGps').onclick=()=>locate(gps=>{toast(gps?'GPS actualizado':'GPS no disponible');initMap()});
+    document.getElementById('mapStyle').onchange=initMap;
+    function kmlLatLngs(){const text=state.prefs?.kmlText||'';const m=text.match(/<coordinates[^>]*>([\s\S]*?)<\/coordinates>/i);if(!m)return[];return m[1].trim().split(/\s+/).map(pair=>{const [lng,lat]=pair.split(',').map(Number);return Number.isFinite(lat)&&Number.isFinite(lng)?[lat,lng]:null}).filter(Boolean).slice(0,400)}
+    function initMap(){const el=document.getElementById('messengerMap');if(!el||!window.L||!current)return;if(map){map.remove();map=null}const q=(state.quickers||[]).find(x=>x.name===session.name)||{};const here=lastGps?[lastGps.lat,lastGps.lng]:[Number(q.lat)||4.6872,Number(q.lng)||-74.0488];map=L.map(el,{zoomControl:true}).setView(here,13);const road=L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap'});const sat=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,attribution:'Tiles &copy; Esri'});(document.getElementById('mapStyle').value==='road'?road:sat).addTo(map);L.control.layers({'Normal':road,'Satelital':sat},{},{position:'topleft'}).addTo(map);L.marker(here).addTo(map).bindPopup(`<strong>${session.name}</strong><br>${current.point}`).openPopup();const zone=kmlLatLngs();if(zone.length>2){L.polygon(zone,{color:'#F5C518',weight:2,dashArray:'7 5',fillColor:'#F5C518',fillOpacity:.18}).addTo(map);map.fitBounds([here,...zone],{padding:[24,24],maxZoom:14});document.getElementById('zoneText').textContent=`Zona KML: ${state.prefs.kmlName||'cargada'}`}}
     document.getElementById('logout').onclick=()=>location.reload();
   </script>
 </body>
