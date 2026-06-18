@@ -596,6 +596,14 @@
   .row-actions { display: flex; gap: 5px; flex-wrap: nowrap; }
   .mini-action { border: 1px solid var(--border); background: var(--card-bg); color: var(--text-1); border-radius: 8px; padding: 4px 7px; font-size: 10px; font-weight: 700; }
   .mini-action:hover { border-color: rgba(245,197,24,.45); color: var(--q); }
+  .icon-action { width: 30px; height: 30px; padding: 0; display: inline-grid; place-items: center; }
+  .icon-action .ti { font-size: 15px; }
+  .malla-action-groups.compact-actions { grid-template-columns: repeat(3, minmax(120px, 1fr)); }
+  .malla-action-groups.compact-actions .action-group { padding: 12px; }
+  .malla-action-groups.compact-actions .action-group-buttons { gap: 8px; }
+  .malla-action-groups.compact-actions .dev-btn.icon-btn,
+  .malla-action-groups.compact-actions label.dev-btn.icon-btn { width: 42px; min-width: 42px; height: 42px; min-height: 42px; padding: 0; display: inline-grid; place-items: center; font-size: 0; cursor: pointer; }
+  .malla-action-groups.compact-actions .dev-btn.icon-btn .ti { font-size: 18px; }
   .status-pill { display: inline-flex; align-items: center; padding: 4px 8px; border-radius: 999px; font-size: 10px; font-weight: 800; border: 1px solid transparent; }
   .st-ok { background: rgba(34,197,94,.13); color: #4ade80; border-color: rgba(34,197,94,.2); }
   .st-warn { background: rgba(245,197,24,.14); color: var(--q); border-color: rgba(245,197,24,.22); }
@@ -724,6 +732,8 @@
   .map-avatar { width: 34px; height: 34px; border-radius: 12px; display: grid; place-items: center; background: rgba(245,197,24,.16); color: var(--q); font-weight: 900; }
   .map-dot-legend { width: 9px; height: 9px; border-radius: 50%; display: inline-block; margin-right: 7px; background: var(--q); }
   .evidence-preview { width: 54px; height: 38px; object-fit: cover; border-radius: 9px; border: 1px solid rgba(245,197,24,.45); background: #111; display: inline-block; vertical-align: middle; }
+  .evidence-button { border:0; background:transparent; padding:0; cursor:pointer; }
+  .evidence-large { width: min(760px, 100%); max-height: 68vh; object-fit: contain; border-radius: 16px; border: 1px solid var(--border); background: #050505; }
   .config-split { display: grid; grid-template-columns: 1fr; gap: 16px; }
   .settings-shell { display: grid; grid-template-columns: 260px minmax(0,1fr); min-height: 620px; border: 1px solid var(--border); border-radius: 18px; overflow: hidden; background: rgba(0,0,0,.14); }
   .settings-nav { border-right: 1px solid var(--border); padding: 16px 12px; background: rgba(0,0,0,.16); overflow: auto; }
@@ -1569,7 +1579,7 @@ function toggleMode() {
       mallaSortDir: 'desc',
       ingressGraceMinutes: 30,
       contractTypes: ['Fijo', 'Colaborativo', 'Quick Go', 'Back up'],
-      managementTypes: ['Adicional', 'Relevo', 'Colaborativo', 'Fijo', 'Flotante'],
+      managementTypes: ['Adicional', 'Relevo', 'Colaborativo', 'Fijo', 'Flotante', 'Quick Go'],
       mallaTemplates: [],
       mallaBlankResetDone: true,
       mapStyle: 'satellite',
@@ -1627,6 +1637,7 @@ function toggleMode() {
     next.prefs.mallaColumns = [...requiredMallaCols, ...(next.prefs.mallaColumns || []).filter(col => !requiredMallaCols.includes(col) && !['planned', 'executed', 'approval', 'serviceType', 'type', 'idGo', 'statusId', 'absenceReport', 'status'].includes(col))];
     next.prefs.contractTypes = next.prefs.contractTypes || seed.prefs.contractTypes;
     next.prefs.managementTypes = next.prefs.managementTypes || seed.prefs.managementTypes;
+    if (!next.prefs.managementTypes.includes('Quick Go')) next.prefs.managementTypes.push('Quick Go');
     next.prefs.ingressGraceMinutes = Number(next.prefs.ingressGraceMinutes || seed.prefs.ingressGraceMinutes);
     next.prefs.mallaTemplates = next.prefs.mallaTemplates || [];
     next.prefs.mallaBlankResetDone = true;
@@ -1656,7 +1667,7 @@ function toggleMode() {
       contractType: d.contractType || (d.type === 'Quick Go' ? 'Quick Go' : 'Fijo'),
       managementType: d.managementType || d.type || d.serviceType || 'Fijo',
       quickGoId: d.quickGoId || d.idGo || '',
-      quickGoStatus: d.quickGoStatus || 'Pendiente de asignación',
+      quickGoStatus: d.quickGoStatus || '',
       observations: d.observations || '',
       noveltyType: d.noveltyType || (d.absenceReport && d.absenceReport !== 'En turno' ? 'INASISTENCIA' : ''),
       evidencePhoto: d.evidencePhoto || (i === 0 ? 'foto_inicio.jpg' : ''),
@@ -1808,6 +1819,10 @@ function toggleMode() {
 
   function action(label, actionName, id) {
     return `<button class="mini-action" type="button" data-action="${actionName}" data-id="${id}">${label}</button>`;
+  }
+
+  function iconAction(label, actionName, id, icon) {
+    return `<button class="mini-action icon-action" type="button" title="${escapeHTML(label)}" aria-label="${escapeHTML(label)}" data-action="${actionName}" data-id="${id}"><i class="ti ${icon}"></i></button>`;
   }
 
   function pointName(point) {
@@ -1968,7 +1983,7 @@ function toggleMode() {
 
   function evidenceCell(d) {
     const evidence = state.evidences.find(e => e.availability === d.id && e.photoData);
-    if (evidence?.photoData) return `<img class="evidence-preview" src="${evidence.photoData}" alt="Evidencia ${escapeHTML(d.quicker)}">`;
+    if (evidence?.photoData) return `<button class="evidence-button" type="button" title="Ver evidencia" data-action="viewEvidence" data-id="${evidence.id}"><img class="evidence-preview" src="${evidence.photoData}" alt="Evidencia ${escapeHTML(d.quicker)}"></button>`;
     if (!d.evidencePhoto) return '<span class="fp-sub">Pendiente</span>';
     return `<span class="evidence-thumb" title="${escapeHTML(d.evidencePhoto)}"><i class="ti ti-photo"></i></span>`;
   }
@@ -1976,6 +1991,20 @@ function toggleMode() {
   function evidencePreview(e) {
     if (e.photoData) return `<img class="evidence-preview" src="${e.photoData}" alt="Evidencia ${escapeHTML(e.quicker)}">`;
     return escapeHTML(e.file || e.status || '');
+  }
+
+  function openEvidenceModal(id) {
+    const evidence = state.evidences.find(e => e.id === id);
+    if (!evidence?.photoData) { toast('No hay foto disponible para ampliar'); return; }
+    const form = document.getElementById('modal-form');
+    document.getElementById('modal-title').textContent = `Evidencia · ${evidence.quicker || ''}`;
+    document.getElementById('modal-subtitle').textContent = `${evidence.stage || 'Registro'} · ${evidence.time || ''} · ${evidence.address || ''}`;
+    form.innerHTML = `<div class="form-grid">
+      <div class="form-field full"><img class="evidence-large" src="${evidence.photoData}" alt="Evidencia ampliada"></div>
+    </div><div class="modal-foot"><button class="dev-btn" type="button" id="cancel-form">Cerrar</button><a class="dev-btn primary" href="${evidence.photoData}" download="${escapeHTML(evidence.file || 'evidencia.jpg')}"><i class="ti ti-download"></i> Descargar</a></div>`;
+    document.getElementById('cancel-form').onclick = closeModal;
+    document.getElementById('app-modal').classList.add('open');
+    document.getElementById('app-modal').setAttribute('aria-hidden', 'false');
   }
 
   function customCell(d, col) {
@@ -1986,6 +2015,14 @@ function toggleMode() {
     }
     const type = col.type === 'numero' ? 'number' : col.type === 'fecha' ? 'date' : 'text';
     return `<input class="mini-action" style="min-width:120px" type="${type}" value="${escapeHTML(value)}" data-custom-cell="${d.id}" data-custom-key="${col.key}">`;
+  }
+
+  function editableCell(d, field, value, type = 'text') {
+    return `<input class="mini-action" style="min-width:112px" type="${type}" value="${escapeHTML(value || '')}" data-malla-input="${d.id}" data-malla-field="${field}">`;
+  }
+
+  function editableSelectCell(d, field, options, value, emptyLabel = '') {
+    return optionSelect(options, value || '', `data-malla-select="${d.id}" data-malla-field="${field}"`, emptyLabel);
   }
 
   function optionSelect(options, value, attrs, emptyLabel = '') {
@@ -2002,13 +2039,30 @@ function toggleMode() {
   }
 
   function quickGoCell(d) {
-    if (d.contractType !== 'Quick Go') return '<span class="fp-sub">No aplica</span>';
+    if (!isQuickGoMalla(d)) return '<span class="fp-sub">No aplica</span>';
     return `<input class="mini-action" style="min-width:120px" value="${escapeHTML(d.quickGoId || '')}" placeholder="ID Quick Go" data-malla-input="${d.id}" data-malla-field="quickGoId">`;
   }
 
   function quickGoStatusCell(d) {
-    if (d.contractType !== 'Quick Go') return '<span class="fp-sub">No aplica</span>';
-    return optionSelect(['Pendiente de asignación', 'Asignado', 'Cancelado', 'Finalizado'], d.quickGoStatus || 'Pendiente de asignación', `data-malla-select="${d.id}" data-malla-field="quickGoStatus"`);
+    if (!isQuickGoMalla(d)) return '<span class="fp-sub">No aplica</span>';
+    return optionSelect(['ASIGNADO', 'FINALIZADO', 'CANCELADO'], (d.quickGoStatus || 'ASIGNADO').toUpperCase(), `data-malla-select="${d.id}" data-malla-field="quickGoStatus"`);
+  }
+
+  function isQuickGoMalla(d) {
+    return /quick\s*go/i.test(`${d.contractType || ''} ${d.managementType || ''}`);
+  }
+
+  function normalizeQuickGoFields(item) {
+    if (isQuickGoMalla(item)) {
+      if (!['ASIGNADO', 'FINALIZADO', 'CANCELADO'].includes(String(item.quickGoStatus || '').toUpperCase())) {
+        item.quickGoStatus = 'ASIGNADO';
+      } else {
+        item.quickGoStatus = String(item.quickGoStatus).toUpperCase();
+      }
+    } else {
+      item.quickGoId = '';
+      item.quickGoStatus = '';
+    }
   }
 
   function noveltyCell(d) {
@@ -2085,19 +2139,20 @@ function toggleMode() {
   function renderMallas() {
     const rows = sortedMallas().map(d => {
       const q = state.quickers.find(item => item.name === d.quicker) || {};
+      const clientPoints = ((state.clients.find(c => c.name === d.client) || {}).points || []).map(pointName);
       const values = {
-        date: escapeHTML(d.date),
-        city: escapeHTML(d.city || pointInfo(d.client, d.point).city || 'Bogotá'),
-        cedula: escapeHTML(d.cedula || q.cedula || 'Sin cédula'),
-        quicker: escapeHTML(d.quicker || 'Pendiente de asignación'),
-        client: escapeHTML(d.client),
-        point: escapeHTML(d.point),
-        schedule: escapeHTML(d.schedule || `${d.plannedStart || ''} - ${d.plannedEnd || ''}`),
+        date: editableCell(d, 'date', d.date, 'date'),
+        city: editableCell(d, 'city', d.city || pointInfo(d.client, d.point).city || 'Bogotá'),
+        cedula: editableCell(d, 'cedula', d.cedula || q.cedula || ''),
+        quicker: editableSelectCell(d, 'quicker', ['Pendiente de asignación', ...state.quickers.map(item => item.name)], d.quicker || 'Pendiente de asignación'),
+        client: editableSelectCell(d, 'client', state.clients.map(c => c.name), d.client),
+        point: editableSelectCell(d, 'point', clientPoints.length ? clientPoints : [d.point].filter(Boolean), d.point, 'Sin punto'),
+        schedule: editableCell(d, 'schedule', d.schedule || `${d.plannedStart || ''} - ${d.plannedEnd || ''}`),
         contractType: contractCell(d),
         managementType: managementCell(d),
         quickGoId: quickGoCell(d),
         quickGoStatus: quickGoStatusCell(d),
-        observations: escapeHTML([d.observations, computeIngress(d).note].filter(Boolean).join(' · ')),
+        observations: `<input class="mini-action" style="min-width:180px" value="${escapeHTML(d.observations || '')}" placeholder="${escapeHTML(computeIngress(d).note || 'Observación')}" data-malla-input="${d.id}" data-malla-field="observations">`,
         planned: `${escapeHTML(d.plannedStart)} - ${escapeHTML(d.plannedEnd)}`,
         executed: `${escapeHTML(d.realStart || 'Sin inicio')} - ${escapeHTML(d.realEnd || 'En curso')}`,
         serviceType: escapeHTML(d.serviceType),
@@ -2106,27 +2161,26 @@ function toggleMode() {
         noveltyType: noveltyCell(d),
         approval: pill(d.approval),
         status: pill(d.status),
-        actions: `<div class="row-actions">${action('Gestionar', 'manageMalla', d.id)}${action('Replicar', 'duplicateMalla', d.id)}${action('Eliminar', 'deleteAvailability', d.id)}</div>`
+        actions: `<div class="row-actions">${iconAction('Gestionar', 'manageMalla', d.id, 'ti-settings')}${iconAction('Replicar', 'duplicateMalla', d.id, 'ti-copy')}${iconAction('Eliminar', 'deleteAvailability', d.id, 'ti-trash')}</div>`
       };
       state.prefs.customMallaColumns.forEach(col => values[col.key] = customCell(d, col));
       return row(visibleMallaColumns().map(key => values[key] ?? ''));
     });
     const headers = visibleMallaColumns().map(key => headerCell(key));
     const canEditTitles = hasPermission('perm:editarTitulosMalla');
-    const titleTool = canEditTitles ? `<button class="dev-btn" data-add-column="mallas"><i class="ti ti-columns"></i> Agregar título</button>` : '';
+    const titleTool = canEditTitles ? `<button class="dev-btn icon-btn" data-add-column="mallas" title="Agregar título" aria-label="Agregar título"><i class="ti ti-columns"></i></button>` : '';
     panel('mallas', 'Mallas', '',
       '',
       `<div class="malla-command-bar">
-        <div class="malla-action-groups">
+        <div class="malla-action-groups compact-actions">
           <div class="action-group"><div class="action-group-label">Carga</div><div class="action-group-buttons">
-            <button class="dev-btn primary" data-open="malla"><i class="ti ti-plus"></i> Nueva malla</button>
-            <label class="dev-btn"><i class="ti ti-upload"></i> Importar malla<input type="file" accept=".xlsx,.xls,.csv" data-import-malla style="display:none"></label>
-            <button class="dev-btn" data-download-malla-template><i class="ti ti-download"></i> Descargar base</button>
+            <button class="dev-btn primary icon-btn" data-open="malla" title="Nueva malla" aria-label="Nueva malla"><i class="ti ti-plus"></i></button>
+            <label class="dev-btn icon-btn" title="Importar malla" aria-label="Importar malla"><i class="ti ti-upload"></i><input type="file" accept=".xlsx,.xls,.csv" data-import-malla style="display:none"></label>
+            <button class="dev-btn icon-btn" data-download-malla-template title="Descargar base" aria-label="Descargar base"><i class="ti ti-download"></i></button>
           </div></div>
           <div class="action-group"><div class="action-group-label">Operación</div><div class="action-group-buttons">
-            <button class="dev-btn" data-replicate-mass><i class="ti ti-copy"></i> Replicar masivo</button>
-            <button class="dev-btn" data-export="availabilities"><i class="ti ti-file-export"></i> Exportar CSV</button>
-            <button class="dev-btn" data-export="quickgo"><i class="ti ti-file-export"></i> Exportar Quick Go</button>
+            <button class="dev-btn icon-btn" data-replicate-mass title="Replicar masivo" aria-label="Replicar masivo"><i class="ti ti-copy"></i></button>
+            <button class="dev-btn icon-btn" data-export="availabilities" title="Exportar CSV" aria-label="Exportar CSV"><i class="ti ti-file-export"></i></button>
           </div></div>
           <div class="action-group"><div class="action-group-label">Columnas</div><div class="action-group-buttons">
             ${titleTool || '<span class="fp-sub">Sin permisos para editar títulos.</span>'}
@@ -2568,6 +2622,7 @@ function toggleMode() {
         ['contractType', 'Tipo de contrato', 'select', state.prefs.contractTypes],
         ['managementType', 'Tipo de gestión', 'select', state.prefs.managementTypes],
         ['quickGoId', 'ID Quick Go', 'text'],
+        ['quickGoStatus', 'Estado ID Quick Go', 'select', ['ASIGNADO', 'FINALIZADO', 'CANCELADO']],
         ['observations', 'Observación', 'textarea']
       ],
       submit: data => {
@@ -2576,6 +2631,7 @@ function toggleMode() {
         if (asset && (!data.contractType || data.contractType === 'Fijo')) data.contractType = 'Fijo';
         if (data.quicker === 'Pendiente de asignación') data.quicker = '';
         const item = { id: uid('DIS'), ...data, schedule: `${data.plannedStart} - ${data.plannedEnd}`, serviceType: data.managementType, noveltyType: '', realStart: '', realEnd: '', approval: 'Pendiente', evidencePhoto: '', status: data.quicker ? 'Programado' : 'Pendiente asignación', custom: {} };
+        normalizeQuickGoFields(item);
         state.availabilities.unshift(item);
         log('Disponibilidad', 'Creó malla', item.id);
       }
@@ -2696,6 +2752,7 @@ function toggleMode() {
         if (field[0] === 'quicker') return ['quicker', 'Quicker', 'select', ['Pendiente de asignación', ...state.quickers.map(q => q.name)]];
         if (field[0] === 'contractType') return ['contractType', 'Tipo de contrato', 'select', state.prefs.contractTypes || seed.prefs.contractTypes];
         if (field[0] === 'managementType') return ['managementType', 'Tipo de gestión', 'select', state.prefs.managementTypes || seed.prefs.managementTypes];
+        if (field[0] === 'quickGoStatus') return ['quickGoStatus', 'Estado ID Quick Go', 'select', ['ASIGNADO', 'FINALIZADO', 'CANCELADO']];
         return field;
       });
     }
@@ -2719,6 +2776,42 @@ function toggleMode() {
     return current;
   }
 
+  function openMallaCreateOptions() {
+    const form = document.getElementById('modal-form');
+    const dates = [...new Set(state.availabilities.map(d => d.date).filter(Boolean))].sort().reverse();
+    document.getElementById('modal-title').textContent = 'Nueva malla';
+    document.getElementById('modal-subtitle').textContent = 'Crea una disponibilidad individual o duplica la programación de un día ya cargado.';
+    form.innerHTML = `<div class="form-grid">
+      <div class="form-field full">
+        <button class="dev-btn primary" type="button" data-create-single-malla><i class="ti ti-plus"></i> Agregar casilla individual</button>
+      </div>
+      <div class="form-field full"><label>Duplicar malla existente</label><span class="fp-sub">Selecciona un día origen y replica sus servicios al rango que necesites.</span></div>
+      <div class="form-field"><label>Día origen</label><select name="sourceDate">${dates.map(date => `<option value="${escapeHTML(date)}">${escapeHTML(date)}</option>`).join('')}</select></div>
+      <div class="form-field"><label>Fecha inicio destino</label><input name="startDate" type="date"></div>
+      <div class="form-field"><label>Fecha fin destino</label><input name="endDate" type="date"></div>
+    </div><div class="modal-foot"><button class="dev-btn" type="button" id="cancel-form">Cancelar</button><button class="dev-btn primary" type="submit">Duplicar día</button></div>`;
+    form.querySelector('[data-create-single-malla]').onclick = () => openForm('malla');
+    form.onsubmit = event => {
+      event.preventDefault();
+      const data = Object.fromEntries(new FormData(form).entries());
+      if (!data.sourceDate || !data.startDate || !data.endDate) { toast('Completa día origen y rango destino'); return; }
+      const source = state.availabilities.filter(d => d.date === data.sourceDate);
+      if (!source.length) { toast('No hay mallas en el día origen'); return; }
+      const start = new Date(`${data.startDate}T00:00:00`);
+      const end = new Date(`${data.endDate}T00:00:00`);
+      for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+        const date = d.toISOString().slice(0, 10);
+        source.forEach(item => state.availabilities.unshift({ ...item, id: uid('DIS'), date, realStart: '', realEnd: '', evidencePhoto: '', status: item.quicker ? 'Programado' : 'Pendiente asignación', custom: { ...(item.custom || {}) } }));
+      }
+      closeModal();
+      log('Malla', 'Duplicó malla desde nuevo', `${data.sourceDate} a ${data.startDate}-${data.endDate}`);
+      saveState('Malla duplicada');
+    };
+    document.getElementById('cancel-form').onclick = closeModal;
+    document.getElementById('app-modal').classList.add('open');
+    document.getElementById('app-modal').setAttribute('aria-hidden', 'false');
+  }
+
   function openForm(type) {
     const schema = schemaFor(type);
     const form = document.getElementById('modal-form');
@@ -2736,6 +2829,16 @@ function toggleMode() {
       };
       updatePoints();
       if (clientSel) clientSel.onchange = updatePoints;
+      const toggleQuickGo = () => {
+        const isQuickGo = /quick\s*go/i.test(`${form.elements.contractType?.value || ''} ${form.elements.managementType?.value || ''}`);
+        ['quickGoId', 'quickGoStatus'].forEach(name => {
+          const field = form.elements[name]?.closest('.form-field');
+          if (field) field.style.display = isQuickGo ? '' : 'none';
+        });
+      };
+      form.elements.contractType?.addEventListener('change', toggleQuickGo);
+      form.elements.managementType?.addEventListener('change', toggleQuickGo);
+      toggleQuickGo();
     }
     form.onsubmit = event => {
       event.preventDefault();
@@ -2751,7 +2854,7 @@ function toggleMode() {
 
   function fieldHTML(name, label, type, options = []) {
     const full = type === 'textarea' ? ' full' : '';
-    const optional = ['quickGoId', 'observations', 'cedula', 'city', 'serviceType', 'point'].includes(name);
+    const optional = ['quickGoId', 'quickGoStatus', 'observations', 'cedula', 'city', 'serviceType', 'point'].includes(name);
     const req = optional ? '' : ' required';
     if (type === 'select') {
       return `<div class="form-field${full}"><label>${label}</label><select name="${name}"${req}>${options.map(o => `<option>${escapeHTML(o)}</option>`).join('')}</select></div>`;
@@ -2774,6 +2877,7 @@ function toggleMode() {
     if (actionName === 'editUser') { openUserForm(id); return; }
     if (actionName === 'permissionsUser') { openPermissionsForm(id); return; }
     if (actionName === 'editMessenger') { openMessengerUserForm(id); return; }
+    if (actionName === 'viewEvidence') { openEvidenceModal(id); return; }
     if (actionName === 'deleteMessenger') {
       const q = find('quickers');
       if (q && confirm(`¿Eliminar mensajero ${q.name}?`)) {
@@ -3114,7 +3218,7 @@ function toggleMode() {
     const planned = String(get('Horario', 'HORARIO', 'schedule') || '');
     const [start = '', end = ''] = planned.split('-').map(v => v.trim());
     const contractType = get('Tipo de contrato', 'TIPO DE CONTRATO', 'contractType') || 'Fijo';
-    return {
+    const item = {
       id: uid('DIS'),
       date: get('Fecha', 'FECHA', 'date'),
       city: get('Ciudad', 'CIUDAD', 'city') || 'Bogotá',
@@ -3127,7 +3231,7 @@ function toggleMode() {
       contractType,
       managementType: get('Tipo de gestión', 'TIPO DE GESTIÓN', 'managementType') || 'Fijo',
       quickGoId: get('ID Quick Go', 'ID QUICK GO', 'quickGoId'),
-      quickGoStatus: get('Estado ID Quick Go', 'ESTADO ID QUICK GO', 'quickGoStatus') || (contractType === 'Quick Go' ? 'Pendiente de asignación' : ''),
+      quickGoStatus: get('Estado ID Quick Go', 'ESTADO ID QUICK GO', 'quickGoStatus') || (contractType === 'Quick Go' ? 'ASIGNADO' : ''),
       observations: get('Observación', 'OBSERVACIÓN', 'observations'),
       noveltyType: get('Inasistencias / novedades', 'INASISTENCIAS / NOVEDADES', 'noveltyType'),
       realStart: '',
@@ -3136,6 +3240,8 @@ function toggleMode() {
       status: get('Estado', 'ESTADO', 'status') || (get('Nombre y apellidos', 'NOMBRE Y APELLIDOS', 'quicker') ? 'Programado' : 'Pendiente asignación'),
       custom: {}
     };
+    normalizeQuickGoFields(item);
+    return item;
   }
 
   function importMallaFile(file) {
@@ -3591,6 +3697,7 @@ function toggleMode() {
       if (open.dataset.open === 'cliente') openClientForm();
       else if (open.dataset.open === 'usuario') openUserForm();
       else if (open.dataset.open === 'messengerUser') openMessengerUserForm();
+      else if (open.dataset.open === 'malla') openMallaCreateOptions();
       else openForm(open.dataset.open);
     }
     const cfgTab = event.target.closest('[data-config-tab]');
@@ -3750,8 +3857,31 @@ function toggleMode() {
     if (event.target.matches('[data-malla-select]')) {
       const item = state.availabilities.find(d => d.id === event.target.dataset.mallaSelect);
       if (!item) return;
-      item[event.target.dataset.mallaField] = event.target.value;
-      if (event.target.dataset.mallaField === 'contractType' && event.target.value === 'Quick Go' && !item.quickGoId) {
+      const field = event.target.dataset.mallaField;
+      item[field] = event.target.value;
+      if (field === 'quicker') {
+        const quick = state.quickers.find(q => q.name === item.quicker);
+        if (item.quicker === 'Pendiente de asignación') item.quicker = '';
+        if (quick) {
+          item.cedula = quick.cedula || item.cedula || '';
+          item.city = quick.city || item.city || '';
+          item.status = 'Programado';
+        } else if (!item.quicker) {
+          item.status = 'Pendiente asignación';
+        }
+      }
+      if (field === 'client') {
+        const points = ((state.clients.find(c => c.name === item.client) || {}).points || []).map(pointName);
+        item.point = points[0] || '';
+        item.city = pointInfo(item.client, item.point).city || item.city || '';
+      }
+      if (field === 'point') {
+        item.city = pointInfo(item.client, item.point).city || item.city || '';
+      }
+      if (field === 'contractType' || field === 'managementType' || field === 'quickGoStatus') {
+        normalizeQuickGoFields(item);
+      }
+      if (isQuickGoMalla(item) && !item.quickGoId) {
         item.status = item.quicker ? item.status : 'Pendiente asignación';
       }
       log('Malla', `Actualizó ${event.target.dataset.mallaField}`, item.id);
@@ -3797,6 +3927,7 @@ function toggleMode() {
     else if (type === 'messengerUser') openMessengerUserForm();
     else if (type === 'calendarEvent') openCalendarEventForm();
     else if (type === 'file') openFolderForm();
+    else if (type === 'malla') openMallaCreateOptions();
     else openForm(type);
   });
   document.getElementById('export-current')?.addEventListener('click', () => {
