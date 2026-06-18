@@ -749,6 +749,9 @@
   .malla-record-sheet .data-table th { background:#E86F1E; color:#fff; font-size:10px; }
   .malla-record-sheet .data-table td { white-space:nowrap; }
   .malla-record-title { font-size:12px; font-weight:900; color:var(--text-1); margin: 2px 0 8px; }
+  .malla-record-toolbar { display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; padding:12px; border-bottom:1px solid var(--border); }
+  .malla-record-toolbar input { min-width:240px; }
+  .record-sort-btn { border:0; background:transparent; color:inherit; font:inherit; font-weight:900; cursor:pointer; white-space:nowrap; }
   .config-split { display: grid; grid-template-columns: 1fr; gap: 16px; }
   .settings-shell { display: grid; grid-template-columns: 260px minmax(0,1fr); min-height: 620px; border: 1px solid var(--border); border-radius: 18px; overflow: hidden; background: rgba(0,0,0,.14); }
   .settings-nav { border-right: 1px solid var(--border); padding: 16px 12px; background: rgba(0,0,0,.16); overflow: auto; }
@@ -936,12 +939,10 @@
       <span id="cloud-status" class="status-pill st-warn">Modo local</span>
       <span id="project-pill" class="status-pill st-info project-pill">Proyecto: Global</span>
       <div class="tb-search"><i class="ti ti-search"></i><input id="global-search" placeholder="Buscar módulo o Quicker..."></div>
-      <button class="dev-btn primary" id="quick-create"><i class="ti ti-plus"></i> Nuevo registro</button>
-      <button class="dev-btn" id="export-current"><i class="ti ti-download"></i> Exportar</button>
-      <div class="tb-icon-btn" title="Notificaciones">
+      <button class="tb-icon-btn" type="button" title="Notificaciones" aria-label="Notificaciones" data-show-notifications>
         <i class="ti ti-bell"></i>
         <div class="notif-dot"></div>
-      </div>
+      </button>
       <button id="mode-toggle" onclick="toggleMode()">
         <i class="ti ti-sun" id="mode-icon"></i>
         <span id="mode-label">Modo claro</span>
@@ -2108,7 +2109,8 @@ function toggleMode() {
   function ingressCell(d) {
     const info = computeIngress(d);
     const danger = info.status === 'Sin ingreso' ? '⚠ ' : '';
-    return `${pill(`${danger}${info.status}`)}<div class="fp-sub">${escapeHTML(info.note)}</div>`;
+    const note = info.note && info.note !== info.status ? `<div class="fp-sub">${escapeHTML(info.note)}</div>` : '';
+    return `${pill(`${danger}${info.status}`)}${note}`;
   }
 
   function panel(pageId, title, subtitle, actions, body) {
@@ -2199,6 +2201,7 @@ function toggleMode() {
           <div class="action-group"><div class="action-group-label">Operación</div><div class="action-group-buttons">
             <button class="dev-btn icon-btn" data-replicate-mass title="Replicar masivo" aria-label="Replicar masivo"><i class="ti ti-copy"></i></button>
             <button class="dev-btn icon-btn" data-export="availabilities" title="Exportar Excel" aria-label="Exportar Excel"><i class="ti ti-file-export"></i></button>
+            <button class="dev-btn icon-btn" data-delete-malla-mass title="Borrar malla masivo" aria-label="Borrar malla masivo"><i class="ti ti-trash"></i></button>
           </div></div>
           <div class="action-group"><div class="action-group-label">Columnas</div><div class="action-group-buttons">
             ${titleTool || '<span class="fp-sub">Sin permisos para editar títulos.</span>'}
@@ -2920,9 +2923,12 @@ function toggleMode() {
     if (actionName === 'deleteAvailability') {
       const item = find('availabilities');
       if (item && confirm(`¿Eliminar servicio ${item.date} · ${item.point || ''} · ${item.quicker || 'sin asignar'}?`)) {
+        const date = item.date || 'Sin fecha';
+        const recordsOpen = document.getElementById('app-modal')?.classList.contains('wide');
         state.availabilities = state.availabilities.filter(d => d.id !== id);
         log('Malla', 'Eliminó servicio', id);
         saveState('Servicio eliminado');
+        if (recordsOpen) setTimeout(() => openMallaRecords(date), 0);
       }
       return;
     }
@@ -3352,6 +3358,26 @@ function toggleMode() {
     return aoa.slice(headerIndex + 1).map(values => Object.fromEntries(headers.map((header, index) => [header, values[index] ?? ''])));
   }
 
+  function normalizeImportedDate(value) {
+    if (value instanceof Date && !Number.isNaN(value.getTime())) return value.toISOString().slice(0, 10);
+    if (typeof value === 'number' || (/^\d+(\.\d+)?$/.test(String(value).trim()) && Number(value) > 30000)) {
+      const serial = Number(value);
+      if (Number.isFinite(serial)) {
+        const date = new Date(Date.UTC(1899, 11, 30 + Math.floor(serial)));
+        return date.toISOString().slice(0, 10);
+      }
+    }
+    const text = String(value || '').trim();
+    if (!text) return '';
+    if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
+    const slash = text.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2,4})$/);
+    if (slash) {
+      const year = slash[3].length === 2 ? `20${slash[3]}` : slash[3];
+      return `${year}-${slash[2].padStart(2, '0')}-${slash[1].padStart(2, '0')}`;
+    }
+    return text;
+  }
+
   function normalizeMallaImportRow(row) {
     const get = (...names) => {
       const found = names.find(name => Object.prototype.hasOwnProperty.call(row, name));
@@ -3362,7 +3388,7 @@ function toggleMode() {
     const contractType = get('Tipo de contrato', 'TIPO DE CONTRATO', 'contractType') || 'Fijo';
     const item = {
       id: uid('DIS'),
-      date: get('Fecha', 'FECHA', 'date'),
+      date: normalizeImportedDate(get('Fecha', 'FECHA', 'date')),
       city: get('Ciudad', 'CIUDAD', 'city') || 'Bogotá',
       point: get('Punto', 'PUNTO', 'point'),
       quicker: get('Nombre y apellidos', 'NOMBRE Y APELLIDOS', 'Nombre y apellido', 'quicker'),
@@ -3393,7 +3419,9 @@ function toggleMode() {
       const wb = XLSX.read(reader.result, { type: 'array', cellDates: false });
       const ws = wb.Sheets[wb.SheetNames[0]];
       const rows = rowsFromMallaSheet(ws);
+      const batchId = uid('IMP');
       const imported = rows.map(normalizeMallaImportRow).filter(r => r.date || r.point || r.cedula || r.quicker);
+      imported.forEach(item => item.importBatchId = batchId);
       state.availabilities.unshift(...imported);
       log('Malla', 'Importó malla masiva', `${imported.length} registros`);
       saveState('Malla importada');
@@ -3401,15 +3429,82 @@ function toggleMode() {
     reader.readAsArrayBuffer(file);
   }
 
+  function deleteMallaByDate(date) {
+    const target = date || '';
+    const count = state.availabilities.filter(item => (item.date || 'Sin fecha') === target).length;
+    if (!count) { toast('No hay registros para eliminar'); return; }
+    if (!confirm(`¿Eliminar ${count} registros de la malla ${target}?`)) return;
+    state.availabilities = state.availabilities.filter(item => (item.date || 'Sin fecha') !== target);
+    log('Malla', 'Eliminó malla diaria', `${target} · ${count} registros`);
+    closeModal();
+    saveState('Malla eliminada');
+  }
+
+  function openMallaMassDeleteForm() {
+    const dates = [...new Set((state.availabilities || []).map(item => item.date || 'Sin fecha'))].sort((a, b) => String(b).localeCompare(String(a)));
+    const latestBatch = [...new Set((state.availabilities || []).map(item => item.importBatchId).filter(Boolean))][0] || '';
+    const form = document.getElementById('modal-form');
+    document.getElementById('modal-title').textContent = 'Borrar malla masivo';
+    document.getElementById('modal-subtitle').textContent = 'Elimina registros cargados por error sin tener que borrarlos uno a uno.';
+    form.innerHTML = `<div class="form-grid">
+      <div class="form-field full"><label>Qué deseas borrar</label><select name="scope">
+        <option value="date">Una malla por fecha</option>
+        <option value="latestBatch">Última importación</option>
+        <option value="all">Toda la malla cargada</option>
+      </select></div>
+      <div class="form-field full"><label>Fecha de malla</label><select name="date">${dates.map(date => `<option value="${escapeHTML(date)}">${escapeHTML(date)} · ${state.availabilities.filter(item => (item.date || 'Sin fecha') === date).length} registros</option>`).join('')}</select></div>
+      <div class="form-field full"><label>Confirmación</label><input name="confirmText" placeholder="Escribe BORRAR para confirmar" required></div>
+    </div><div class="modal-foot"><button class="dev-btn" type="button" id="cancel-form">Cancelar</button><button class="dev-btn primary" type="submit"><i class="ti ti-trash"></i> Borrar</button></div>`;
+    form.elements.scope.onchange = () => {
+      form.elements.date.closest('.form-field').style.display = form.elements.scope.value === 'date' ? '' : 'none';
+    };
+    form.onsubmit = event => {
+      event.preventDefault();
+      const data = Object.fromEntries(new FormData(form).entries());
+      if (String(data.confirmText || '').trim().toUpperCase() !== 'BORRAR') { toast('Escribe BORRAR para confirmar'); return; }
+      let before = state.availabilities.length;
+      if (data.scope === 'date') state.availabilities = state.availabilities.filter(item => (item.date || 'Sin fecha') !== data.date);
+      if (data.scope === 'latestBatch') {
+        if (!latestBatch) { toast('No hay lote de importación reciente'); return; }
+        state.availabilities = state.availabilities.filter(item => item.importBatchId !== latestBatch);
+      }
+      if (data.scope === 'all') state.availabilities = [];
+      const removed = before - state.availabilities.length;
+      closeModal();
+      log('Malla', 'Borrado masivo', `${removed} registros`);
+      saveState(`${removed} registros eliminados`);
+    };
+    document.getElementById('cancel-form').onclick = closeModal;
+    const modal = document.getElementById('app-modal');
+    modal.classList.remove('wide');
+    modal.classList.add('open');
+    modal.setAttribute('aria-hidden', 'false');
+  }
+
+  function sortRecordItems(items) {
+    const key = state.prefs.recordSortKey || 'date';
+    const dir = state.prefs.recordSortDir === 'asc' ? 1 : -1;
+    return [...items].sort((a, b) => compareMallaValue(a, b, key) * dir);
+  }
+
   function openMallaRecords(selectedDate = '') {
     const dates = [...new Set((state.availabilities || []).map(item => item.date || 'Sin fecha'))].sort((a, b) => String(b).localeCompare(String(a)));
     const activeDate = selectedDate || dates[0] || 'Sin fecha';
-    const items = (state.availabilities || []).filter(item => (item.date || 'Sin fecha') === activeDate);
+    const search = state.prefs.recordSearch || '';
+    const normalizedSearch = search.toLowerCase();
+    const items = sortRecordItems((state.availabilities || []).filter(item => (item.date || 'Sin fecha') === activeDate).filter(item => {
+      if (!normalizedSearch) return true;
+      const exportRow = mallaExportRow(item);
+      return Object.values({ ...exportRow, client: item.client || '', status: item.status || '' }).join(' ').toLowerCase().includes(normalizedSearch);
+    }));
     const cols = mallaTemplateColumns();
-    const headers = cols.map(col => escapeHTML(col.label)).concat('Editar');
+    const headers = cols.map(col => {
+      const active = state.prefs.recordSortKey === col.key ? (state.prefs.recordSortDir === 'asc' ? ' ▲' : ' ▼') : '';
+      return `<button class="record-sort-btn" type="button" data-record-sort="${escapeHTML(col.key)}">${escapeHTML(col.label)}${active}</button>`;
+    }).concat('Gestión');
     const rows = items.map(item => {
       const exportRow = mallaExportRow(item);
-      return row(cols.map(col => escapeHTML(exportRow[col.key] || '')).concat(iconAction('Editar registro', 'manageMalla', item.id, 'ti-pencil')));
+      return row(cols.map(col => escapeHTML(exportRow[col.key] || '')).concat(`<div class="row-actions">${iconAction('Editar registro', 'manageMalla', item.id, 'ti-pencil')}${iconAction('Eliminar registro', 'deleteAvailability', item.id, 'ti-trash')}</div>`));
     });
     const dayButtons = dates.map(date => {
       const count = state.availabilities.filter(item => (item.date || 'Sin fecha') === date).length;
@@ -3421,12 +3516,43 @@ function toggleMode() {
     form.innerHTML = `<div class="malla-record-list">
       <aside class="malla-record-days">${dayButtons || '<span class="fp-sub">No hay mallas guardadas.</span>'}</aside>
       <section class="malla-record-sheet">
-        <div style="padding:12px"><div class="malla-record-title">Malla ${escapeHTML(activeDate)}</div></div>
+        <div class="malla-record-toolbar">
+          <div><div class="malla-record-title">Malla ${escapeHTML(activeDate)}</div><span class="fp-sub">${items.length} registros visibles</span></div>
+          <input data-record-search value="${escapeHTML(search)}" placeholder="Buscar en esta malla...">
+          <button class="dev-btn icon-btn" type="button" data-delete-record-date="${escapeHTML(activeDate)}" title="Eliminar esta malla" aria-label="Eliminar esta malla"><i class="ti ti-trash"></i></button>
+        </div>
         <div class="data-table-wrap"><table class="data-table"><thead><tr>${headers.map(h => `<th>${h}</th>`).join('')}</tr></thead><tbody>${rows.join('') || `<tr><td colspan="${headers.length}">Sin registros para este día.</td></tr>`}</tbody></table></div>
       </section>
     </div>`;
     const modal = document.getElementById('app-modal');
     modal.classList.add('open', 'wide');
+    modal.setAttribute('aria-hidden', 'false');
+    requestAnimationFrame(() => {
+      const input = document.querySelector('[data-record-search]');
+      if (input && search) {
+        input.focus();
+        input.setSelectionRange(input.value.length, input.value.length);
+      }
+    });
+  }
+
+  function openNotificationsPanel() {
+    const form = document.getElementById('modal-form');
+    const alerts = [
+      ...state.novelties.filter(n => !/cerrada|rechazada/i.test(n.status)).slice(0, 8).map(n => ({ icon: 'ti-alert-triangle', title: n.type, meta: `${n.status || 'Pendiente'} · ${n.ref || ''}` })),
+      ...state.logs.slice(0, 6).map(l => ({ icon: 'ti-history', title: l.action, meta: `${l.entity} · ${l.time}` }))
+    ];
+    document.getElementById('modal-title').textContent = 'Notificaciones';
+    document.getElementById('modal-subtitle').textContent = 'Resumen de novedades abiertas y actividad reciente.';
+    form.innerHTML = `<div class="tl-list">${alerts.map(item => `<div class="tl-item">
+      <div class="tl-dot y"><i class="ti ${item.icon}" style="font-size:10px"></i></div>
+      <div class="tl-body"><div class="tl-body-title">${escapeHTML(item.title || 'Notificación')}</div><div class="tl-body-meta">${escapeHTML(item.meta || '')}</div></div>
+    </div>`).join('') || '<div class="fp-sub">No hay notificaciones pendientes.</div>'}</div>
+    <div class="modal-foot"><button class="dev-btn primary" type="button" id="cancel-form">Cerrar</button></div>`;
+    document.getElementById('cancel-form').onclick = closeModal;
+    const modal = document.getElementById('app-modal');
+    modal.classList.remove('wide');
+    modal.classList.add('open');
     modal.setAttribute('aria-hidden', 'false');
   }
 
@@ -3970,6 +4096,19 @@ function toggleMode() {
     if (newFolder) openFolderForm();
     const replicateMass = event.target.closest('[data-replicate-mass]');
     if (replicateMass) openReplicateMassForm();
+    const deleteMallaMass = event.target.closest('[data-delete-malla-mass]');
+    if (deleteMallaMass) openMallaMassDeleteForm();
+    const deleteRecordDate = event.target.closest('[data-delete-record-date]');
+    if (deleteRecordDate) deleteMallaByDate(deleteRecordDate.dataset.deleteRecordDate);
+    const recordSort = event.target.closest('[data-record-sort]');
+    if (recordSort) {
+      const key = recordSort.dataset.recordSort;
+      state.prefs.recordSortDir = state.prefs.recordSortKey === key && state.prefs.recordSortDir === 'asc' ? 'desc' : 'asc';
+      state.prefs.recordSortKey = key;
+      openMallaRecords(document.querySelector('.malla-day-btn.on')?.dataset.recordDate || '');
+    }
+    const showNotifications = event.target.closest('[data-show-notifications]');
+    if (showNotifications) openNotificationsPanel();
     const sortCol = event.target.closest('[data-sort-col]');
     if (sortCol) {
       const key = sortCol.dataset.sortCol;
@@ -4145,6 +4284,12 @@ function toggleMode() {
     document.querySelectorAll('.functional-panel tbody tr').forEach(tr => {
       tr.style.display = tr.textContent.toLowerCase().includes(term) ? '' : 'none';
     });
+  });
+  document.addEventListener('input', event => {
+    if (event.target.matches('[data-record-search]')) {
+      state.prefs.recordSearch = event.target.value;
+      openMallaRecords(document.querySelector('.malla-day-btn.on')?.dataset.recordDate || '');
+    }
   });
 
   function applySession() {
