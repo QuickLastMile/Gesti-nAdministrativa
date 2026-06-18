@@ -613,6 +613,7 @@
   .light-mode .module-tab,.light-mode .nov-kpi,.light-mode .detail-row,.light-mode .form-field-card { background:rgba(255,255,255,.92); border-color:rgba(18,18,18,.2); }
   .light-mode .nov-filterbar select,.light-mode .nov-filterbar input,.light-mode .form-config-select { background:#fff; color:#15130c; border-color:#ded5b8; }
   #page-mallas > :not(.functional-panel),
+  #page-novedades > :not(.functional-panel),
   #page-calendario > :not(.functional-panel),
   #page-archivos > :not(.functional-panel),
   #page-config > :not(.functional-panel) { display: none !important; }
@@ -1582,10 +1583,7 @@ function toggleMode() {
       { id: 'QK-1003', cedula: '79999123', name: 'Andrés Silva', phone: '3105550103', email: 'andres.silva@mail.com', client: 'Farmacias Andina', point: 'Chapinero', zone: 'KML Sur', docName: 'Tecnomecánica', docExpires: '2026-06-15', status: 'Bloqueado', lat: 4.6464, lng: -74.0631 }
     ],
     availabilities: [],
-    novelties: [
-      { id: 'NOV-001', type: 'Retardo', origin: 'Sistema', ref: 'DIS-002', severity: 'Media', status: 'En validación', note: 'Llegada 41 minutos después del plan.' },
-      { id: 'NOV-002', type: 'No colocado', origin: 'Sistema', ref: 'DIS-003', severity: 'Alta', status: 'Reportada', note: 'Sin inicio dentro de la regla del cliente.' }
-    ],
+    novelties: [],
     tickets: [
       { id: 'TCK-001', coordinator: 'Diana Gómez', activity: 'Validar comparendos de Carlos Mejía', type: 'Seguimiento Quicker', complexity: 'Media', sla: 'Hoy 15:00', status: 'Abierto' },
       { id: 'TCK-002', coordinator: 'Diana Gómez', activity: 'Aprobar novedad DIS-002', type: 'Novedad operativa', complexity: 'Alta', sla: 'Hoy 11:30', status: 'En proceso' }
@@ -1664,7 +1662,7 @@ function toggleMode() {
     next.users = Array.isArray(value?.users) ? value.users : [adminBootstrap];
     next.quickers = Array.isArray(value?.quickers) ? value.quickers : [];
     next.availabilities = value?.prefs?.mallaBlankResetDone ? (value?.availabilities || seed.availabilities) : [];
-    next.novelties = value?.novelties || seed.novelties;
+    next.novelties = (value?.novelties || seed.novelties).filter(n => !['NOV-001', 'NOV-002'].includes(n.id));
     next.tickets = value?.tickets || seed.tickets;
     next.cases = value?.cases || seed.cases;
     next.evidences = value?.evidences || seed.evidences;
@@ -1847,7 +1845,8 @@ function toggleMode() {
     const v = String(value || '').toLowerCase();
     if (v.includes('final') || v.includes('activo') || v.includes('cerr') || v.includes('cargada') || v.includes('aprob')) return 'st-ok';
     if (v.includes('pend') || v.includes('valid') || v.includes('proceso') || v.includes('iniciado')) return 'st-warn';
-    if (v.includes('no colocado') || v.includes('bloque') || v.includes('alta') || v.includes('venc')) return 'st-bad';
+    if (v.includes('retardo') || v.includes('retraso') || v.includes('otro sí') || v.includes('otro si')) return 'st-warn';
+    if (v.includes('inasistencia') || v.includes('desvinculación') || v.includes('descuento') || v.includes('accidente') || v.includes('no colocado') || v.includes('bloque') || v.includes('alta') || v.includes('venc')) return 'st-bad';
     return 'st-info';
   }
 
@@ -2431,14 +2430,14 @@ function toggleMode() {
 
   function getGeneralNoveltyRows() {
     return state.novelties
-      .filter(n => !/retardo|retraso|hora extra|adicional|parqueadero|periferia|transferencia/i.test(`${n.type} ${n.subtype || ''}`))
+      .filter(n => (n.origin === 'Malla' || state.availabilities.some(d => d.id === n.ref)) && !/retardo|retraso|hora extra|adicional|parqueadero|periferia|transferencia/i.test(`${n.type} ${n.subtype || ''}`))
       .map(n => ({ ...n, ...noveltyContext(n), gestionStatus: noveltyGestionStatus(n) }))
       .filter(n => passesNovedadesDateFilter(n.date));
   }
 
   function getDelayRows() {
     const stored = state.novelties
-      .filter(n => /retardo|retraso/i.test(`${n.type} ${n.subtype || ''}`))
+      .filter(n => (n.origin === 'Malla' || state.availabilities.some(d => d.id === n.ref)) && /retardo|retraso/i.test(`${n.type} ${n.subtype || ''}`))
       .map(n => ({ ...n, ...noveltyContext(n), delayStatus: n.delayStatus || 'Pendiente', source: 'novelty' }));
     const storedRefs = new Set(stored.map(n => n.ref));
     const computed = state.availabilities
@@ -2507,6 +2506,15 @@ function toggleMode() {
     return `${Math.round(hours.reduce((a, b) => a + b, 0) / hours.length)}h`;
   }
 
+  function topNoveltyQuickers(items) {
+    const counts = new Map();
+    items.forEach(item => {
+      const name = item.quicker || item.name || item.cedula || 'Sin asignar';
+      counts.set(name, (counts.get(name) || 0) + 1);
+    });
+    return [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 4);
+  }
+
   function exportCurrentNovedades() {
     const tab = state.prefs.novedadesTab || 'inasistencias';
     const rows = novedadesCurrentRows().map(item => ({
@@ -2541,11 +2549,16 @@ function toggleMode() {
     const allRows = [...allGeneral, ...delays, ...hours, ...adds];
     const pending = allRows.filter(n => /pendiente|reportada|validación/i.test(`${n.gestionStatus || n.status || n.delayStatus || ''}`)).length;
     const owners = new Set(allRows.map(n => n.gestionOwner || n.owner).filter(Boolean)).size || 1;
+    const topQuickers = topNoveltyQuickers(allRows);
     const dashboard = `<div class="nov-dashboard">
       <div class="nov-kpi"><small>Pendientes</small><strong>${pending}</strong></div>
       <div class="nov-kpi"><small>Tiempo gestión prom.</small><strong>${avgGestionHours(allRows)}</strong></div>
       <div class="nov-kpi"><small>Adicionales por aprobar</small><strong>${adds.filter(a => /pendiente|reportada/i.test(a.status || '')).length}</strong></div>
       <div class="nov-kpi"><small>Responsables activos</small><strong>${owners}</strong></div>
+    </div>
+    <div class="nov-filterbar" style="margin-top:-4px">
+      <span class="fp-sub" style="font-weight:900;text-transform:uppercase;letter-spacing:.5px">Mensajeros con más novedades</span>
+      ${topQuickers.length ? topQuickers.map(([name, count]) => `<span class="status-pill st-warn">${escapeHTML(name)} · ${count}</span>`).join('') : '<span class="fp-sub">Sin novedades registradas desde malla.</span>'}
     </div>`;
     const filterbar = `<div class="nov-filterbar">
       <select data-novedades-filter-mode>
@@ -2560,37 +2573,37 @@ function toggleMode() {
       const user = currentUser();
       const showClient = user.profile === 'Administrador' || !user.profile || user.profile === 'Gerencia';
       const rows = delays.map(n => row([
-        escapeHTML(n.type || 'Retraso'),
+        pill(n.type || 'Retraso'),
+        pill(n.delayStatus || 'Pendiente'),
         ...(showClient ? [escapeHTML(n.client || '')] : []),
         escapeHTML(n.date || ''),
         escapeHTML(n.quicker || ''),
         escapeHTML(n.cedula || ''),
         escapeHTML(n.observation || n.note || ''),
-        pill(n.delayStatus || 'Pendiente'),
         `<div class="row-actions">${iconAction('Gestionar retraso', 'viewDelay', n.id, 'ti-eye')}${iconAction('Justificado', 'justifyDelay', n.id, 'ti-circle-check')}${iconAction('No justificado', 'rejectDelay', n.id, 'ti-circle-x')}</div>`
       ]));
-      body = table(['Tipo', ...(showClient ? ['Cliente'] : []), 'Fecha', 'Nombre', 'Cédula', 'Observación', 'Estado', 'Acciones'], rows);
+      body = table(['Tipo', 'Estado', ...(showClient ? ['Cliente'] : []), 'Fecha', 'Nombre', 'Cédula', 'Observación', 'Acciones'], rows);
     } else if (active === 'horas') {
       const rows = hours.map(n => row([
-        escapeHTML(n.date || ''), escapeHTML(n.quicker || n.name || ''), escapeHTML(n.cedula || ''), escapeHTML(n.client || ''), escapeHTML(n.hours || n.amount || ''), escapeHTML(n.justification || n.note || ''), pill(n.status || 'Pendiente'),
+        pill(n.status || 'Pendiente'), escapeHTML(n.date || ''), escapeHTML(n.quicker || n.name || ''), escapeHTML(n.cedula || ''), escapeHTML(n.client || ''), escapeHTML(n.hours || n.amount || ''), escapeHTML(n.justification || n.note || ''),
         `<div class="row-actions">${iconAction('Ver detalle', 'viewOvertime', n.id, 'ti-eye')}${iconAction('Aprobar', 'approveOvertime', n.id, 'ti-circle-check')}${iconAction('Rechazar', 'rejectOvertime', n.id, 'ti-circle-x')}</div>`
       ]));
-      body = table(['Fecha', 'Nombre', 'Cédula', 'Cliente', 'Horas', 'Justificación', 'Estado', 'Acciones'], rows);
+      body = table(['Estado', 'Fecha', 'Nombre', 'Cédula', 'Cliente', 'Horas', 'Justificación', 'Acciones'], rows);
     } else if (active === 'adicionales') {
       const rows = adds.map(n => row([
-        escapeHTML(n.date || ''), escapeHTML(n.type || ''), escapeHTML(n.quicker || ''), escapeHTML(n.cedula || ''), escapeHTML(n.client || ''), escapeHTML(n.point || ''), escapeHTML(n.amount || ''), pill(n.status || 'Pendiente'),
+        pill(n.type || 'Adicional'), pill(n.status || 'Pendiente'), escapeHTML(n.date || ''), escapeHTML(n.quicker || ''), escapeHTML(n.cedula || ''), escapeHTML(n.client || ''), escapeHTML(n.point || ''), escapeHTML(n.amount || ''),
         `<div class="row-actions">${iconAction('Ver soporte', 'viewAdditional', n.id, 'ti-eye')}${iconAction('Aprobar', 'approveAdditional', n.id, 'ti-circle-check')}${iconAction('Rechazar', 'rejectAdditional', n.id, 'ti-circle-x')}</div>`
       ]));
-      body = table(['Fecha', 'Tipo', 'Nombre', 'Cédula', 'Cliente', 'Punto', 'Valor', 'Estado', 'Acciones'], rows);
+      body = table(['Tipo', 'Estado', 'Fecha', 'Nombre', 'Cédula', 'Cliente', 'Punto', 'Valor', 'Acciones'], rows);
     } else {
       const rows = allGeneral.map(n => row([
-        escapeHTML(n.type || ''), escapeHTML(n.subtype || ''), escapeHTML(n.date || ''), escapeHTML(n.quicker || ''), escapeHTML(n.cedula || ''), pill(n.gestionStatus || 'Pendiente'), escapeHTML(n.oasisId || ''),
+        pill(n.type || ''), pill(n.gestionStatus || 'Pendiente'), escapeHTML(n.subtype || ''), escapeHTML(n.date || ''), escapeHTML(n.quicker || ''), escapeHTML(n.cedula || ''), escapeHTML(n.oasisId || ''),
         `<div class="row-actions">${iconAction('Ver y gestionar', 'viewNoveltyCase', n.id, 'ti-eye')}${iconAction('Ticket', 'ticketFromNovelty', n.id, 'ti-ticket')}</div>`
       ]));
-      body = table(['Tipo', 'Subtipo', 'Fecha', 'Nombre', 'Cédula', 'Estado gestión', 'ID OASIS', 'Acciones'], rows);
+      body = table(['Tipo', 'Estado gestión', 'Subtipo', 'Fecha', 'Nombre', 'Cédula', 'ID OASIS', 'Acciones'], rows);
     }
     panel('novedades', 'Novedades', '',
-      `<button class="dev-btn primary" data-open="novedad"><i class="ti ti-plus"></i> Nueva novedad</button>`,
+      '',
       `${tabbar}${dashboard}${filterbar}${body}`
     );
   }
@@ -2964,6 +2977,35 @@ function toggleMode() {
       }, true);
   }
 
+  function realNovedadesCount() {
+    const openStatus = item => !/finalizado|cancelado|rechazado|cerrada|cerrado/i.test(`${item.gestionStatus || item.status || item.delayStatus || ''}`);
+    const mallaRefs = new Set(state.availabilities.map(d => d.id));
+    const storedRefs = new Set(state.novelties.map(n => n.ref).filter(Boolean));
+    const stored = state.novelties.filter(n => (n.origin === 'Malla' || mallaRefs.has(n.ref)) && openStatus(n)).length;
+    const computedDelays = state.availabilities.filter(d => d.realStart && minutesBetween(d.plannedStart, d.realStart) > 0 && !storedRefs.has(d.id)).length;
+    const pendingAdds = (state.parkingReports || []).filter(openStatus).length;
+    const pendingHours = (state.overtimeReports || []).filter(openStatus).length;
+    return stored + computedDelays + pendingAdds + pendingHours;
+  }
+
+  function setNavBadge(moduleId, value) {
+    const item = [...document.querySelectorAll('.nav-item')].find(el => el.getAttribute('onclick')?.includes(`'${moduleId}'`));
+    if (!item) return;
+    let badge = item.querySelector('.nbadge');
+    if (!badge) {
+      badge = document.createElement('span');
+      badge.className = 'nbadge';
+      item.appendChild(badge);
+    }
+    badge.textContent = String(value);
+  }
+
+  function updateNavBadges() {
+    setNavBadge('mallas', state.availabilities.length);
+    setNavBadge('novedades', realNovedadesCount());
+    setNavBadge('tickets', state.tickets.filter(t => !/cerrado|finalizado|cancelado/i.test(t.status || '')).length);
+  }
+
   function renderAll() {
     renderDashboard();
     renderMallas();
@@ -2978,6 +3020,7 @@ function toggleMode() {
     renderCalendario();
     renderArchivos();
     renderConfig();
+    updateNavBadges();
   }
 
   const schemas = {
