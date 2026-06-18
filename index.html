@@ -58,7 +58,7 @@
     --accent-glow: 0 4px 20px rgba(245,197,24,.35);
   }
 
-  html, body { height: 100%; font-family: 'Inter', sans-serif; font-size: 13px; }
+  html, body { height: 100%; font-family: 'Inter', sans-serif; font-size: 13px; overflow: hidden; }
 
   body {
     background: var(--bg-grad);
@@ -96,6 +96,8 @@
     border-right: 1px solid var(--border);
     display: flex; flex-direction: column;
     transition: background .3s;
+    height: 100vh;
+    overflow: hidden;
   }
   .sb-logo {
     padding: 20px 16px 16px;
@@ -109,12 +111,15 @@
     display: flex; align-items: center; justify-content: center;
     font-weight: 800; font-size: 16px; color: #000;
     box-shadow: 0 4px 16px rgba(245,197,24,.4);
+    overflow: hidden;
   }
+  .sb-logo-icon img { width: 100%; height: 100%; object-fit: cover; display: block; }
   .sb-logo-name { font-size: 16px; font-weight: 700; color: var(--text-1); }
   .sb-logo-tag  { font-size: 10px; color: var(--text-2); letter-spacing: .3px; }
+  .sb-scroll { flex: 1; overflow-y: auto; padding: 10px 0 8px; }
 
   .sb-section {
-    padding: 16px 14px 6px;
+    padding: 10px 14px 6px;
     font-size: 10px; font-weight: 600;
     color: var(--text-3);
     text-transform: uppercase; letter-spacing: 1px;
@@ -148,7 +153,7 @@
   }
   .nav-item.active .nbadge { background: rgba(0,0,0,.4); color: var(--q); }
 
-  .sb-bottom { margin-top: auto; border-top: 1px solid var(--border); padding: 10px 8px; }
+  .sb-bottom { margin-top: auto; border-top: 1px solid var(--border); padding: 6px 8px; flex-shrink: 0; }
   .sb-user {
     display: flex; align-items: center; gap: 10px;
     padding: 8px 10px; border-radius: 10px;
@@ -632,6 +637,7 @@
   }
   .form-field textarea { min-height: 82px; resize: vertical; }
   .modal-foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+  .app-modal.wide .modal-card { width: min(1180px, calc(100vw - 42px)); }
   .toast {
     position: fixed; right: 22px; bottom: 22px; z-index: 60; border: 1px solid rgba(245,197,24,.35);
     background: rgba(8,6,18,.94); color: #fff; border-radius: 14px; padding: 12px 14px; font-size: 12px;
@@ -734,6 +740,15 @@
   .evidence-preview { width: 54px; height: 38px; object-fit: cover; border-radius: 9px; border: 1px solid rgba(245,197,24,.45); background: #111; display: inline-block; vertical-align: middle; }
   .evidence-button { border:0; background:transparent; padding:0; cursor:pointer; }
   .evidence-large { width: min(760px, 100%); max-height: 68vh; object-fit: contain; border-radius: 16px; border: 1px solid var(--border); background: #050505; }
+  .malla-record-list { display:grid; grid-template-columns: 230px minmax(0,1fr); gap:12px; max-height: 68vh; overflow:hidden; }
+  .malla-record-days { border:1px solid var(--border); border-radius:14px; padding:10px; overflow:auto; background:rgba(0,0,0,.12); }
+  .malla-day-btn { width:100%; border:1px solid var(--border); background:var(--card-bg); color:var(--text-1); border-radius:12px; padding:10px; text-align:left; margin-bottom:8px; cursor:pointer; }
+  .malla-day-btn:hover, .malla-day-btn.on { border-color:rgba(245,197,24,.45); background:rgba(245,197,24,.11); }
+  .malla-record-sheet { overflow:auto; border:1px solid var(--border); border-radius:14px; background:rgba(255,255,255,.03); }
+  .malla-record-sheet .data-table-wrap { border:0; border-radius:0; }
+  .malla-record-sheet .data-table th { background:#E86F1E; color:#fff; font-size:10px; }
+  .malla-record-sheet .data-table td { white-space:nowrap; }
+  .malla-record-title { font-size:12px; font-weight:900; color:var(--text-1); margin: 2px 0 8px; }
   .config-split { display: grid; grid-template-columns: 1fr; gap: 16px; }
   .settings-shell { display: grid; grid-template-columns: 260px minmax(0,1fr); min-height: 620px; border: 1px solid var(--border); border-radius: 18px; overflow: hidden; background: rgba(0,0,0,.14); }
   .settings-nav { border-right: 1px solid var(--border); padding: 16px 12px; background: rgba(0,0,0,.16); overflow: auto; }
@@ -844,13 +859,14 @@
   <!-- ═══ SIDEBAR ═══ -->
   <nav id="sidebar">
     <div class="sb-logo">
-      <div class="sb-logo-icon">Q</div>
+      <div class="sb-logo-icon"><img src="https://i.ibb.co/KjmjjvNZ/Captura-de-pantalla-2025-09-15-161315.jpg" alt="Quick"></div>
       <div>
         <div class="sb-logo-name">Quick</div>
         <div class="sb-logo-tag">Last Mile Platform</div>
       </div>
     </div>
 
+    <div class="sb-scroll">
     <div class="sb-section">Principal</div>
     <div class="nav-item" onclick="nav('dashboard',this)">
       <i class="ti ti-layout-dashboard"></i> Dashboard
@@ -894,6 +910,7 @@
     </div>
     <div class="nav-item" onclick="nav('archivos',this)">
       <i class="ti ti-folder"></i> Archivos
+    </div>
     </div>
 
     <div class="sb-bottom">
@@ -1453,7 +1470,7 @@
 <div class="login-overlay open" id="login-screen">
   <form class="login-card" id="login-form">
     <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
-      <div class="sb-logo">Q</div>
+      <div class="sb-logo-icon"><img src="https://i.ibb.co/KjmjjvNZ/Captura-de-pantalla-2025-09-15-161315.jpg" alt="Quick"></div>
       <div><h2>Quick Last Mile</h2><p style="margin:0">Ingreso administrativo y operativo</p></div>
     </div>
     <div class="login-field"><label>Usuario</label><input id="login-user" autocomplete="username" value="admin.quick" required></div>
@@ -2009,12 +2026,7 @@ function toggleMode() {
 
   function customCell(d, col) {
     const value = d.custom?.[col.key] || '';
-    if (col.type === 'lista') {
-      const options = String(col.options || '').split(',').map(v => v.trim()).filter(Boolean);
-      return `<select class="mini-action" data-custom-cell="${d.id}" data-custom-key="${col.key}"><option value=""></option>${options.map(o => `<option ${o === value ? 'selected' : ''}>${escapeHTML(o)}</option>`).join('')}</select>`;
-    }
-    const type = col.type === 'numero' ? 'number' : col.type === 'fecha' ? 'date' : 'text';
-    return `<input class="mini-action" style="min-width:120px" type="${type}" value="${escapeHTML(value)}" data-custom-cell="${d.id}" data-custom-key="${col.key}">`;
+    return value ? escapeHTML(value) : '<span class="fp-sub">Sin dato</span>';
   }
 
   function editableCell(d, field, value, type = 'text') {
@@ -2028,6 +2040,11 @@ function toggleMode() {
   function optionSelect(options, value, attrs, emptyLabel = '') {
     const opts = emptyLabel ? [`<option value="">${escapeHTML(emptyLabel)}</option>`] : [];
     return `<select class="mini-action" ${attrs}>${opts.concat(options.map(o => `<option value="${escapeHTML(o)}" ${o === value ? 'selected' : ''}>${escapeHTML(o)}</option>`)).join('')}</select>`;
+  }
+
+  function optionsHTML(options, selected = '', emptyLabel = '') {
+    const opts = emptyLabel ? [`<option value="">${escapeHTML(emptyLabel)}</option>`] : [];
+    return opts.concat((options || []).map(o => `<option value="${escapeHTML(o)}" ${o === selected ? 'selected' : ''}>${escapeHTML(o)}</option>`)).join('');
   }
 
   function contractCell(d) {
@@ -2141,18 +2158,18 @@ function toggleMode() {
       const q = state.quickers.find(item => item.name === d.quicker) || {};
       const clientPoints = ((state.clients.find(c => c.name === d.client) || {}).points || []).map(pointName);
       const values = {
-        date: editableCell(d, 'date', d.date, 'date'),
-        city: editableCell(d, 'city', d.city || pointInfo(d.client, d.point).city || 'Bogotá'),
-        cedula: editableCell(d, 'cedula', d.cedula || q.cedula || ''),
-        quicker: editableSelectCell(d, 'quicker', ['Pendiente de asignación', ...state.quickers.map(item => item.name)], d.quicker || 'Pendiente de asignación'),
-        client: editableSelectCell(d, 'client', state.clients.map(c => c.name), d.client),
-        point: editableSelectCell(d, 'point', clientPoints.length ? clientPoints : [d.point].filter(Boolean), d.point, 'Sin punto'),
-        schedule: editableCell(d, 'schedule', d.schedule || `${d.plannedStart || ''} - ${d.plannedEnd || ''}`),
-        contractType: contractCell(d),
-        managementType: managementCell(d),
-        quickGoId: quickGoCell(d),
-        quickGoStatus: quickGoStatusCell(d),
-        observations: `<input class="mini-action" style="min-width:180px" value="${escapeHTML(d.observations || '')}" placeholder="${escapeHTML(computeIngress(d).note || 'Observación')}" data-malla-input="${d.id}" data-malla-field="observations">`,
+        date: escapeHTML(d.date),
+        city: escapeHTML(d.city || pointInfo(d.client, d.point).city || 'Bogotá'),
+        cedula: escapeHTML(d.cedula || q.cedula || ''),
+        quicker: escapeHTML(d.quicker || 'Pendiente de asignación'),
+        client: escapeHTML(d.client || ''),
+        point: escapeHTML(d.point || 'Sin punto'),
+        schedule: escapeHTML(d.schedule || `${d.plannedStart || ''} - ${d.plannedEnd || ''}`),
+        contractType: escapeHTML(d.contractType || 'Fijo'),
+        managementType: escapeHTML(d.managementType || 'Fijo'),
+        quickGoId: isQuickGoMalla(d) ? escapeHTML(d.quickGoId || 'Pendiente') : '<span class="fp-sub">No aplica</span>',
+        quickGoStatus: isQuickGoMalla(d) ? pill((d.quickGoStatus || 'ASIGNADO').toUpperCase()) : '<span class="fp-sub">No aplica</span>',
+        observations: escapeHTML(d.observations || ''),
         planned: `${escapeHTML(d.plannedStart)} - ${escapeHTML(d.plannedEnd)}`,
         executed: `${escapeHTML(d.realStart || 'Sin inicio')} - ${escapeHTML(d.realEnd || 'En curso')}`,
         serviceType: escapeHTML(d.serviceType),
@@ -2161,7 +2178,7 @@ function toggleMode() {
         noveltyType: noveltyCell(d),
         approval: pill(d.approval),
         status: pill(d.status),
-        actions: `<div class="row-actions">${iconAction('Gestionar', 'manageMalla', d.id, 'ti-settings')}${iconAction('Replicar', 'duplicateMalla', d.id, 'ti-copy')}${iconAction('Eliminar', 'deleteAvailability', d.id, 'ti-trash')}</div>`
+        actions: `<div class="row-actions">${iconAction('Editar malla', 'manageMalla', d.id, 'ti-pencil')}${iconAction('Eliminar', 'deleteAvailability', d.id, 'ti-trash')}</div>`
       };
       state.prefs.customMallaColumns.forEach(col => values[col.key] = customCell(d, col));
       return row(visibleMallaColumns().map(key => values[key] ?? ''));
@@ -2177,10 +2194,11 @@ function toggleMode() {
             <button class="dev-btn primary icon-btn" data-open="malla" title="Nueva malla" aria-label="Nueva malla"><i class="ti ti-plus"></i></button>
             <label class="dev-btn icon-btn" title="Importar malla" aria-label="Importar malla"><i class="ti ti-upload"></i><input type="file" accept=".xlsx,.xls,.csv" data-import-malla style="display:none"></label>
             <button class="dev-btn icon-btn" data-download-malla-template title="Descargar base" aria-label="Descargar base"><i class="ti ti-download"></i></button>
+            <button class="dev-btn icon-btn" data-open-malla-records title="Registros diarios" aria-label="Registros diarios"><i class="ti ti-clipboard-list"></i></button>
           </div></div>
           <div class="action-group"><div class="action-group-label">Operación</div><div class="action-group-buttons">
             <button class="dev-btn icon-btn" data-replicate-mass title="Replicar masivo" aria-label="Replicar masivo"><i class="ti ti-copy"></i></button>
-            <button class="dev-btn icon-btn" data-export="availabilities" title="Exportar CSV" aria-label="Exportar CSV"><i class="ti ti-file-export"></i></button>
+            <button class="dev-btn icon-btn" data-export="availabilities" title="Exportar Excel" aria-label="Exportar Excel"><i class="ti ti-file-export"></i></button>
           </div></div>
           <div class="action-group"><div class="action-group-label">Columnas</div><div class="action-group-buttons">
             ${titleTool || '<span class="fp-sub">Sin permisos para editar títulos.</span>'}
@@ -2866,8 +2884,9 @@ function toggleMode() {
   }
 
   function closeModal() {
-    document.getElementById('app-modal').classList.remove('open');
-    document.getElementById('app-modal').setAttribute('aria-hidden', 'true');
+    const modal = document.getElementById('app-modal');
+    modal.classList.remove('open', 'wide');
+    modal.setAttribute('aria-hidden', 'true');
   }
 
   function handleAction(actionName, id) {
@@ -2927,7 +2946,6 @@ function toggleMode() {
       return;
     }
     if (actionName === 'manageMalla') { openMallaManagement(id); return; }
-    if (actionName === 'duplicateMalla') { openDuplicateMalla(id); return; }
     if (actionName === 'startAvailability') {
       const item = find('availabilities'); item.realStart = item.realStart || new Date().toTimeString().slice(0,5); item.status = 'En turno'; log('Disponibilidad', 'Inició turno', id);
     }
@@ -2982,6 +3000,10 @@ function toggleMode() {
   }
 
   function exportCSV(collection) {
+    if (collection === 'availabilities') {
+      downloadMallaWorkbook(state.availabilities || [], 'mallas', false);
+      return;
+    }
     if (collection === 'quickgo') {
       const rows = state.availabilities.filter(d => d.contractType === 'Quick Go').map(d => ({
         fecha: d.date,
@@ -3006,20 +3028,39 @@ function toggleMode() {
   }
 
   function downloadCSV(datasets, collection) {
+    if (window.XLSX) {
+      const wb = XLSX.utils.book_new();
+      Object.entries(datasets).forEach(([name, rows]) => {
+        const dataRows = rows && rows.length ? rows : [{}];
+        const headers = [...new Set(dataRows.flatMap(row => Object.keys(row || {})))];
+        const aoa = headers.length
+          ? [headers, ...dataRows.map(row => headers.map(h => cleanExcelValue(row?.[h])))]
+          : [[name]];
+        const ws = XLSX.utils.aoa_to_sheet(aoa);
+        ws['!cols'] = headers.map(h => ({ wch: Math.max(14, String(h).length + 3) }));
+        if (headers.length) {
+          ws['!autofilter'] = { ref: XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: Math.max(0, aoa.length - 1), c: headers.length - 1 } }) };
+        }
+        XLSX.utils.book_append_sheet(wb, ws, safeSheetName(name));
+      });
+      XLSX.writeFile(wb, `quick_lastmile_${collection}_${new Date().toISOString().slice(0,10)}.xlsx`);
+      toast('Excel generado');
+      return;
+    }
     const chunks = Object.entries(datasets).map(([name, rows]) => {
       if (!rows.length) return `${name}\n`;
       const headers = Object.keys(rows[0]);
-      const lines = rows.map(r => headers.map(h => `"${String(r[h] ?? '').replaceAll('"', '""')}"`).join(','));
-      return `${name}\n${headers.join(',')}\n${lines.join('\n')}`;
+      const lines = rows.map(r => headers.map(h => `"${String(r[h] ?? '').replaceAll('"', '""')}"`).join(';'));
+      return `${name}\n${headers.join(';')}\n${lines.join('\n')}`;
     });
-    const blob = new Blob([chunks.join('\n\n')], { type: 'text/csv;charset=utf-8' });
+    const blob = new Blob(['\ufeff' + chunks.join('\n\n')], { type: 'text/csv;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
     a.download = `quick_lastmile_${collection}_${new Date().toISOString().slice(0,10)}.csv`;
     a.click();
     URL.revokeObjectURL(url);
-    toast('CSV generado');
+    toast('Archivo generado');
   }
 
   function selectedPointsClient() {
@@ -3201,13 +3242,114 @@ function toggleMode() {
     saveState('Columnas restauradas');
   }
 
-  function mallaTemplateHeaders() {
-    return visibleMallaColumns().filter(key => key !== 'actions').map(key => mallaColumnLabels()[key] || key);
+  function cleanExcelValue(value) {
+    if (value == null) return '';
+    if (typeof value === 'object') return JSON.stringify(value);
+    return String(value).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+  }
+
+  function safeSheetName(name) {
+    return String(name || 'Hoja').replace(/[\\/?*[\]:]/g, ' ').slice(0, 31) || 'Hoja';
+  }
+
+  function mallaTemplateColumns() {
+    return [
+      { key: 'date', label: 'Fecha (obligatorio)' },
+      { key: 'city', label: 'Ciudad (obligatorio)' },
+      { key: 'point', label: 'Punto (obligatorio)', comment: 'El punto debe ser igual al registrado en la plataforma.' },
+      { key: 'quicker', label: 'Nombre y apellidos (obligatorio)' },
+      { key: 'cedula', label: 'Cédula (obligatorio)' },
+      { key: 'schedule', label: 'Horario (obligatorio)' },
+      { key: 'contractType', label: 'Tipo de contrato (obligatorio)', comment: 'FIJO, COLABORATIVO, QUICK GO, BACK UP.' },
+      { key: 'managementType', label: 'Tipo de gestión (obligatorio)', comment: 'ADICIONAL, RELEVO, COLABORATIVO, FIJO, FLOTANTE, QUICK GO.' },
+      { key: 'quickGoId', label: 'ID Quick Go (opcional)', comment: 'Si no es Quick Go colocar no aplica.' },
+      { key: 'quickGoStatus', label: 'Estado ID Quick Go (opcional)', comment: 'Si no es Quick Go colocar no aplica. Estados: FINALIZADO, ASIGNADO, CANCELADO.' },
+      { key: 'evidencePhoto', label: 'Evidencia de ingreso (esto no se registra)' },
+      { key: 'ingressStatus', label: 'Estado de ingreso (esto no se registra)' },
+      { key: 'observations', label: 'Observación (opcional)' },
+      { key: 'noveltyType', label: 'Inasistencias / novedades (esto no se registra)' }
+    ];
+  }
+
+  function mallaExportRow(item = {}) {
+    const schedule = item.schedule || [item.plannedStart, item.plannedEnd].filter(Boolean).join(' - ');
+    return {
+      date: item.date || '',
+      city: item.city || pointInfo(item.client, item.point).city || '',
+      point: item.point || '',
+      quicker: item.quicker || '',
+      cedula: item.cedula || '',
+      schedule,
+      contractType: item.contractType || '',
+      managementType: item.managementType || '',
+      quickGoId: isQuickGoMalla(item) ? (item.quickGoId || '') : 'No aplica',
+      quickGoStatus: isQuickGoMalla(item) ? (item.quickGoStatus || '') : 'No aplica',
+      evidencePhoto: item.evidencePhoto ? 'Con evidencia' : '',
+      ingressStatus: item.realStart ? `Ingreso ${item.realStart}` : '',
+      observations: item.observations || '',
+      noveltyType: item.noveltyType || ''
+    };
+  }
+
+  function buildMallaAoa(rows = [], includeBlankRows = false) {
+    const cols = mallaTemplateColumns();
+    const aoa = [['plantilla_malla'], cols.map(c => c.label)];
+    const data = includeBlankRows ? Array.from({ length: 20 }, () => ({})) : rows.map(mallaExportRow);
+    data.forEach(rowItem => aoa.push(cols.map(col => cleanExcelValue(rowItem[col.key]))));
+    return aoa;
+  }
+
+  function decorateMallaSheet(ws, aoa) {
+    const cols = mallaTemplateColumns();
+    ws['!cols'] = [
+      { wch: 16 }, { wch: 18 }, { wch: 30 }, { wch: 34 }, { wch: 18 }, { wch: 18 }, { wch: 24 },
+      { wch: 24 }, { wch: 18 }, { wch: 22 }, { wch: 26 }, { wch: 24 }, { wch: 32 }, { wch: 34 }
+    ];
+    ws['!autofilter'] = { ref: XLSX.utils.encode_range({ s: { r: 1, c: 0 }, e: { r: Math.max(1, aoa.length - 1), c: cols.length - 1 } }) };
+    cols.forEach((col, index) => {
+      if (!col.comment) return;
+      const cell = ws[XLSX.utils.encode_cell({ r: 1, c: index })];
+      if (cell) cell.c = [{ a: 'Quick', t: col.comment }];
+    });
+  }
+
+  function downloadMallaWorkbook(rows = [], collection = 'mallas', includeBlankRows = false) {
+    if (!window.XLSX) {
+      downloadCSV({ plantilla_malla: rows.map(mallaExportRow) }, collection);
+      return;
+    }
+    const aoa = buildMallaAoa(rows, includeBlankRows);
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    decorateMallaSheet(ws, aoa);
+    XLSX.utils.book_append_sheet(wb, ws, 'plantilla_malla');
+    XLSX.writeFile(wb, `quick_lastmile_${collection}_${new Date().toISOString().slice(0,10)}.xlsx`);
+    toast(includeBlankRows ? 'Base descargada' : 'Excel generado');
   }
 
   function downloadMallaTemplate() {
-    const headers = mallaTemplateHeaders();
-    downloadCSV({ plantilla_malla: [Object.fromEntries(headers.map(h => [h, '']))] }, 'plantilla_malla');
+    downloadMallaWorkbook([], 'plantilla_malla', true);
+  }
+
+  function cleanMallaHeader(value) {
+    return String(value || '')
+      .replace(/CÃ©/g, 'Cé')
+      .replace(/gestiÃ³n/gi, 'gestión')
+      .replace(/ObservaciÃ³n/gi, 'Observación')
+      .replace(/\s*\([^)]*\)\s*/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  function rowsFromMallaSheet(ws) {
+    const aoa = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+    const headerIndex = aoa.findIndex(rowItems => {
+      const text = rowItems.map(cleanMallaHeader).join('|').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      return text.includes('fecha') && text.includes('cedula') && text.includes('horario');
+    });
+    if (headerIndex < 0) return XLSX.utils.sheet_to_json(ws, { defval: '' });
+    const headers = aoa[headerIndex].map(cleanMallaHeader);
+    return aoa.slice(headerIndex + 1).map(values => Object.fromEntries(headers.map((header, index) => [header, values[index] ?? ''])));
   }
 
   function normalizeMallaImportRow(row) {
@@ -3250,13 +3392,42 @@ function toggleMode() {
     reader.onload = () => {
       const wb = XLSX.read(reader.result, { type: 'array', cellDates: false });
       const ws = wb.Sheets[wb.SheetNames[0]];
-      const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
+      const rows = rowsFromMallaSheet(ws);
       const imported = rows.map(normalizeMallaImportRow).filter(r => r.date || r.point || r.cedula || r.quicker);
       state.availabilities.unshift(...imported);
       log('Malla', 'Importó malla masiva', `${imported.length} registros`);
       saveState('Malla importada');
     };
     reader.readAsArrayBuffer(file);
+  }
+
+  function openMallaRecords(selectedDate = '') {
+    const dates = [...new Set((state.availabilities || []).map(item => item.date || 'Sin fecha'))].sort((a, b) => String(b).localeCompare(String(a)));
+    const activeDate = selectedDate || dates[0] || 'Sin fecha';
+    const items = (state.availabilities || []).filter(item => (item.date || 'Sin fecha') === activeDate);
+    const cols = mallaTemplateColumns();
+    const headers = cols.map(col => escapeHTML(col.label)).concat('Editar');
+    const rows = items.map(item => {
+      const exportRow = mallaExportRow(item);
+      return row(cols.map(col => escapeHTML(exportRow[col.key] || '')).concat(iconAction('Editar registro', 'manageMalla', item.id, 'ti-pencil')));
+    });
+    const dayButtons = dates.map(date => {
+      const count = state.availabilities.filter(item => (item.date || 'Sin fecha') === date).length;
+      return `<button class="malla-day-btn ${date === activeDate ? 'on' : ''}" type="button" data-record-date="${escapeHTML(date)}"><strong>${escapeHTML(date)}</strong><br><span class="fp-sub">${count} registros</span></button>`;
+    }).join('');
+    const form = document.getElementById('modal-form');
+    document.getElementById('modal-title').textContent = 'Registros diarios de malla';
+    document.getElementById('modal-subtitle').textContent = 'Consulta las mallas almacenadas por día y edita registros puntuales.';
+    form.innerHTML = `<div class="malla-record-list">
+      <aside class="malla-record-days">${dayButtons || '<span class="fp-sub">No hay mallas guardadas.</span>'}</aside>
+      <section class="malla-record-sheet">
+        <div style="padding:12px"><div class="malla-record-title">Malla ${escapeHTML(activeDate)}</div></div>
+        <div class="data-table-wrap"><table class="data-table"><thead><tr>${headers.map(h => `<th>${h}</th>`).join('')}</tr></thead><tbody>${rows.join('') || `<tr><td colspan="${headers.length}">Sin registros para este día.</td></tr>`}</tbody></table></div>
+      </section>
+    </div>`;
+    const modal = document.getElementById('app-modal');
+    modal.classList.add('open', 'wide');
+    modal.setAttribute('aria-hidden', 'false');
   }
 
   function openMallaTemplateForm() {
@@ -3327,22 +3498,84 @@ function toggleMode() {
     const item = state.availabilities.find(d => d.id === id);
     if (!item) return;
     const form = document.getElementById('modal-form');
-    document.getElementById('modal-title').textContent = `Gestionar malla · ${item.quicker}`;
-    document.getElementById('modal-subtitle').textContent = `${item.date} · ${item.client} · ${item.point}`;
+    document.getElementById('app-modal').classList.remove('wide');
+    document.getElementById('modal-title').textContent = `Editar malla · ${item.quicker || 'Pendiente de asignación'}`;
+    document.getElementById('modal-subtitle').textContent = `${item.date || 'Sin fecha'} · ${item.client || 'Sin cliente'} · ${item.point || 'Sin punto'}`;
+    const customFields = (state.prefs.customMallaColumns || []).map(col => {
+      const value = item.custom?.[col.key] || '';
+      if (col.type === 'lista') {
+        const opts = String(col.options || '').split(',').map(v => v.trim()).filter(Boolean);
+        return `<div class="form-field"><label>${escapeHTML(col.label)}</label><select name="custom:${escapeHTML(col.key)}">${optionsHTML(opts, value, 'Sin dato')}</select></div>`;
+      }
+      const type = col.type === 'numero' ? 'number' : col.type === 'fecha' ? 'date' : 'text';
+      return `<div class="form-field"><label>${escapeHTML(col.label)}</label><input name="custom:${escapeHTML(col.key)}" type="${type}" value="${escapeHTML(value)}"></div>`;
+    }).join('');
     form.innerHTML = `<div class="form-grid">
-      <div class="form-field"><label>Estado operativo</label><select name="status"><option>En turno</option><option>Finalizado</option><option>Finalizado con novedad</option><option>No colocado</option><option>Permiso</option><option>Incapacidad</option><option>Desvinculación</option></select></div>
-      <div class="form-field"><label>Tipo de inasistencia/proceso</label><select name="processType"><option>Sin novedad</option><option>Inasistencia injustificada</option><option>Permiso autorizado</option><option>Incapacidad</option><option>Proceso disciplinario</option><option>Desvinculación</option><option>Reemplazo requerido</option></select></div>
+      <div class="form-field"><label>Fecha</label><input name="date" type="date" value="${escapeHTML(item.date || '')}" required></div>
+      <div class="form-field"><label>Ciudad</label><input name="city" value="${escapeHTML(item.city || pointInfo(item.client, item.point).city || '')}"></div>
+      <div class="form-field"><label>Cliente</label><select name="client" id="malla-edit-client">${optionsHTML(state.clients.map(c => c.name), item.client, 'Sin cliente')}</select></div>
+      <div class="form-field"><label>Punto de venta</label><select name="point" id="malla-edit-point">${pointOptionsFor(item.client, item.point)}</select></div>
+      <div class="form-field"><label>Nombre y apellidos</label><select name="quicker">${optionsHTML(['Pendiente de asignación', ...state.quickers.map(q => q.name)], item.quicker || 'Pendiente de asignación')}</select></div>
+      <div class="form-field"><label>Cédula</label><input name="cedula" value="${escapeHTML(item.cedula || '')}"></div>
+      <div class="form-field"><label>Inicio planeado</label><input name="plannedStart" type="time" value="${escapeHTML(item.plannedStart || '')}"></div>
+      <div class="form-field"><label>Fin planeado</label><input name="plannedEnd" type="time" value="${escapeHTML(item.plannedEnd || '')}"></div>
+      <div class="form-field"><label>Horario</label><input name="schedule" value="${escapeHTML(item.schedule || `${item.plannedStart || ''} - ${item.plannedEnd || ''}`)}"></div>
+      <div class="form-field"><label>Estado operativo</label><select name="status">${optionsHTML(['Creado', 'Programado', 'Pendiente asignación', 'En turno', 'Finalizado', 'Finalizado con novedad', 'No colocado', 'Permiso', 'Incapacidad', 'Desvinculación'], item.status || 'Creado')}</select></div>
+      <div class="form-field"><label>Tipo de contrato</label><select name="contractType" id="malla-edit-contract">${optionsHTML(state.prefs.contractTypes || seed.prefs.contractTypes, item.contractType || 'Fijo')}</select></div>
+      <div class="form-field"><label>Tipo de gestión</label><select name="managementType" id="malla-edit-management">${optionsHTML(state.prefs.managementTypes || seed.prefs.managementTypes, item.managementType || 'Fijo')}</select></div>
+      <div class="form-field quickgo-edit-field"><label>ID Quick Go</label><input name="quickGoId" value="${escapeHTML(item.quickGoId || '')}"></div>
+      <div class="form-field quickgo-edit-field"><label>Estado ID Quick Go</label><select name="quickGoStatus">${optionsHTML(['ASIGNADO', 'FINALIZADO', 'CANCELADO'], (item.quickGoStatus || 'ASIGNADO').toUpperCase())}</select></div>
       <div class="form-field"><label>Inicio real</label><input name="realStart" type="time" value="${escapeHTML(item.realStart || '')}"></div>
       <div class="form-field"><label>Fin real</label><input name="realEnd" type="time" value="${escapeHTML(item.realEnd || '')}"></div>
+      <div class="form-field"><label>Aprobación</label><select name="approval">${optionsHTML(['Pendiente', 'Aprobada', 'Rechazada', 'No aplica'], item.approval || 'Pendiente')}</select></div>
+      <div class="form-field"><label>Inasistencia / novedad</label><select name="noveltyType">${optionsHTML(noveltyTypes.filter(Boolean), item.noveltyType || '', 'Sin novedad')}</select></div>
+      ${customFields}
+      <div class="form-field full"><label>Observación</label><textarea name="observations" placeholder="Observaciones de la casilla.">${escapeHTML(item.observations || '')}</textarea></div>
+      <div class="form-field full"><label>Crear caso/novedad si aplica</label><select name="processType"><option>Sin novedad</option><option>Inasistencia injustificada</option><option>Permiso autorizado</option><option>Incapacidad</option><option>Proceso disciplinario</option><option>Desvinculación</option><option>Reemplazo requerido</option></select></div>
       <div class="form-field full"><label>Detalle para novedades</label><textarea name="note" placeholder="Describe qué ocurrió y qué gestión debe seguir el coordinador."></textarea></div>
-    </div><div class="modal-foot"><button class="dev-btn" type="button" id="cancel-form">Cancelar</button><button class="dev-btn primary" type="submit">Actualizar malla</button></div>`;
-    form.elements.status.value = item.status === 'Iniciado' ? 'En turno' : item.status;
+    </div><div class="modal-foot"><button class="dev-btn" type="button" id="cancel-form">Cancelar</button><button class="dev-btn primary" type="submit">Guardar cambios</button></div>`;
+    const syncPointOptions = () => {
+      const pointSelect = document.getElementById('malla-edit-point');
+      if (pointSelect) pointSelect.innerHTML = pointOptionsFor(form.elements.client.value, item.point);
+    };
+    const toggleQuickGo = () => {
+      const show = /quick\s*go/i.test(`${form.elements.contractType.value} ${form.elements.managementType.value}`);
+      form.querySelectorAll('.quickgo-edit-field').forEach(el => el.style.display = show ? '' : 'none');
+    };
+    document.getElementById('malla-edit-client')?.addEventListener('change', syncPointOptions);
+    document.getElementById('malla-edit-contract')?.addEventListener('change', toggleQuickGo);
+    document.getElementById('malla-edit-management')?.addEventListener('change', toggleQuickGo);
+    toggleQuickGo();
     form.onsubmit = event => {
       event.preventDefault();
       const data = Object.fromEntries(new FormData(form).entries());
-      item.status = data.status;
-      item.realStart = data.realStart || item.realStart;
-      item.realEnd = data.realEnd || item.realEnd;
+      Object.assign(item, {
+        date: data.date,
+        city: data.city,
+        client: data.client,
+        point: data.point,
+        quicker: data.quicker === 'Pendiente de asignación' ? '' : data.quicker,
+        cedula: data.cedula,
+        plannedStart: data.plannedStart,
+        plannedEnd: data.plannedEnd,
+        schedule: data.schedule || `${data.plannedStart || ''} - ${data.plannedEnd || ''}`,
+        status: data.status,
+        contractType: data.contractType,
+        managementType: data.managementType,
+        serviceType: data.managementType,
+        quickGoId: data.quickGoId,
+        quickGoStatus: data.quickGoStatus,
+        realStart: data.realStart,
+        realEnd: data.realEnd,
+        approval: data.approval,
+        noveltyType: data.noveltyType,
+        observations: data.observations
+      });
+      item.custom = item.custom || {};
+      Object.entries(data).forEach(([key, value]) => {
+        if (key.startsWith('custom:')) item.custom[key.replace('custom:', '')] = value;
+      });
+      normalizeQuickGoFields(item);
       if (data.processType !== 'Sin novedad') {
         state.novelties.unshift({ id: uid('NOV'), type: data.processType, origin: 'Coordinador', ref: `${item.date} · ${item.quicker}`, severity: /Desvinculación|disciplinario|injustificada/i.test(data.processType) ? 'Alta' : 'Media', status: 'Reportada', note: data.note || `Gestión creada desde malla: ${data.processType}.` });
         if (/Incapacidad|Permiso|Desvinculación|disciplinario|Inasistencia/i.test(data.processType)) {
@@ -3350,45 +3583,12 @@ function toggleMode() {
         }
       }
       closeModal();
-      log('Malla', 'Gestionó malla', `${item.date} · ${item.quicker}`);
+      log('Malla', 'Editó malla', `${item.date} · ${item.quicker || 'Pendiente'}`);
       saveState('Malla actualizada');
     };
     document.getElementById('cancel-form').onclick = closeModal;
     document.getElementById('app-modal').classList.add('open');
-  }
-
-  function openDuplicateMalla(id) {
-    const item = state.availabilities.find(d => d.id === id);
-    if (!item) return;
-    const form = document.getElementById('modal-form');
-    document.getElementById('modal-title').textContent = `Duplicar malla · ${item.quicker}`;
-    document.getElementById('modal-subtitle').textContent = 'Crea un rango de fechas para permisos, incapacidades o programación repetida.';
-    form.innerHTML = `<div class="form-grid">
-      <div class="form-field"><label>Fecha inicio</label><input name="startDate" type="date" value="${escapeHTML(item.date)}" required></div>
-      <div class="form-field"><label>Fecha fin</label><input name="endDate" type="date" value="${escapeHTML(item.date)}" required></div>
-      <div class="form-field"><label>Estado para el rango</label><select name="status"><option>Creado</option><option>Permiso</option><option>Incapacidad</option><option>No colocado</option></select></div>
-      <div class="form-field"><label>Crear novedad/caso</label><select name="caseType"><option>Sin caso</option><option>Permiso autorizado</option><option>Incapacidad</option><option>Inasistencia</option></select></div>
-    </div><div class="modal-foot"><button class="dev-btn" type="button" id="cancel-form">Cancelar</button><button class="dev-btn primary" type="submit">Duplicar</button></div>`;
-    form.onsubmit = event => {
-      event.preventDefault();
-      const data = Object.fromEntries(new FormData(form).entries());
-      const start = new Date(`${data.startDate}T00:00:00`);
-      const end = new Date(`${data.endDate}T00:00:00`);
-      for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-        const date = d.toISOString().slice(0, 10);
-        const copy = { ...item, id: uid('DIS'), date, status: data.status, realStart: '', realEnd: '', evidencePhoto: '', custom: { ...(item.custom || {}) } };
-        state.availabilities.unshift(copy);
-      }
-      if (data.caseType !== 'Sin caso') {
-        state.novelties.unshift({ id: uid('NOV'), type: data.caseType, origin: 'Coordinador', ref: `${data.startDate} a ${data.endDate} · ${item.quicker}`, severity: 'Media', status: 'Reportada', note: 'Rango creado desde duplicación de malla.' });
-        state.cases.unshift({ id: uid('CAS'), type: data.caseType, quicker: item.quicker, period: `${data.startDate} a ${data.endDate}`, status: 'Creado desde rango', owner: state.session?.name || 'Coordinador' });
-      }
-      closeModal();
-      log('Malla', 'Duplicó rango', `${data.startDate} a ${data.endDate} · ${item.quicker}`);
-      saveState('Malla duplicada');
-    };
-    document.getElementById('cancel-form').onclick = closeModal;
-    document.getElementById('app-modal').classList.add('open');
+    document.getElementById('app-modal').setAttribute('aria-hidden', 'false');
   }
 
   function openMallaNoveltyForm(availabilityId, type) {
@@ -3756,6 +3956,10 @@ function toggleMode() {
     if (lists) openMallaListsForm();
     const downloadTpl = event.target.closest('[data-download-malla-template]');
     if (downloadTpl) downloadMallaTemplate();
+    const openMallaRecordsBtn = event.target.closest('[data-open-malla-records]');
+    if (openMallaRecordsBtn) openMallaRecords();
+    const recordDate = event.target.closest('[data-record-date]');
+    if (recordDate) openMallaRecords(recordDate.dataset.recordDate);
     const newTpl = event.target.closest('[data-new-malla-template]');
     if (newTpl) openMallaTemplateForm();
     const exportPoints = event.target.closest('[data-export-points]');
