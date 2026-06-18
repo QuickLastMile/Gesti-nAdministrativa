@@ -576,6 +576,7 @@
   .data-table td { font-size: 12px; color: var(--text-1); }
   .data-table th,.data-table td,.tbl th,.tbl td { white-space: nowrap; }
   .data-table tr:hover { background: rgba(245,197,24,.055); }
+  .sort-head { border: 0; background: transparent; color: inherit; font: inherit; text-transform: inherit; letter-spacing: inherit; cursor: pointer; padding: 0; }
   .row-actions { display: flex; gap: 6px; flex-wrap: wrap; }
   .mini-action { border: 1px solid var(--border); background: var(--card-bg); color: var(--text-1); border-radius: 9px; padding: 5px 8px; font-size: 10px; font-weight: 700; }
   .mini-action:hover { border-color: rgba(245,197,24,.45); color: var(--q); }
@@ -1437,9 +1438,9 @@ function toggleMode() {
       { id: 'QK-1003', cedula: '79999123', name: 'Andrés Silva', phone: '3105550103', email: 'andres.silva@mail.com', client: 'Farmacias Andina', point: 'Chapinero', zone: 'KML Sur', docName: 'Tecnomecánica', docExpires: '2026-06-15', status: 'Bloqueado', lat: 4.6464, lng: -74.0631 }
     ],
     availabilities: [
-      { id: 'DIS-001', date: '2026-06-17', city: 'Bogotá', client: 'Farmacias Andina', point: 'Santa Bárbara', cedula: '1018456789', quicker: 'Carlos Mejía', plannedStart: '08:00', plannedEnd: '18:00', schedule: '08:00 - 18:00', type: 'Fijo', idGo: 'GO-001', statusId: 'Activo', observations: '', absenceReport: 'En turno', realStart: '08:03', realEnd: '', serviceType: 'Fijo', approval: 'Pendiente punto', evidencePhoto: 'inicio_carlos.jpg', status: 'Iniciado', custom: {} },
-      { id: 'DIS-002', date: '2026-06-17', city: 'Bogotá', client: 'Retail Express', point: 'Portal 80', cedula: '1020456123', quicker: 'Lina Torres', plannedStart: '09:00', plannedEnd: '19:00', schedule: '09:00 - 19:00', type: 'Adicional', idGo: 'GO-002', statusId: 'Activo', observations: 'Retardo operativo', absenceReport: 'En turno', realStart: '09:41', realEnd: '', serviceType: 'Adicional', approval: 'No aplica', evidencePhoto: 'retardo_lina.jpg', status: 'Con novedad', custom: {} },
-      { id: 'DIS-003', date: '2026-06-17', city: 'Bogotá', client: 'Farmacias Andina', point: 'Chapinero', cedula: '79999123', quicker: 'Andrés Silva', plannedStart: '07:00', plannedEnd: '17:00', schedule: '07:00 - 17:00', type: 'Colaborativo', idGo: 'GO-003', statusId: 'Activo', observations: '', absenceReport: 'Ausencia injustificada', realStart: '', realEnd: '', serviceType: 'Colaborativo', approval: 'Pendiente', evidencePhoto: '', status: 'No colocado', custom: {} }
+      { id: 'DIS-001', date: '2026-06-17', city: 'Bogotá', client: 'Farmacias Andina', point: 'Santa Bárbara', cedula: '1018456789', quicker: 'Carlos Mejía', plannedStart: '08:00', plannedEnd: '18:00', schedule: '08:00 - 18:00', contractType: 'Fijo', managementType: 'Fijo', quickGoId: '', observations: '', noveltyType: '', realStart: '08:03', realEnd: '', serviceType: 'Fijo', approval: 'Pendiente punto', evidencePhoto: 'inicio_carlos.jpg', status: 'Iniciado', custom: {} },
+      { id: 'DIS-002', date: '2026-06-17', city: 'Bogotá', client: 'Retail Express', point: 'Portal 80', cedula: '1020456123', quicker: 'Lina Torres', plannedStart: '09:00', plannedEnd: '19:00', schedule: '09:00 - 19:00', contractType: 'Fijo', managementType: 'Adicional', quickGoId: '', observations: 'Retardo operativo', noveltyType: '', realStart: '09:41', realEnd: '', serviceType: 'Adicional', approval: 'No aplica', evidencePhoto: 'retardo_lina.jpg', status: 'Con novedad', custom: {} },
+      { id: 'DIS-003', date: '2026-06-17', city: 'Bogotá', client: 'Farmacias Andina', point: 'Chapinero', cedula: '', quicker: '', plannedStart: '07:00', plannedEnd: '17:00', schedule: '07:00 - 17:00', contractType: 'Quick Go', managementType: 'Relevo', quickGoId: '', observations: 'Pendiente de asignación Quick Go', noveltyType: '', realStart: '', realEnd: '', serviceType: 'Colaborativo', approval: 'Pendiente', evidencePhoto: '', status: 'Pendiente asignación', custom: {} }
     ],
     novelties: [
       { id: 'NOV-001', type: 'Retardo', origin: 'Sistema', ref: 'DIS-002', severity: 'Media', status: 'En validación', note: 'Llegada 41 minutos después del plan.' },
@@ -1468,9 +1469,14 @@ function toggleMode() {
       { id: 'HSQ-001', type: 'SOAT vencido', client: 'Farmacias Andina', point: 'Santa Bárbara', quicker: 'Carlos Mejía', cedula: '1018456789', status: 'Reportado', note: 'Alerta documental de ejemplo.' }
     ],
     prefs: {
-      mallaColumns: ['date', 'city', 'point', 'cedula', 'quicker', 'schedule', 'type', 'idGo', 'statusId', 'observations', 'status', 'evidence', 'absenceReport', 'actions'],
+      mallaColumns: ['date', 'city', 'point', 'quicker', 'cedula', 'schedule', 'contractType', 'managementType', 'quickGoId', 'evidence', 'ingressStatus', 'observations', 'noveltyType', 'actions'],
       customMallaColumns: [],
       sortMallas: 'date-desc',
+      mallaSortKey: 'date',
+      mallaSortDir: 'desc',
+      ingressGraceMinutes: 30,
+      contractTypes: ['Fijo', 'Colaborativo', 'Quick Go', 'Back up'],
+      managementTypes: ['Adicional', 'Relevo', 'Colaborativo', 'Fijo', 'Flotante'],
       mapStyle: 'satellite',
       mapQuicker: 'Todos',
       mapZone: 'Todas',
@@ -1520,7 +1526,10 @@ function toggleMode() {
     next.hsqReports = value?.hsqReports || seed.hsqReports || [];
     next.prefs = { ...seed.prefs, ...(value?.prefs || {}) };
     const requiredMallaCols = seed.prefs.mallaColumns;
-    next.prefs.mallaColumns = [...requiredMallaCols, ...(next.prefs.mallaColumns || []).filter(col => !requiredMallaCols.includes(col) && col !== 'planned' && col !== 'executed' && col !== 'approval' && col !== 'serviceType')];
+    next.prefs.mallaColumns = [...requiredMallaCols, ...(next.prefs.mallaColumns || []).filter(col => !requiredMallaCols.includes(col) && !['planned', 'executed', 'approval', 'serviceType', 'type', 'idGo', 'statusId', 'absenceReport', 'status'].includes(col))];
+    next.prefs.contractTypes = next.prefs.contractTypes || seed.prefs.contractTypes;
+    next.prefs.managementTypes = next.prefs.managementTypes || seed.prefs.managementTypes;
+    next.prefs.ingressGraceMinutes = Number(next.prefs.ingressGraceMinutes || seed.prefs.ingressGraceMinutes);
     next.session = null;
     const missingUsers = seed.users.filter(seedUser => !next.users.some(u => u.username === seedUser.username));
     next.users = [...next.users, ...missingUsers].map((u, i) => {
@@ -1541,11 +1550,11 @@ function toggleMode() {
       city: d.city || (((next.clients.find(c => c.name === d.client) || {}).points || []).find(p => (typeof p === 'string' ? p : p.name) === d.point)?.city) || 'Bogotá',
       cedula: d.cedula || next.quickers.find(q => q.name === d.quicker)?.cedula || '',
       schedule: d.schedule || `${d.plannedStart || ''} - ${d.plannedEnd || ''}`.trim(),
-      type: d.type || d.serviceType || 'Fijo',
-      idGo: d.idGo || '',
-      statusId: d.statusId || 'Activo',
+      contractType: d.contractType || (d.type === 'Quick Go' ? 'Quick Go' : 'Fijo'),
+      managementType: d.managementType || d.type || d.serviceType || 'Fijo',
+      quickGoId: d.quickGoId || d.idGo || '',
       observations: d.observations || '',
-      absenceReport: d.absenceReport || 'En turno',
+      noveltyType: d.noveltyType || (d.absenceReport && d.absenceReport !== 'En turno' ? 'INASISTENCIA' : ''),
       evidencePhoto: d.evidencePhoto || (i === 0 ? 'foto_inicio.jpg' : ''),
       custom: d.custom || {},
       ...d
@@ -1612,40 +1621,60 @@ function toggleMode() {
     return (client.points || []).find(p => pointName(p) === pointNameValue) || {};
   }
 
-  const absenceOptions = {
-    'En turno': [],
-    'Permiso no remunerado': ['Inasistencia'],
-    'Permiso remunerado': ['Inasistencia'],
-    'Incapacidad': ['Inasistencia'],
-    'Ausencia injustificada': ['Inasistencia'],
-    'Calamidad': ['Inasistencia'],
-    'Licencia por luto': ['Inasistencia'],
-    'Licencia paternidad': ['Inasistencia'],
-    'Acta de compromiso': ['Proceso disciplinario/acta'],
-    'Proceso disciplinario': ['Proceso disciplinario/acta'],
-    'Proceso seguridad': ['Proceso disciplinario/acta'],
-    'Renuncia': ['Desvinculación'],
-    'Terminación de contrato': ['Desvinculación'],
-    'Periodo de prueba': ['Desvinculación'],
-    'Traslado horizontal': ['Otro sí'],
-    'Cambio de centro de costos': ['Otro sí'],
-    'Cambio de rodamiento': ['Otro sí'],
-    'Cambio de ciudad': ['Otro sí'],
-    'Pérdida de medicamento': ['Descuento'],
-    'Pérdida de dinero': ['Descuento'],
-    'Daño de mercancía': ['Descuento'],
-    'Robo': ['Descuento'],
-    'Accidente dentro de turno': ['Accidente'],
-    'Accidente fuera de turno': ['Accidente']
-  };
+  const noveltyTypes = ['', 'INASISTENCIA', 'DESVINCULACIÓN', 'OTRO SÍ', 'PROCESOS', 'DESCUENTO', 'ACCIDENTE'];
 
   const noveltyFormFields = {
-    'Inasistencia': ['Canal', 'Nombre quien reporta', 'Ciudad', 'Causal', 'Fecha inicio', 'Fecha fin', 'Cédula mensajero', 'Nombre mensajero', 'Observación', 'Documento o soporte'],
-    'Proceso disciplinario/acta': ['Canal', 'Nombre quien reporta', 'Ciudad', 'Motivo', 'Cédula', 'Nombre Quicker', 'Fecha del evento', 'Descripción de la falta cometida', 'Cómo afectó lo sucedido a la operación', 'Falta cometida según reglamento interno', 'Evidencias fotográficas o documento acta'],
-    'Desvinculación': ['Canal', 'Nombre quien reporta', 'Ciudad', 'Motivo', 'Fecha de ingreso', 'Fecha último día laborado', 'Cédula mensajero', 'Nombre mensajero', 'Observación', 'Documento', 'Archivo horas extras', 'Archivo productividad', 'Archivo adicionales'],
-    'Otro sí': ['Canal', 'Nombre quien reporta', 'Ciudad', 'Motivo', 'Fecha nuevas condiciones', 'Nueva operación', 'Cargo', 'Cédula', 'Nombre Quicker otro sí', 'Observación'],
-    'Descuento': ['Canal', 'Nombre quien reporta', 'Fecha novedad', 'Motivo', 'Ciudad', 'Cargo', 'Cédula', 'Nombre Quicker', 'Valor', 'Descripción novedad', 'Evidencia o soporte novedad'],
-    'Accidente': ['Canal', 'Nombre quien reporta', 'Ciudad', 'Tipo accidente', 'Fecha evento', 'Cédula', 'Nombre Quicker', 'Descripción', 'Soporte']
+    'INASISTENCIA': [
+      { name: 'causal', label: 'Causal', type: 'select', options: ['Permiso no remunerado', 'Permiso remunerado', 'Incapacidad', 'Ausencia injustificada', 'Licencia por luto', 'Licencia de paternidad', 'Calamidad'] },
+      { name: 'fechaInicio', label: 'Fecha inicio', type: 'date' },
+      { name: 'fechaFin', label: 'Fecha fin', type: 'date' },
+      { name: 'observacion', label: 'Observación', type: 'textarea', optional: true },
+      { name: 'soporte', label: 'Documento o soporte', type: 'file', optional: true }
+    ],
+    'PROCESOS': [
+      { name: 'tipo', label: 'Tipo', type: 'select', options: ['Acta de compromiso', 'Proceso disciplinario', 'Proceso de seguridad'] },
+      { name: 'fechaEvento', label: 'Fecha de evento', type: 'date' },
+      { name: 'descripcionFalta', label: 'Descripción de la falta cometida', type: 'textarea' },
+      { name: 'afectacionOperacion', label: '¿Cómo afectó a la operación?', type: 'textarea' },
+      { name: 'faltaReglamento', label: 'Falta cometida según el reglamento interno', type: 'textarea' },
+      { name: 'evidencias', label: 'Evidencias fotográficas o documento acta', type: 'file', optional: true }
+    ],
+    'DESVINCULACIÓN': [
+      { name: 'motivo', label: 'Motivo', type: 'select', options: ['Renuncia', 'Terminación de contrato', 'Terminación por obra o labor', 'Terminación por periodo de prueba', 'Abandono de puesto'] },
+      { name: 'fechaUltimoDia', label: 'Fecha último día laborado', type: 'date' },
+      { name: 'observacion', label: 'Observación', type: 'textarea', optional: true },
+      { name: 'documento', label: 'Documento', type: 'file', optional: true },
+      { name: 'contratarRelevo', label: '¿Se debe contratar relevo?', type: 'select', options: ['No', 'Sí'] },
+      { name: 'cuentaReferido', label: '¿Cuenta con referido?', type: 'select', options: ['No', 'Sí'] },
+      { name: 'nombreReferido', label: 'Nombre del referido', type: 'text', optional: true },
+      { name: 'telefonoReferido', label: 'Número telefónico del referido', type: 'text', optional: true }
+    ],
+    'OTRO SÍ': [
+      { name: 'motivo', label: 'Motivo', type: 'select', options: ['Traslado horizontal', 'Cambio de centro de costos', 'Cambio de rodamiento', 'Cambio de ciudad'] },
+      { name: 'fechaNuevasCondiciones', label: 'Fecha nuevas condiciones', type: 'date' },
+      { name: 'nuevaOperacion', label: 'Nueva operación', type: 'text', optional: true },
+      { name: 'cargo', label: 'Cargo', type: 'select', options: ['QUICKER MENSAJERO', 'QUICKER CONDUCTOR', 'AUXILIAR', 'SUPERVISOR'] },
+      { name: 'motivoOtroSi', label: 'Motivo Otro Sí', type: 'select', options: ['Vacante nueva', 'Renuncia'] },
+      { name: 'nombreRenuncia', label: 'Nombre', type: 'text', optional: true },
+      { name: 'cedulaRenuncia', label: 'Cédula', type: 'text', optional: true },
+      { name: 'idDesvinculacion', label: 'ID de desvinculación', type: 'text', optional: true },
+      { name: 'observacion', label: 'Observación', type: 'textarea', optional: true }
+    ],
+    'DESCUENTO': [
+      { name: 'motivo', label: 'Motivo', type: 'select', options: ['Pérdida de mercancía', 'Robo', 'Daño de mercancía', 'Pérdida de dinero'] },
+      { name: 'fechaNovedad', label: 'Fecha de novedad', type: 'date' },
+      { name: 'valor', label: 'Valor', type: 'number' },
+      { name: 'descripcion', label: 'Descripción de novedad', type: 'textarea' },
+      { name: 'soporte', label: 'Evidencia o soporte', type: 'file', optional: true },
+      { name: 'contrato', label: 'Contrato', type: 'select', options: ['Quicker conductor', 'Quicker mensajero', 'Coordinador', 'Quick Go'] }
+    ],
+    'ACCIDENTE': [
+      { name: 'sucedio', label: '¿Sucedió?', type: 'select', options: ['Dentro de turno', 'Fuera de turno'] },
+      { name: 'fechaAccidente', label: 'Fecha del accidente', type: 'date' },
+      { name: 'horaAccidente', label: 'Hora del accidente', type: 'time' },
+      { name: 'relato', label: 'Relato del accidente', type: 'textarea' },
+      { name: 'evidencias', label: 'Evidencias fotográficas', type: 'file', optional: true }
+    ]
   };
 
   function mallaColumnLabels() {
@@ -1657,15 +1686,16 @@ function toggleMode() {
       client: 'Cliente',
       point: 'Punto',
       schedule: 'Horario',
-      type: 'Tipo',
-      idGo: 'ID GO',
-      statusId: 'Estado ID',
-      observations: 'Observaciones',
+      contractType: 'Tipo de contrato',
+      managementType: 'Tipo de gestión',
+      quickGoId: 'ID Quick Go',
+      observations: 'Observación',
       planned: 'Planeado',
       executed: 'Ejecutado',
       serviceType: 'Servicio',
       evidence: 'Evidencia de ingreso',
-      absenceReport: 'Reporte de inasistencia',
+      ingressStatus: 'Estado de ingreso',
+      noveltyType: 'Inasistencias / novedades',
       approval: 'Aprobación',
       status: 'Estado',
       actions: 'Gestión'
@@ -1676,19 +1706,32 @@ function toggleMode() {
 
   function headerCell(key) {
     const label = mallaColumnLabels()[key] || key;
-    return `${escapeHTML(label)}<span class="col-tools"><button class="col-btn" data-move-col="${key}" data-dir="-1" title="Mover izquierda">‹</button><button class="col-btn" data-move-col="${key}" data-dir="1" title="Mover derecha">›</button></span>`;
+    const active = state.prefs.mallaSortKey === key ? (state.prefs.mallaSortDir === 'asc' ? ' ▲' : ' ▼') : '';
+    return `<button class="sort-head" type="button" draggable="true" data-sort-col="${key}" data-drag-col="${key}" title="Ordenar o arrastrar columna">${escapeHTML(label)}${active}</button><span class="col-tools"><button class="col-btn" data-move-col="${key}" data-dir="-1" title="Mover izquierda">‹</button><button class="col-btn" data-move-col="${key}" data-dir="1" title="Mover derecha">›</button></span>`;
   }
 
   function sortedMallas() {
     const items = scopedItems(state.availabilities, item => ({ client: item.client, point: item.point, quicker: item.quicker }));
-    const mode = state.prefs.sortMallas;
-    const by = (fn, dir = 1) => items.sort((a, b) => String(fn(a)).localeCompare(String(fn(b)), 'es') * dir);
-    if (mode === 'date-desc') by(a => a.date || '', -1);
-    if (mode === 'date-asc') by(a => a.date || '', 1);
-    if (mode === 'quicker-asc') by(a => a.quicker || '', 1);
-    if (mode === 'client-asc') by(a => a.client || '', 1);
-    if (mode === 'status-asc') by(a => a.status || '', 1);
+    const key = state.prefs.mallaSortKey || 'date';
+    const dir = state.prefs.mallaSortDir === 'asc' ? 1 : -1;
+    items.sort((a, b) => compareMallaValue(a, b, key) * dir);
     return items;
+  }
+
+  function compareMallaValue(a, b, key) {
+    const av = mallaRawValue(a, key);
+    const bv = mallaRawValue(b, key);
+    const an = Number(String(av).replace(/[^\d.-]/g, ''));
+    const bn = Number(String(bv).replace(/[^\d.-]/g, ''));
+    if (Number.isFinite(an) && Number.isFinite(bn) && String(av).match(/\d/) && String(bv).match(/\d/)) return an - bn;
+    return String(av ?? '').localeCompare(String(bv ?? ''), 'es', { numeric: true, sensitivity: 'base' });
+  }
+
+  function mallaRawValue(item, key) {
+    if (key === 'ingressStatus') return computeIngress(item).status;
+    if (key === 'evidence') return item.evidencePhoto || '';
+    if (key === 'schedule') return item.schedule || `${item.plannedStart || ''} - ${item.plannedEnd || ''}`;
+    return item.custom?.[key] ?? item[key] ?? '';
   }
 
   function currentUser() {
@@ -1746,9 +1789,51 @@ function toggleMode() {
     return `<input class="mini-action" style="min-width:120px" type="${type}" value="${escapeHTML(value)}" data-custom-cell="${d.id}" data-custom-key="${col.key}">`;
   }
 
-  function absenceCell(d) {
-    const options = Object.keys(absenceOptions);
-    return `<select class="mini-action" data-absence-report="${d.id}" style="min-width:190px">${options.map(o => `<option value="${escapeHTML(o)}" ${o === (d.absenceReport || 'En turno') ? 'selected' : ''}>${escapeHTML(o)}</option>`).join('')}</select>`;
+  function optionSelect(options, value, attrs, emptyLabel = '') {
+    const opts = emptyLabel ? [`<option value="">${escapeHTML(emptyLabel)}</option>`] : [];
+    return `<select class="mini-action" ${attrs}>${opts.concat(options.map(o => `<option value="${escapeHTML(o)}" ${o === value ? 'selected' : ''}>${escapeHTML(o)}</option>`)).join('')}</select>`;
+  }
+
+  function contractCell(d) {
+    return optionSelect(state.prefs.contractTypes || seed.prefs.contractTypes, d.contractType || 'Fijo', `data-malla-select="${d.id}" data-malla-field="contractType"`);
+  }
+
+  function managementCell(d) {
+    return optionSelect(state.prefs.managementTypes || seed.prefs.managementTypes, d.managementType || 'Fijo', `data-malla-select="${d.id}" data-malla-field="managementType"`);
+  }
+
+  function quickGoCell(d) {
+    if (d.contractType !== 'Quick Go') return '<span class="fp-sub">No aplica</span>';
+    return `<input class="mini-action" style="min-width:120px" value="${escapeHTML(d.quickGoId || '')}" placeholder="ID Quick Go" data-malla-input="${d.id}" data-malla-field="quickGoId">`;
+  }
+
+  function noveltyCell(d) {
+    return optionSelect(noveltyTypes, d.noveltyType || '', `data-novelty-type="${d.id}"`, 'Sin novedad');
+  }
+
+  function computeIngress(d) {
+    if (d.realStart) {
+      const diff = minutesBetween(d.plannedStart, d.realStart);
+      if (diff <= 0) return { status: 'En turno', note: 'Ingreso puntual' };
+      if (diff <= state.prefs.ingressGraceMinutes) return { status: 'En turno', note: `${diff} minutos tarde` };
+      return { status: 'En turno', note: 'Ingreso fuera de tiempo' };
+    }
+    const start = new Date(`${d.date}T${d.plannedStart || '00:00'}:00`);
+    const limit = new Date(start.getTime() + Number(state.prefs.ingressGraceMinutes || 30) * 60000);
+    if (new Date() <= limit) return { status: 'Pendiente', note: 'Dentro del tiempo permitido' };
+    return { status: 'Sin ingreso', note: 'Sin ingreso' };
+  }
+
+  function minutesBetween(start, end) {
+    const [sh, sm] = String(start || '00:00').split(':').map(Number);
+    const [eh, em] = String(end || '00:00').split(':').map(Number);
+    return Math.round(((eh * 60 + em) - (sh * 60 + sm)));
+  }
+
+  function ingressCell(d) {
+    const info = computeIngress(d);
+    const danger = info.status === 'Sin ingreso' ? '⚠ ' : '';
+    return `${pill(`${danger}${info.status}`)}<div class="fp-sub">${escapeHTML(info.note)}</div>`;
   }
 
   function panel(pageId, title, subtitle, actions, body) {
@@ -1800,19 +1885,20 @@ function toggleMode() {
         date: escapeHTML(d.date),
         city: escapeHTML(d.city || pointInfo(d.client, d.point).city || 'Bogotá'),
         cedula: escapeHTML(d.cedula || q.cedula || 'Sin cédula'),
-        quicker: escapeHTML(d.quicker),
+        quicker: escapeHTML(d.quicker || 'Pendiente de asignación'),
         client: escapeHTML(d.client),
         point: escapeHTML(d.point),
         schedule: escapeHTML(d.schedule || `${d.plannedStart || ''} - ${d.plannedEnd || ''}`),
-        type: escapeHTML(d.type || d.serviceType || 'Fijo'),
-        idGo: escapeHTML(d.idGo || ''),
-        statusId: escapeHTML(d.statusId || 'Activo'),
-        observations: escapeHTML(d.observations || ''),
+        contractType: contractCell(d),
+        managementType: managementCell(d),
+        quickGoId: quickGoCell(d),
+        observations: escapeHTML([d.observations, computeIngress(d).note].filter(Boolean).join(' · ')),
         planned: `${escapeHTML(d.plannedStart)} - ${escapeHTML(d.plannedEnd)}`,
         executed: `${escapeHTML(d.realStart || 'Sin inicio')} - ${escapeHTML(d.realEnd || 'En curso')}`,
         serviceType: escapeHTML(d.serviceType),
         evidence: evidenceCell(d),
-        absenceReport: absenceCell(d),
+        ingressStatus: ingressCell(d),
+        noveltyType: noveltyCell(d),
         approval: pill(d.approval),
         status: pill(d.status),
         actions: `<div class="row-actions">${action('Gestionar', 'manageMalla', d.id)}${action('Duplicar rango', 'duplicateMalla', d.id)}</div>`
@@ -1823,12 +1909,10 @@ function toggleMode() {
     const headers = visibleMallaColumns().map(key => headerCell(key));
     const canEditTitles = hasPermission('perm:editarTitulosMalla');
     panel('mallas', 'Gestión real de mallas y turnos', 'Crea disponibilidades y cambia estados. Los cambios quedan guardados en localStorage.',
-      `<button class="dev-btn primary" data-open="malla"><i class="ti ti-plus"></i> Nueva malla</button>${canEditTitles ? '<button class="dev-btn" data-add-column="mallas"><i class="ti ti-columns"></i> Agregar título</button><button class="dev-btn" data-reset-columns="mallas"><i class="ti ti-refresh"></i> Reset columnas</button>' : ''}<button class="dev-btn" data-export="availabilities">Exportar CSV</button>`,
-      `<div class="toolbar-line"><span class="fp-sub">Ordenar:</span><select data-sort-mallas><option value="date-desc">Fecha mayor a menor</option><option value="date-asc">Fecha menor a mayor</option><option value="quicker-asc">Mensajero A-Z</option><option value="client-asc">Cliente A-Z</option><option value="status-asc">Estado A-Z</option></select></div>` +
+      `<button class="dev-btn primary" data-open="malla"><i class="ti ti-plus"></i> Nueva malla</button>${canEditTitles ? '<button class="dev-btn" data-open-malla-lists><i class="ti ti-list-details"></i> Listas malla</button><button class="dev-btn" data-add-column="mallas"><i class="ti ti-columns"></i> Agregar título</button><button class="dev-btn" data-reset-columns="mallas"><i class="ti ti-refresh"></i> Reset columnas</button>' : ''}<button class="dev-btn" data-export="availabilities">Exportar CSV</button><button class="dev-btn" data-export="quickgo"><i class="ti ti-file-export"></i> Exportar Quick Go</button>`,
+      `<div class="toolbar-line"><span class="fp-sub">Clic en un encabezado para ordenar. Usa ‹ › para mover columnas. Tolerancia ingreso:</span><input type="number" data-ingress-grace value="${escapeHTML(state.prefs.ingressGraceMinutes || 30)}" style="width:74px"><span class="fp-sub">minutos</span></div>` +
       table(headers, rows)
     );
-    const sorter = document.querySelector('[data-sort-mallas]');
-    if (sorter) sorter.value = state.prefs.sortMallas;
   }
 
   function renderMapa() {
@@ -2179,16 +2263,20 @@ function toggleMode() {
         ['client', 'Cliente', 'select', state.clients.map(c => c.name)],
         ['point', 'Punto de venta', 'text'],
         ['cedula', 'Cédula', 'text'],
-        ['quicker', 'Quicker', 'select', state.quickers.map(q => q.name)],
+        ['quicker', 'Quicker', 'select', ['Pendiente de asignación', ...state.quickers.map(q => q.name)]],
         ['plannedStart', 'Inicio planeado', 'time'],
         ['plannedEnd', 'Fin planeado', 'time'],
-        ['type', 'Tipo', 'select', ['Fijo', 'Adicional', 'Colaborativo']],
-        ['idGo', 'ID GO', 'text'],
-        ['statusId', 'Estado ID', 'text'],
-        ['observations', 'Observaciones', 'textarea']
+        ['contractType', 'Tipo de contrato', 'select', state.prefs.contractTypes],
+        ['managementType', 'Tipo de gestión', 'select', state.prefs.managementTypes],
+        ['quickGoId', 'ID Quick Go', 'text'],
+        ['observations', 'Observación', 'textarea']
       ],
       submit: data => {
-        const item = { id: uid('DIS'), ...data, schedule: `${data.plannedStart} - ${data.plannedEnd}`, serviceType: data.type, absenceReport: 'En turno', realStart: '', realEnd: '', approval: 'Pendiente', evidencePhoto: '', status: 'Programado', custom: {} };
+        const asset = findAssetByCedula(data.cedula);
+        if (asset && !data.quicker) data.quicker = asset.name;
+        if (asset && (!data.contractType || data.contractType === 'Fijo')) data.contractType = 'Fijo';
+        if (data.quicker === 'Pendiente de asignación') data.quicker = '';
+        const item = { id: uid('DIS'), ...data, schedule: `${data.plannedStart} - ${data.plannedEnd}`, serviceType: data.managementType, noveltyType: '', realStart: '', realEnd: '', approval: 'Pendiente', evidencePhoto: '', status: data.quicker ? 'Programado' : 'Pendiente asignación', custom: {} };
         state.availabilities.unshift(item);
         log('Disponibilidad', 'Creó malla', item.id);
       }
@@ -2305,7 +2393,9 @@ function toggleMode() {
     if (type === 'malla') {
       current.fields = current.fields.map(field => {
         if (field[0] === 'client') return ['client', 'Cliente', 'select', state.clients.map(c => c.name)];
-        if (field[0] === 'quicker') return ['quicker', 'Quicker', 'select', state.quickers.map(q => q.name)];
+        if (field[0] === 'quicker') return ['quicker', 'Quicker', 'select', ['Pendiente de asignación', ...state.quickers.map(q => q.name)]];
+        if (field[0] === 'contractType') return ['contractType', 'Tipo de contrato', 'select', state.prefs.contractTypes || seed.prefs.contractTypes];
+        if (field[0] === 'managementType') return ['managementType', 'Tipo de gestión', 'select', state.prefs.managementTypes || seed.prefs.managementTypes];
         return field;
       });
     }
@@ -2445,9 +2535,30 @@ function toggleMode() {
   }
 
   function exportCSV(collection) {
+    if (collection === 'quickgo') {
+      const rows = state.availabilities.filter(d => d.contractType === 'Quick Go').map(d => ({
+        fecha: d.date,
+        ciudad: d.city,
+        punto: d.point,
+        direccion: pointInfo(d.client, d.point).address || '',
+        horario: d.schedule,
+        operacion: d.client,
+        descripcionServicio: d.observations || d.managementType,
+        cedula: d.cedula,
+        mensajero: d.quicker,
+        idQuickGo: d.quickGoId,
+        estadoSolicitud: d.quicker ? 'Asignado' : 'Pendiente de asignación'
+      }));
+      downloadCSV({ quickgo: rows }, 'quickgo');
+      return;
+    }
     const datasets = collection === 'all'
       ? { clients: state.clients, users: state.users, quickers: state.quickers, availabilities: state.availabilities, novelties: state.novelties, tickets: state.tickets, cases: state.cases, hsqReports: state.hsqReports, assetMatrix: state.assetMatrix, evidences: state.evidences, parkingReports: state.parkingReports, logs: state.logs }
       : { [collection]: state[collection] || [] };
+    downloadCSV(datasets, collection);
+  }
+
+  function downloadCSV(datasets, collection) {
     const chunks = Object.entries(datasets).map(([name, rows]) => {
       if (!rows.length) return `${name}\n`;
       const headers = Object.keys(rows[0]);
@@ -2485,6 +2596,17 @@ function toggleMode() {
     saveState('Columna movida');
   }
 
+  function moveMallaColumnTo(sourceKey, targetKey) {
+    const cols = state.prefs.mallaColumns;
+    const from = cols.indexOf(sourceKey);
+    const to = cols.indexOf(targetKey);
+    if (from < 0 || to < 0 || from === to) return;
+    const [col] = cols.splice(from, 1);
+    cols.splice(to, 0, col);
+    log('Configuración', 'Arrastró columna de malla', `${sourceKey} -> ${targetKey}`);
+    saveState('Columna movida');
+  }
+
   function addMallaColumn() {
     const form = document.getElementById('modal-form');
     document.getElementById('modal-title').textContent = 'Agregar título a la malla';
@@ -2518,6 +2640,27 @@ function toggleMode() {
     state.prefs.customMallaColumns = [];
     log('Configuración', 'Restauró columnas de malla', 'Default');
     saveState('Columnas restauradas');
+  }
+
+  function openMallaListsForm() {
+    const form = document.getElementById('modal-form');
+    document.getElementById('modal-title').textContent = 'Listas de la malla';
+    document.getElementById('modal-subtitle').textContent = 'Configura opciones disponibles para tipo de contrato y tipo de gestión.';
+    form.innerHTML = `<div class="form-grid">
+      <div class="form-field full"><label>Tipos de contrato separados por coma</label><input name="contractTypes" value="${escapeHTML((state.prefs.contractTypes || []).join(', '))}"></div>
+      <div class="form-field full"><label>Tipos de gestión separados por coma</label><input name="managementTypes" value="${escapeHTML((state.prefs.managementTypes || []).join(', '))}"></div>
+    </div><div class="modal-foot"><button class="dev-btn" type="button" id="cancel-form">Cancelar</button><button class="dev-btn primary" type="submit">Guardar listas</button></div>`;
+    form.onsubmit = event => {
+      event.preventDefault();
+      const data = Object.fromEntries(new FormData(form).entries());
+      state.prefs.contractTypes = data.contractTypes.split(',').map(v => v.trim()).filter(Boolean);
+      state.prefs.managementTypes = data.managementTypes.split(',').map(v => v.trim()).filter(Boolean);
+      closeModal();
+      log('Configuración', 'Actualizó listas de malla', 'Contrato/Gestión');
+      saveState('Listas actualizadas');
+    };
+    document.getElementById('cancel-form').onclick = closeModal;
+    document.getElementById('app-modal').classList.add('open');
   }
 
   function openMallaManagement(id) {
@@ -2588,49 +2731,43 @@ function toggleMode() {
     document.getElementById('app-modal').classList.add('open');
   }
 
-  function openAbsenceNoveltyForm(availabilityId, subtype) {
+  function openMallaNoveltyForm(availabilityId, type) {
     const item = state.availabilities.find(d => d.id === availabilityId);
-    if (!item || subtype === 'En turno') return;
-    const type = (absenceOptions[subtype] || ['Inasistencia'])[0];
-    const fields = noveltyFormFields[type] || noveltyFormFields['Inasistencia'];
+    if (!item || !type) return;
+    const fields = noveltyFormFields[type] || noveltyFormFields['INASISTENCIA'];
+    const asset = findAssetByCedula(item.cedula) || {};
     const form = document.getElementById('modal-form');
-    document.getElementById('modal-title').textContent = `${type} · ${subtype}`;
-    document.getElementById('modal-subtitle').textContent = `${item.date} · ${item.city || ''} · ${item.point} · ${item.quicker}`;
+    document.getElementById('modal-title').textContent = `${type} · ${item.quicker || 'Pendiente de asignación'}`;
+    document.getElementById('modal-subtitle').textContent = `${item.date} · ${item.city || ''} · ${item.point} · Cédula ${item.cedula || 'sin cédula'}`;
     const defaults = {
-      'Canal': item.client,
-      'Nombre quien reporta': state.session?.name || '',
-      'Ciudad': item.city || 'Bogotá',
-      'Causal': subtype,
-      'Motivo': subtype,
-      'Tipo accidente': subtype,
-      'Fecha inicio': item.date,
-      'Fecha fin': item.date,
-      'Fecha novedad': item.date,
-      'Fecha del evento': item.date,
-      'Fecha evento': item.date,
-      'Fecha de ingreso': state.assetMatrix.find(a => String(a.cedula) === String(item.cedula))?.dateIngress || '',
-      'Cédula mensajero': item.cedula,
-      'Cédula': item.cedula,
-      'Nombre mensajero': item.quicker,
-      'Nombre Quicker': item.quicker,
-      'Nombre Quicker otro sí': item.quicker,
-      'Cargo': 'Quicker - Mensajero',
-      'Observación': item.observations || '',
-      'Observaciones': item.observations || ''
+      fechaInicio: item.date,
+      fechaFin: item.date,
+      fechaEvento: item.date,
+      fechaNovedad: item.date,
+      fechaAccidente: item.date,
+      observacion: item.observations || '',
+      cargo: 'QUICKER MENSAJERO'
     };
-    const html = fields.map(label => {
-      const lower = label.toLowerCase();
-      const value = defaults[label] || '';
-      if (/documento|archivo|evidencia|soporte|fotograf/i.test(label)) {
-        return `<div class="form-field full"><label>${escapeHTML(label)}</label><input name="${escapeHTML(label)}" type="file"></div>`;
+    const fixed = `
+      <div class="form-field"><label>Cédula</label><input name="cedula" value="${escapeHTML(item.cedula || '')}" readonly></div>
+      <div class="form-field"><label>Nombre mensajero</label><input name="quicker" value="${escapeHTML(item.quicker || '')}" readonly></div>
+      <div class="form-field"><label>Correo matriz</label><input name="correo" value="${escapeHTML(asset.email || '')}" readonly></div>
+      <div class="form-field"><label>Celular matriz</label><input name="celular" value="${escapeHTML(asset.cellPhone || asset.phone || '')}" readonly></div>
+      <div class="form-field"><label>Fecha ingreso matriz</label><input name="fechaIngreso" value="${escapeHTML(asset.dateIngress || '')}" readonly></div>`;
+    const html = fields.map(field => {
+      const value = defaults[field.name] || '';
+      if (field.type === 'select') {
+        return `<div class="form-field"><label>${escapeHTML(field.label)}</label><select name="${field.name}" ${field.optional ? '' : 'required'}>${field.options.map(o => `<option>${escapeHTML(o)}</option>`).join('')}</select></div>`;
       }
-      if (/descripción|observaci|afecto|falta cometida/i.test(lower)) {
-        return `<div class="form-field full"><label>${escapeHTML(label)}</label><textarea name="${escapeHTML(label)}">${escapeHTML(value)}</textarea></div>`;
+      if (field.type === 'textarea') {
+        return `<div class="form-field full"><label>${escapeHTML(field.label)}</label><textarea name="${field.name}" ${field.optional ? '' : 'required'}>${escapeHTML(value)}</textarea></div>`;
       }
-      const typeAttr = /fecha/i.test(label) ? 'date' : /valor/i.test(label) ? 'number' : 'text';
-      return `<div class="form-field"><label>${escapeHTML(label)}</label><input name="${escapeHTML(label)}" type="${typeAttr}" value="${escapeHTML(value)}"></div>`;
+      if (field.type === 'file') {
+        return `<div class="form-field full"><label>${escapeHTML(field.label)}</label><input name="${field.name}" type="file" ${field.optional ? '' : 'required'}></div>`;
+      }
+      return `<div class="form-field"><label>${escapeHTML(field.label)}</label><input name="${field.name}" type="${field.type}" value="${escapeHTML(value)}" ${field.optional ? '' : 'required'}></div>`;
     }).join('');
-    form.innerHTML = `<div class="form-grid">${html}</div><div class="modal-foot"><button class="dev-btn" type="button" id="cancel-form">Cancelar</button><button class="dev-btn primary" type="submit">Registrar novedad</button></div>`;
+    form.innerHTML = `<div class="form-grid">${fixed}${html}</div><div class="modal-foot"><button class="dev-btn" type="button" id="cancel-form">Cancelar</button><button class="dev-btn primary" type="submit">Registrar novedad</button></div>`;
     form.onsubmit = event => {
       event.preventDefault();
       const data = {};
@@ -2638,18 +2775,18 @@ function toggleMode() {
         if (!el.name) return;
         data[el.name] = el.type === 'file' ? (el.files?.[0]?.name || '') : el.value;
       });
-      item.absenceReport = subtype;
-      item.status = subtype === 'En turno' ? item.status : 'Con novedad';
+      item.noveltyType = type;
+      item.status = 'Con novedad';
       state.novelties.unshift({
-        id: uid('NOV'), type, subtype, origin: 'Malla', ref: item.id, cedula: item.cedula, quicker: item.quicker,
-        severity: /robo|desvinculación|terminación|ausencia injustificada|accidente|proceso/i.test(subtype) ? 'Alta' : 'Media',
-        status: 'Reportada', note: data['Observación'] || data['Descripción novedad'] || item.observations || subtype, formData: data
+        id: uid('NOV'), type, subtype: data.causal || data.motivo || data.tipo || data.sucedio || '', origin: 'Malla', ref: item.id, cedula: item.cedula, quicker: item.quicker,
+        severity: /robo|desvinculación|terminación|ausencia injustificada|accidente|proceso/i.test(JSON.stringify(data)) ? 'Alta' : 'Media',
+        status: 'Reportada', note: data.observacion || data.descripcion || data.relato || item.observations || type, formData: data
       });
       if (!/Descuento|Accidente/i.test(type)) {
         state.cases.unshift({ id: uid('CAS'), type, quicker: item.quicker, period: item.date, status: 'Creado desde malla', owner: state.session?.name || 'Coordinador' });
       }
       closeModal();
-      log('Malla', `Registró ${type}`, `${subtype} · ${item.quicker}`);
+      log('Malla', `Registró ${type}`, `${item.id} · ${item.quicker || 'Sin asignar'}`);
       saveState('Novedad registrada');
     };
     document.getElementById('cancel-form').onclick = closeModal;
@@ -2865,12 +3002,21 @@ function toggleMode() {
     if (addCol) addMallaColumn();
     const resetCols = event.target.closest('[data-reset-columns="mallas"]');
     if (resetCols) resetMallaColumns();
+    const lists = event.target.closest('[data-open-malla-lists]');
+    if (lists) openMallaListsForm();
+    const sortCol = event.target.closest('[data-sort-col]');
+    if (sortCol) {
+      const key = sortCol.dataset.sortCol;
+      state.prefs.mallaSortDir = state.prefs.mallaSortKey === key && state.prefs.mallaSortDir === 'asc' ? 'desc' : 'asc';
+      state.prefs.mallaSortKey = key;
+      saveState('Orden actualizado');
+    }
   });
 
   document.addEventListener('change', event => {
-    if (event.target.matches('[data-sort-mallas]')) {
-      state.prefs.sortMallas = event.target.value;
-      saveState('Orden actualizado');
+    if (event.target.matches('[data-ingress-grace]')) {
+      state.prefs.ingressGraceMinutes = Number(event.target.value || 30);
+      saveState('Tolerancia actualizada');
     }
     if (event.target.matches('[data-map-style]')) {
       state.prefs.mapStyle = event.target.value;
@@ -2914,19 +3060,54 @@ function toggleMode() {
         saveState('Campo actualizado');
       }
     }
-    if (event.target.matches('[data-absence-report]')) {
-      const id = event.target.dataset.absenceReport;
+    if (event.target.matches('[data-malla-input]')) {
+      const item = state.availabilities.find(d => d.id === event.target.dataset.mallaInput);
+      if (!item) return;
+      item[event.target.dataset.mallaField] = event.target.value;
+      log('Malla', `Actualizó ${event.target.dataset.mallaField}`, item.id);
+      saveState('Malla actualizada');
+    }
+    if (event.target.matches('[data-malla-select]')) {
+      const item = state.availabilities.find(d => d.id === event.target.dataset.mallaSelect);
+      if (!item) return;
+      item[event.target.dataset.mallaField] = event.target.value;
+      if (event.target.dataset.mallaField === 'contractType' && event.target.value === 'Quick Go' && !item.quickGoId) {
+        item.status = item.quicker ? item.status : 'Pendiente asignación';
+      }
+      log('Malla', `Actualizó ${event.target.dataset.mallaField}`, item.id);
+      saveState('Malla actualizada');
+    }
+    if (event.target.matches('[data-novelty-type]')) {
+      const id = event.target.dataset.noveltyType;
       const item = state.availabilities.find(d => d.id === id);
       if (!item) return;
       const value = event.target.value;
-      if (value === 'En turno') {
-        item.absenceReport = value;
+      if (!value) {
+        item.noveltyType = '';
         log('Malla', 'Actualizó reporte de inasistencia', `${id} · En turno`);
         saveState('Malla actualizada');
       } else {
-        openAbsenceNoveltyForm(id, value);
+        openMallaNoveltyForm(id, value);
       }
     }
+  });
+
+  document.addEventListener('dragstart', event => {
+    const col = event.target.closest('[data-drag-col]');
+    if (!col) return;
+    event.dataTransfer?.setData('text/plain', col.dataset.dragCol);
+  });
+
+  document.addEventListener('dragover', event => {
+    if (event.target.closest('[data-drag-col]')) event.preventDefault();
+  });
+
+  document.addEventListener('drop', event => {
+    const target = event.target.closest('[data-drag-col]');
+    const sourceKey = event.dataTransfer?.getData('text/plain');
+    if (!target || !sourceKey) return;
+    event.preventDefault();
+    moveMallaColumnTo(sourceKey, target.dataset.dragCol);
   });
 
   document.getElementById('quick-create')?.addEventListener('click', () => {
