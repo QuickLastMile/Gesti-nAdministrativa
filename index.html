@@ -10,6 +10,9 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
+<script src="quick_firebase_config.js"></script>
 <style>
   /* ───── RESET & BASE ───── */
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -570,15 +573,16 @@
   .fp-card-value { font-size: 22px; font-weight: 800; margin: 6px 0 2px; color: var(--text-1); }
   .fp-card-note { font-size: 11px; color: var(--text-2); }
   .data-table-wrap { border: 1px solid var(--border); border-radius: 14px; overflow: auto; background: rgba(0,0,0,.12); }
-  .data-table { width: 100%; border-collapse: collapse; min-width: 760px; }
-  .data-table th,.data-table td { padding: 11px 12px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: middle; }
-  .data-table th { font-size: 10px; text-transform: uppercase; letter-spacing: .8px; color: var(--text-3); font-weight: 800; background: rgba(255,255,255,.025); }
-  .data-table td { font-size: 12px; color: var(--text-1); }
+  .data-table { width: max-content; min-width: 100%; border-collapse: collapse; }
+  .data-table th,.data-table td { padding: 8px 9px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: middle; }
+  .data-table th { font-size: 9px; text-transform: uppercase; letter-spacing: .35px; color: var(--text-3); font-weight: 800; background: rgba(255,255,255,.025); }
+  .data-table td { font-size: 11px; color: var(--text-1); }
   .data-table th,.data-table td,.tbl th,.tbl td { white-space: nowrap; }
   .data-table tr:hover { background: rgba(245,197,24,.055); }
+  #page-mallas > :not(.functional-panel) { display: none !important; }
   .sort-head { border: 0; background: transparent; color: inherit; font: inherit; text-transform: inherit; letter-spacing: inherit; cursor: pointer; padding: 0; }
-  .row-actions { display: flex; gap: 6px; flex-wrap: wrap; }
-  .mini-action { border: 1px solid var(--border); background: var(--card-bg); color: var(--text-1); border-radius: 9px; padding: 5px 8px; font-size: 10px; font-weight: 700; }
+  .row-actions { display: flex; gap: 5px; flex-wrap: nowrap; }
+  .mini-action { border: 1px solid var(--border); background: var(--card-bg); color: var(--text-1); border-radius: 8px; padding: 4px 7px; font-size: 10px; font-weight: 700; }
   .mini-action:hover { border-color: rgba(245,197,24,.45); color: var(--q); }
   .status-pill { display: inline-flex; align-items: center; padding: 4px 8px; border-radius: 999px; font-size: 10px; font-weight: 800; border: 1px solid transparent; }
   .st-ok { background: rgba(34,197,94,.13); color: #4ade80; border-color: rgba(34,197,94,.2); }
@@ -827,6 +831,7 @@
       <span class="tb-title" id="tb-title">Mallas</span>
       <span class="tb-crumb" id="tb-crumb">/ Operaciones</span>
       <div class="tb-spacer"></div>
+      <span id="cloud-status" class="status-pill st-warn">Modo local</span>
       <div class="tb-search"><i class="ti ti-search"></i><input id="global-search" placeholder="Buscar módulo o Quicker..."></div>
       <button class="dev-btn primary" id="quick-create"><i class="ti ti-plus"></i> Nuevo registro</button>
       <button class="dev-btn" id="export-current"><i class="ti ti-download"></i> Exportar</button>
@@ -1418,7 +1423,13 @@ function toggleMode() {
 /* ───── MVP LOCAL: DATA, CRUD, STATE & EXPORTS ───── */
 (() => {
   const STORAGE_KEY = 'quick_lastmile_mvp_state_v1';
+  const FIREBASE_SETTINGS = window.QUICK_FIREBASE_CONFIG || {};
   let activeModule = 'mallas';
+  let cloudDb = null;
+  let cloudUnsubscribe = null;
+  let applyingRemoteState = false;
+  let cloudSaveTimer = null;
+  let cloudStatus = FIREBASE_SETTINGS.enabled ? 'Conectando Firebase...' : 'Modo local';
 
   const seed = {
     clients: [
@@ -1437,11 +1448,7 @@ function toggleMode() {
       { id: 'QK-1002', cedula: '1020456123', name: 'Lina Torres', phone: '3105550102', email: 'lina.torres@mail.com', client: 'Retail Express', point: 'Portal 80', zone: 'KML Centro', docName: 'Licencia conducción', docExpires: '2026-09-18', status: 'Activo', lat: 4.7082, lng: -74.1115 },
       { id: 'QK-1003', cedula: '79999123', name: 'Andrés Silva', phone: '3105550103', email: 'andres.silva@mail.com', client: 'Farmacias Andina', point: 'Chapinero', zone: 'KML Sur', docName: 'Tecnomecánica', docExpires: '2026-06-15', status: 'Bloqueado', lat: 4.6464, lng: -74.0631 }
     ],
-    availabilities: [
-      { id: 'DIS-001', date: '2026-06-17', city: 'Bogotá', client: 'Farmacias Andina', point: 'Santa Bárbara', cedula: '1018456789', quicker: 'Carlos Mejía', plannedStart: '08:00', plannedEnd: '18:00', schedule: '08:00 - 18:00', contractType: 'Fijo', managementType: 'Fijo', quickGoId: '', observations: '', noveltyType: '', realStart: '08:03', realEnd: '', serviceType: 'Fijo', approval: 'Pendiente punto', evidencePhoto: 'inicio_carlos.jpg', status: 'Iniciado', custom: {} },
-      { id: 'DIS-002', date: '2026-06-17', city: 'Bogotá', client: 'Retail Express', point: 'Portal 80', cedula: '1020456123', quicker: 'Lina Torres', plannedStart: '09:00', plannedEnd: '19:00', schedule: '09:00 - 19:00', contractType: 'Fijo', managementType: 'Adicional', quickGoId: '', observations: 'Retardo operativo', noveltyType: '', realStart: '09:41', realEnd: '', serviceType: 'Adicional', approval: 'No aplica', evidencePhoto: 'retardo_lina.jpg', status: 'Con novedad', custom: {} },
-      { id: 'DIS-003', date: '2026-06-17', city: 'Bogotá', client: 'Farmacias Andina', point: 'Chapinero', cedula: '', quicker: '', plannedStart: '07:00', plannedEnd: '17:00', schedule: '07:00 - 17:00', contractType: 'Quick Go', managementType: 'Relevo', quickGoId: '', observations: 'Pendiente de asignación Quick Go', noveltyType: '', realStart: '', realEnd: '', serviceType: 'Colaborativo', approval: 'Pendiente', evidencePhoto: '', status: 'Pendiente asignación', custom: {} }
-    ],
+    availabilities: [],
     novelties: [
       { id: 'NOV-001', type: 'Retardo', origin: 'Sistema', ref: 'DIS-002', severity: 'Media', status: 'En validación', note: 'Llegada 41 minutos después del plan.' },
       { id: 'NOV-002', type: 'No colocado', origin: 'Sistema', ref: 'DIS-003', severity: 'Alta', status: 'Reportada', note: 'Sin inicio dentro de la regla del cliente.' }
@@ -1469,7 +1476,7 @@ function toggleMode() {
       { id: 'HSQ-001', type: 'SOAT vencido', client: 'Farmacias Andina', point: 'Santa Bárbara', quicker: 'Carlos Mejía', cedula: '1018456789', status: 'Reportado', note: 'Alerta documental de ejemplo.' }
     ],
     prefs: {
-      mallaColumns: ['date', 'city', 'point', 'quicker', 'cedula', 'schedule', 'contractType', 'managementType', 'quickGoId', 'evidence', 'ingressStatus', 'observations', 'noveltyType', 'actions'],
+      mallaColumns: ['date', 'city', 'point', 'quicker', 'cedula', 'schedule', 'contractType', 'managementType', 'quickGoId', 'quickGoStatus', 'evidence', 'ingressStatus', 'observations', 'noveltyType', 'actions'],
       customMallaColumns: [],
       sortMallas: 'date-desc',
       mallaSortKey: 'date',
@@ -1477,6 +1484,8 @@ function toggleMode() {
       ingressGraceMinutes: 30,
       contractTypes: ['Fijo', 'Colaborativo', 'Quick Go', 'Back up'],
       managementTypes: ['Adicional', 'Relevo', 'Colaborativo', 'Fijo', 'Flotante'],
+      mallaTemplates: [],
+      mallaBlankResetDone: true,
       mapStyle: 'satellite',
       mapQuicker: 'Todos',
       mapZone: 'Todas',
@@ -1514,7 +1523,7 @@ function toggleMode() {
     });
     next.users = value?.users || seed.users;
     next.quickers = value?.quickers || seed.quickers;
-    next.availabilities = value?.availabilities || seed.availabilities;
+    next.availabilities = value?.prefs?.mallaBlankResetDone ? (value?.availabilities || seed.availabilities) : [];
     next.novelties = value?.novelties || seed.novelties;
     next.tickets = value?.tickets || seed.tickets;
     next.cases = value?.cases || seed.cases;
@@ -1530,6 +1539,8 @@ function toggleMode() {
     next.prefs.contractTypes = next.prefs.contractTypes || seed.prefs.contractTypes;
     next.prefs.managementTypes = next.prefs.managementTypes || seed.prefs.managementTypes;
     next.prefs.ingressGraceMinutes = Number(next.prefs.ingressGraceMinutes || seed.prefs.ingressGraceMinutes);
+    next.prefs.mallaTemplates = next.prefs.mallaTemplates || [];
+    next.prefs.mallaBlankResetDone = true;
     next.session = null;
     const missingUsers = seed.users.filter(seedUser => !next.users.some(u => u.username === seedUser.username));
     next.users = [...next.users, ...missingUsers].map((u, i) => {
@@ -1553,6 +1564,7 @@ function toggleMode() {
       contractType: d.contractType || (d.type === 'Quick Go' ? 'Quick Go' : 'Fijo'),
       managementType: d.managementType || d.type || d.serviceType || 'Fijo',
       quickGoId: d.quickGoId || d.idGo || '',
+      quickGoStatus: d.quickGoStatus || 'Pendiente de asignación',
       observations: d.observations || '',
       noveltyType: d.noveltyType || (d.absenceReport && d.absenceReport !== 'En turno' ? 'INASISTENCIA' : ''),
       evidencePhoto: d.evidencePhoto || (i === 0 ? 'foto_inicio.jpg' : ''),
@@ -1563,9 +1575,103 @@ function toggleMode() {
   }
 
   function saveState(message = 'Cambio guardado') {
+    const content = document.getElementById('content');
+    const tableWrap = document.querySelector(`#page-${activeModule} .data-table-wrap`);
+    const keep = { top: content?.scrollTop || 0, left: tableWrap?.scrollLeft || 0 };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     renderAll();
+    requestAnimationFrame(() => {
+      const nextContent = document.getElementById('content');
+      const nextWrap = document.querySelector(`#page-${activeModule} .data-table-wrap`);
+      if (nextContent) nextContent.scrollTop = keep.top;
+      if (nextWrap) nextWrap.scrollLeft = keep.left;
+    });
+    if (!applyingRemoteState) scheduleCloudSave();
     toast(message);
+  }
+
+  function cloudDocRef() {
+    if (!cloudDb) return null;
+    return cloudDb.collection(FIREBASE_SETTINGS.collection || 'quick_lastmile').doc(FIREBASE_SETTINGS.documentId || 'platform_state');
+  }
+
+  function publicState() {
+    return { ...state, session: null };
+  }
+
+  function firebaseConfigReady() {
+    const cfg = FIREBASE_SETTINGS.firebaseConfig || {};
+    return FIREBASE_SETTINGS.enabled && cfg.apiKey && !String(cfg.apiKey).includes('PEGAR_') && cfg.projectId && !String(cfg.projectId).includes('PEGAR_');
+  }
+
+  function initCloudSync() {
+    if (!firebaseConfigReady()) {
+      cloudStatus = FIREBASE_SETTINGS.enabled ? 'Firebase pendiente de configuración' : 'Modo local';
+      renderCloudStatus();
+      return;
+    }
+    if (!window.firebase?.firestore) {
+      cloudStatus = 'Firebase SDK no cargó';
+      renderCloudStatus();
+      return;
+    }
+    try {
+      if (!firebase.apps.length) firebase.initializeApp(FIREBASE_SETTINGS.firebaseConfig);
+      cloudDb = firebase.firestore();
+      cloudStatus = 'Firebase conectando...';
+      renderCloudStatus();
+      const ref = cloudDocRef();
+      cloudUnsubscribe?.();
+      cloudUnsubscribe = ref.onSnapshot(snapshot => {
+        if (!snapshot.exists) {
+          scheduleCloudSave(100);
+          return;
+        }
+        const remote = snapshot.data()?.state;
+        if (!remote) return;
+        applyingRemoteState = true;
+        const currentSession = state.session;
+        state = normalizeState(remote);
+        state.session = currentSession;
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        cloudStatus = 'Firebase en vivo';
+        renderAll();
+        renderCloudStatus();
+        applyingRemoteState = false;
+      }, error => {
+        cloudStatus = `Firebase error: ${error.message}`;
+        renderCloudStatus();
+      });
+    } catch (error) {
+      cloudStatus = `Firebase error: ${error.message}`;
+      renderCloudStatus();
+    }
+  }
+
+  function scheduleCloudSave(delay = 650) {
+    if (!cloudDb || applyingRemoteState) return;
+    clearTimeout(cloudSaveTimer);
+    cloudSaveTimer = setTimeout(async () => {
+      try {
+        await cloudDocRef().set({
+          state: publicState(),
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+          updatedBy: state.session?.username || 'local'
+        }, { merge: true });
+        cloudStatus = 'Firebase sincronizado';
+        renderCloudStatus();
+      } catch (error) {
+        cloudStatus = `Firebase error: ${error.message}`;
+        renderCloudStatus();
+      }
+    }, delay);
+  }
+
+  function renderCloudStatus() {
+    const el = document.getElementById('cloud-status');
+    if (!el) return;
+    el.textContent = cloudStatus;
+    el.className = cloudStatus.includes('Firebase en vivo') || cloudStatus.includes('sincronizado') ? 'status-pill st-ok' : cloudStatus.includes('error') || cloudStatus.includes('pendiente') ? 'status-pill st-bad' : 'status-pill st-warn';
   }
 
   function uid(prefix) {
@@ -1689,6 +1795,7 @@ function toggleMode() {
       contractType: 'Tipo de contrato',
       managementType: 'Tipo de gestión',
       quickGoId: 'ID Quick Go',
+      quickGoStatus: 'Estado ID Quick Go',
       observations: 'Observación',
       planned: 'Planeado',
       executed: 'Ejecutado',
@@ -1807,6 +1914,11 @@ function toggleMode() {
     return `<input class="mini-action" style="min-width:120px" value="${escapeHTML(d.quickGoId || '')}" placeholder="ID Quick Go" data-malla-input="${d.id}" data-malla-field="quickGoId">`;
   }
 
+  function quickGoStatusCell(d) {
+    if (d.contractType !== 'Quick Go') return '<span class="fp-sub">No aplica</span>';
+    return optionSelect(['Pendiente de asignación', 'Asignado', 'Cancelado', 'Finalizado'], d.quickGoStatus || 'Pendiente de asignación', `data-malla-select="${d.id}" data-malla-field="quickGoStatus"`);
+  }
+
   function noveltyCell(d) {
     return optionSelect(noveltyTypes, d.noveltyType || '', `data-novelty-type="${d.id}"`, 'Sin novedad');
   }
@@ -1892,6 +2004,7 @@ function toggleMode() {
         contractType: contractCell(d),
         managementType: managementCell(d),
         quickGoId: quickGoCell(d),
+        quickGoStatus: quickGoStatusCell(d),
         observations: escapeHTML([d.observations, computeIngress(d).note].filter(Boolean).join(' · ')),
         planned: `${escapeHTML(d.plannedStart)} - ${escapeHTML(d.plannedEnd)}`,
         executed: `${escapeHTML(d.realStart || 'Sin inicio')} - ${escapeHTML(d.realEnd || 'En curso')}`,
@@ -1901,7 +2014,7 @@ function toggleMode() {
         noveltyType: noveltyCell(d),
         approval: pill(d.approval),
         status: pill(d.status),
-        actions: `<div class="row-actions">${action('Gestionar', 'manageMalla', d.id)}${action('Duplicar rango', 'duplicateMalla', d.id)}</div>`
+        actions: `<div class="row-actions">${action('Gestionar', 'manageMalla', d.id)}${action('Replicar', 'duplicateMalla', d.id)}${action('Eliminar', 'deleteAvailability', d.id)}</div>`
       };
       state.prefs.customMallaColumns.forEach(col => values[col.key] = customCell(d, col));
       return row(visibleMallaColumns().map(key => values[key] ?? ''));
@@ -1909,10 +2022,12 @@ function toggleMode() {
     const headers = visibleMallaColumns().map(key => headerCell(key));
     const canEditTitles = hasPermission('perm:editarTitulosMalla');
     panel('mallas', 'Gestión real de mallas y turnos', 'Crea disponibilidades y cambia estados. Los cambios quedan guardados en localStorage.',
-      `<button class="dev-btn primary" data-open="malla"><i class="ti ti-plus"></i> Nueva malla</button>${canEditTitles ? '<button class="dev-btn" data-open-malla-lists><i class="ti ti-list-details"></i> Listas malla</button><button class="dev-btn" data-add-column="mallas"><i class="ti ti-columns"></i> Agregar título</button><button class="dev-btn" data-reset-columns="mallas"><i class="ti ti-refresh"></i> Reset columnas</button>' : ''}<button class="dev-btn" data-export="availabilities">Exportar CSV</button><button class="dev-btn" data-export="quickgo"><i class="ti ti-file-export"></i> Exportar Quick Go</button>`,
+      `<button class="dev-btn primary" data-open="malla"><i class="ti ti-plus"></i> Nueva malla</button><label class="dev-btn"><i class="ti ti-upload"></i> Importar malla<input type="file" accept=".xlsx,.xls,.csv" data-import-malla style="display:none"></label><button class="dev-btn" data-download-malla-template><i class="ti ti-download"></i> Descargar base</button><button class="dev-btn" data-replicate-mass><i class="ti ti-copy"></i> Replicar masivo</button>${canEditTitles ? '<button class="dev-btn" data-open-malla-lists><i class="ti ti-list-details"></i> Listas malla</button><button class="dev-btn" data-add-column="mallas"><i class="ti ti-columns"></i> Agregar título</button><button class="dev-btn" data-new-malla-template><i class="ti ti-template"></i> Nueva plantilla</button><button class="dev-btn" data-reset-columns="mallas"><i class="ti ti-refresh"></i> Reset columnas</button>' : ''}<button class="dev-btn" data-export="availabilities">Exportar CSV</button><button class="dev-btn" data-export="quickgo"><i class="ti ti-file-export"></i> Exportar Quick Go</button>`,
       `<div class="toolbar-line"><span class="fp-sub">Clic en un encabezado para ordenar. Usa ‹ › para mover columnas. Tolerancia ingreso:</span><input type="number" data-ingress-grace value="${escapeHTML(state.prefs.ingressGraceMinutes || 30)}" style="width:74px"><span class="fp-sub">minutos</span></div>` +
-      table(headers, rows)
+      (!rows.length ? `<div class="dropzone" style="margin-bottom:12px"><strong>Malla sin información</strong><span class="fp-sub">Crea una nueva malla, importa un archivo masivo o descarga la base para empezar a cargar datos.</span></div>` : '') + table(headers, rows)
     );
+    const page = document.getElementById('page-mallas');
+    if (page) [...page.children].forEach(el => { if (!el.classList.contains('functional-panel')) el.hidden = true; });
   }
 
   function renderMapa() {
@@ -2460,6 +2575,15 @@ function toggleMode() {
     if (actionName === 'addPoint') { openPointForm(id); return; }
     if (actionName === 'editUser') { openUserForm(id); return; }
     if (actionName === 'permissionsUser') { openPermissionsForm(id); return; }
+    if (actionName === 'deleteAvailability') {
+      const item = find('availabilities');
+      if (item && confirm(`¿Eliminar servicio ${item.date} · ${item.point || ''} · ${item.quicker || 'sin asignar'}?`)) {
+        state.availabilities = state.availabilities.filter(d => d.id !== id);
+        log('Malla', 'Eliminó servicio', id);
+        saveState('Servicio eliminado');
+      }
+      return;
+    }
     if (actionName === 'deleteClient') {
       const client = find('clients');
       if (client && confirm(`¿Eliminar cliente ${client.name}?`)) {
@@ -2547,7 +2671,7 @@ function toggleMode() {
         cedula: d.cedula,
         mensajero: d.quicker,
         idQuickGo: d.quickGoId,
-        estadoSolicitud: d.quicker ? 'Asignado' : 'Pendiente de asignación'
+        estadoSolicitud: d.quickGoStatus || (d.quicker ? 'Asignado' : 'Pendiente de asignación')
       }));
       downloadCSV({ quickgo: rows }, 'quickgo');
       return;
@@ -2640,6 +2764,105 @@ function toggleMode() {
     state.prefs.customMallaColumns = [];
     log('Configuración', 'Restauró columnas de malla', 'Default');
     saveState('Columnas restauradas');
+  }
+
+  function mallaTemplateHeaders() {
+    return visibleMallaColumns().filter(key => key !== 'actions').map(key => mallaColumnLabels()[key] || key);
+  }
+
+  function downloadMallaTemplate() {
+    const headers = mallaTemplateHeaders();
+    downloadCSV({ plantilla_malla: [Object.fromEntries(headers.map(h => [h, '']))] }, 'plantilla_malla');
+  }
+
+  function normalizeMallaImportRow(row) {
+    const get = (...names) => {
+      const found = names.find(name => Object.prototype.hasOwnProperty.call(row, name));
+      return found ? row[found] : '';
+    };
+    const planned = String(get('Horario', 'HORARIO', 'schedule') || '');
+    const [start = '', end = ''] = planned.split('-').map(v => v.trim());
+    const contractType = get('Tipo de contrato', 'TIPO DE CONTRATO', 'contractType') || 'Fijo';
+    return {
+      id: uid('DIS'),
+      date: get('Fecha', 'FECHA', 'date'),
+      city: get('Ciudad', 'CIUDAD', 'city') || 'Bogotá',
+      point: get('Punto', 'PUNTO', 'point'),
+      quicker: get('Nombre y apellidos', 'NOMBRE Y APELLIDOS', 'Nombre y apellido', 'quicker'),
+      cedula: get('Cédula', 'CEDULA', 'CÉDULA', 'cedula'),
+      plannedStart: start,
+      plannedEnd: end,
+      schedule: planned,
+      contractType,
+      managementType: get('Tipo de gestión', 'TIPO DE GESTIÓN', 'managementType') || 'Fijo',
+      quickGoId: get('ID Quick Go', 'ID QUICK GO', 'quickGoId'),
+      quickGoStatus: get('Estado ID Quick Go', 'ESTADO ID QUICK GO', 'quickGoStatus') || (contractType === 'Quick Go' ? 'Pendiente de asignación' : ''),
+      observations: get('Observación', 'OBSERVACIÓN', 'observations'),
+      noveltyType: get('Inasistencias / novedades', 'INASISTENCIAS / NOVEDADES', 'noveltyType'),
+      realStart: '',
+      realEnd: '',
+      evidencePhoto: '',
+      status: get('Estado', 'ESTADO', 'status') || (get('Nombre y apellidos', 'NOMBRE Y APELLIDOS', 'quicker') ? 'Programado' : 'Pendiente asignación'),
+      custom: {}
+    };
+  }
+
+  function importMallaFile(file) {
+    if (!window.XLSX) { toast('No cargó XLSX. Revisa conexión a internet.'); return; }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const wb = XLSX.read(reader.result, { type: 'array', cellDates: false });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
+      const imported = rows.map(normalizeMallaImportRow).filter(r => r.date || r.point || r.cedula || r.quicker);
+      state.availabilities.unshift(...imported);
+      log('Malla', 'Importó malla masiva', `${imported.length} registros`);
+      saveState('Malla importada');
+    };
+    reader.readAsArrayBuffer(file);
+  }
+
+  function openMallaTemplateForm() {
+    const form = document.getElementById('modal-form');
+    document.getElementById('modal-title').textContent = 'Nueva plantilla de malla';
+    document.getElementById('modal-subtitle').textContent = 'Guarda la estructura actual de columnas para reutilizarla por operación o cliente.';
+    form.innerHTML = `<div class="form-grid"><div class="form-field full"><label>Nombre plantilla</label><input name="name" required placeholder="Ej: Cafam - Bogotá"></div></div><div class="modal-foot"><button class="dev-btn" type="button" id="cancel-form">Cancelar</button><button class="dev-btn primary" type="submit">Guardar plantilla</button></div>`;
+    form.onsubmit = event => {
+      event.preventDefault();
+      const data = Object.fromEntries(new FormData(form).entries());
+      state.prefs.mallaTemplates.push({ id: uid('TPL'), name: data.name, columns: [...state.prefs.mallaColumns], createdAt: todayTime() });
+      closeModal();
+      log('Malla', 'Creó plantilla', data.name);
+      saveState('Plantilla creada');
+    };
+    document.getElementById('cancel-form').onclick = closeModal;
+    document.getElementById('app-modal').classList.add('open');
+  }
+
+  function openReplicateMassForm() {
+    const form = document.getElementById('modal-form');
+    document.getElementById('modal-title').textContent = 'Replicar malla masiva';
+    document.getElementById('modal-subtitle').textContent = 'Replica los servicios actuales a un rango de fechas conservando columnas y datos personalizados.';
+    form.innerHTML = `<div class="form-grid">
+      <div class="form-field"><label>Fecha inicio</label><input name="startDate" type="date" required></div>
+      <div class="form-field"><label>Fecha fin</label><input name="endDate" type="date" required></div>
+    </div><div class="modal-foot"><button class="dev-btn" type="button" id="cancel-form">Cancelar</button><button class="dev-btn primary" type="submit">Replicar</button></div>`;
+    form.onsubmit = event => {
+      event.preventDefault();
+      const data = Object.fromEntries(new FormData(form).entries());
+      const source = [...state.availabilities];
+      const start = new Date(`${data.startDate}T00:00:00`);
+      const end = new Date(`${data.endDate}T00:00:00`);
+      for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+        const date = d.toISOString().slice(0, 10);
+        source.forEach(item => state.availabilities.unshift({ ...item, id: uid('DIS'), date, realStart: '', realEnd: '', evidencePhoto: '', status: item.quicker ? 'Programado' : 'Pendiente asignación', custom: { ...(item.custom || {}) } }));
+      }
+      closeModal();
+      log('Malla', 'Replicó malla masiva', `${data.startDate} a ${data.endDate}`);
+      saveState('Malla replicada');
+    };
+    document.getElementById('cancel-form').onclick = closeModal;
+    document.getElementById('app-modal').classList.add('open');
   }
 
   function openMallaListsForm() {
@@ -3004,6 +3227,12 @@ function toggleMode() {
     if (resetCols) resetMallaColumns();
     const lists = event.target.closest('[data-open-malla-lists]');
     if (lists) openMallaListsForm();
+    const downloadTpl = event.target.closest('[data-download-malla-template]');
+    if (downloadTpl) downloadMallaTemplate();
+    const newTpl = event.target.closest('[data-new-malla-template]');
+    if (newTpl) openMallaTemplateForm();
+    const replicateMass = event.target.closest('[data-replicate-mass]');
+    if (replicateMass) openReplicateMassForm();
     const sortCol = event.target.closest('[data-sort-col]');
     if (sortCol) {
       const key = sortCol.dataset.sortCol;
@@ -3049,6 +3278,10 @@ function toggleMode() {
     if (event.target.matches('[data-asset-matrix-input]')) {
       const file = event.target.files?.[0];
       if (file) parseAssetMatrix(file);
+    }
+    if (event.target.matches('[data-import-malla]')) {
+      const file = event.target.files?.[0];
+      if (file) importMallaFile(file);
     }
     if (event.target.matches('[data-custom-cell]')) {
       const id = event.target.dataset.customCell;
@@ -3200,6 +3433,8 @@ function toggleMode() {
 
   applySession();
   renderAll();
+  renderCloudStatus();
+  initCloudSync();
 })();
 </script>
 </body>
