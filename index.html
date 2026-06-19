@@ -629,6 +629,14 @@
   .chart-config-row { display:grid; grid-template-columns:52px 1.2fr .8fr .8fr; gap:10px; align-items:end; border:1px solid var(--border); border-radius:14px; padding:12px; background:rgba(255,255,255,.035); margin-bottom:10px; }
   .light-mode .chart-card,.light-mode .gestion-upload-card,.light-mode .chart-config-row { background:rgba(255,255,255,.9); border-color:rgba(18,18,18,.16); }
   .light-mode .chart-bar-track { background:rgba(0,0,0,.08); }
+  /* ── Colores por tipo de novedad ── */
+  .nov-accidente  { background:rgba(249,115,22,.16);  color:#fb923c; border-color:rgba(249,115,22,.28); }
+  .nov-inasistencia{ background:rgba(251,191,36,.15); color:#fbbf24; border-color:rgba(251,191,36,.28); }
+  .nov-procesos   { background:rgba(167,139,250,.15); color:#c4b5fd; border-color:rgba(167,139,250,.28); }
+  .nov-descuento  { background:rgba(96,165,250,.14);  color:#93c5fd; border-color:rgba(96,165,250,.26); }
+  .nov-otrosi     { background:rgba(52,211,153,.13);  color:#6ee7b7; border-color:rgba(52,211,153,.24); }
+  .nov-incapacidad{ background:rgba(148,163,184,.13); color:#cbd5e1; border-color:rgba(148,163,184,.24); }
+  .nov-retardo    { background:rgba(245,197,24,.14);  color:var(--q); border-color:rgba(245,197,24,.26); }
   .nov-filterbar { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin:0 0 12px; }
   .nov-filterbar select,.nov-filterbar input,.form-config-select { min-height:38px; border:1px solid var(--border); border-radius:11px; background:var(--card-bg); color:var(--text-1); padding:0 12px; font-weight:750; }
   .detail-list { display:grid; gap:8px; margin:10px 0; }
@@ -1665,6 +1673,9 @@ function toggleMode() {
       novedadesTab: 'inasistencias',
       novedadesFilterMode: 'todo',
       novedadesFilterDate: '2026-06-18',
+      novedadesFilterTipo: 'todos',
+      novedadesFilterGestion: 'todos',
+      mallaViewDate: '',
       formConfigType: 'INASISTENCIA',
       formFieldConfig: {},
       gestionChartConfig: [
@@ -1941,6 +1952,98 @@ function toggleMode() {
     return 'st-info';
   }
 
+  // Pill con color específico por tipo de novedad
+  const NOV_TYPE_COLORS = {
+    'DESVINCULACIÓN': 'st-bad',
+    'DESVINCULACION': 'st-bad',
+    'Desvinculación': 'st-bad',
+    'ACCIDENTE': 'nov-accidente',
+    'Accidente': 'nov-accidente',
+    'Seguridad': 'nov-accidente',
+    'INASISTENCIA': 'nov-inasistencia',
+    'Inasistencia': 'nov-inasistencia',
+    'PROCESOS': 'nov-procesos',
+    'Procesos': 'nov-procesos',
+    'Disciplinario': 'nov-procesos',
+    'DESCUENTO': 'nov-descuento',
+    'Descuento': 'nov-descuento',
+    'OTRO SÍ': 'nov-otrosi',
+    'Otrosí': 'nov-otrosi',
+    'Incapacidad': 'nov-incapacidad',
+    'Contratación': 'st-ok',
+    'RETARDO': 'nov-retardo',
+    'Retardo': 'nov-retardo',
+    'Retraso': 'nov-retardo',
+  };
+
+  function novPill(type) {
+    const cls = NOV_TYPE_COLORS[type] || statusClass(type);
+    return `<span class="status-pill ${cls}">${escapeHTML(type || '')}</span>`;
+  }
+
+  // Gráfica SVG donut inline
+  function svgDonut(segments, size = 80) {
+    if (!segments || !segments.length) return '';
+    const total = segments.reduce((s, x) => s + (x.value || 0), 0);
+    if (!total) return '';
+    const r = 28, cx = 40, cy = 40, stroke = 14;
+    const circ = 2 * Math.PI * r;
+    let offset = 0;
+    const paths = segments.map(seg => {
+      const pct = seg.value / total;
+      const dash = pct * circ;
+      const path = `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${seg.color}" stroke-width="${stroke}" stroke-dasharray="${dash.toFixed(2)} ${(circ - dash).toFixed(2)}" stroke-dashoffset="${(-offset * circ / total).toFixed(2)}" transform="rotate(-90 ${cx} ${cy})" style="transition:stroke-dasharray .4s"/>`;
+      offset += seg.value;
+      return path;
+    });
+    return `<svg viewBox="0 0 80 80" width="${size}" height="${size}" style="display:block">${paths.join('')}</svg>`;
+  }
+
+  // Gráfica SVG barras inline
+  function svgBars(items, maxW = 200, h = 22, color = '#F5C518') {
+    if (!items || !items.length) return '';
+    const maxVal = Math.max(...items.map(x => x.value || 0), 1);
+    const rowH = h + 6;
+    const svgH = items.length * rowH;
+    const bars = items.map((item, i) => {
+      const bw = ((item.value || 0) / maxVal) * maxW;
+      const y = i * rowH;
+      return `<g><rect x="0" y="${y}" width="${bw.toFixed(1)}" height="${h}" rx="6" fill="${item.color || color}" opacity=".85"/>
+        <text x="${Math.min(bw + 6, maxW - 30)}" y="${y + h / 2 + 4}" fill="var(--text-2)" font-size="11" font-family="inherit">${escapeHTML(item.label)} <tspan font-weight="700" fill="var(--text-1)">${item.value}</tspan></text></g>`;
+    });
+    return `<svg viewBox="0 0 ${maxW + 80} ${svgH}" width="100%" style="display:block;max-height:${svgH}px">${bars.join('')}</svg>`;
+  }
+
+  // Genera el bloque de gráficas para el dashboard de novedades
+  function novDashboardCharts(allGeneral) {
+    const tipoCounts = {};
+    const gestionCounts = {};
+    allGeneral.forEach(n => {
+      const t = n.type || 'Otro';
+      const g = n.gestionStatus || 'Pendiente';
+      tipoCounts[t] = (tipoCounts[t] || 0) + 1;
+      gestionCounts[g] = (gestionCounts[g] || 0) + 1;
+    });
+    const typeColors = { 'DESVINCULACIÓN': '#fb7185', 'Desvinculación': '#fb7185', 'INASISTENCIA': '#fbbf24', 'Inasistencia': '#fbbf24', 'ACCIDENTE': '#f97316', 'PROCESOS': '#a78bfa', 'Disciplinario': '#a78bfa', 'DESCUENTO': '#60a5fa', 'Descuento': '#60a5fa', 'OTRO SÍ': '#34d399', 'Otrosí': '#34d399', 'Incapacidad': '#94a3b8', 'Contratación': '#4ade80' };
+    const gestionColors = { 'Pendiente': '#fbbf24', 'En proceso': '#60a5fa', 'Cerrada': '#4ade80', 'Escalada': '#fb7185' };
+    const tipoSegs = Object.entries(tipoCounts).map(([k, v]) => ({ color: typeColors[k] || '#94a3b8', value: v, label: k }));
+    const gestionBars = Object.entries(gestionCounts).map(([k, v]) => ({ label: k, value: v, color: gestionColors[k] || '#94a3b8' })).sort((a, b) => b.value - a.value);
+    if (!allGeneral.length) return '';
+    return `<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:14px 0">
+      <div class="card" style="padding:14px">
+        <div class="card-title" style="font-size:12px;margin-bottom:10px">Novedades por tipo</div>
+        <div style="display:flex;align-items:center;gap:14px">
+          ${svgDonut(tipoSegs, 90)}
+          <div style="display:flex;flex-direction:column;gap:5px">${tipoSegs.map(s => `<div style="display:flex;align-items:center;gap:6px"><span style="width:10px;height:10px;border-radius:50%;background:${s.color};flex-shrink:0"></span><span style="font-size:11px;color:var(--text-2)">${escapeHTML(s.label)}</span><strong style="font-size:11px">${s.value}</strong></div>`).join('')}</div>
+        </div>
+      </div>
+      <div class="card" style="padding:14px">
+        <div class="card-title" style="font-size:12px;margin-bottom:10px">Estado de gestión</div>
+        ${svgBars(gestionBars, 160, 20)}
+      </div>
+    </div>`;
+  }
+
   function pill(value) {
     return `<span class="status-pill ${statusClass(value)}">${escapeHTML(value)}</span>`;
   }
@@ -2064,7 +2167,11 @@ function toggleMode() {
   }
 
   function sortedMallas() {
-    const items = scopedItems(state.availabilities, item => ({ client: item.client, point: item.point, quicker: item.quicker }));
+    const today = new Date().toISOString().slice(0, 10);
+    const viewDate = state.prefs.mallaViewDate || today;
+    const all = scopedItems(state.availabilities, item => ({ client: item.client, point: item.point, quicker: item.quicker }));
+    // Guardar fechas pasadas en historial sin borrarlas, filtrar por fecha seleccionada
+    const items = viewDate === 'todos' ? all : all.filter(d => (d.date || '') === viewDate);
     const key = state.prefs.mallaSortKey || 'date';
     const dir = state.prefs.mallaSortDir === 'asc' ? 1 : -1;
     items.sort((a, b) => compareMallaValue(a, b, key) * dir);
@@ -2444,7 +2551,16 @@ function toggleMode() {
           </div></div>
         </div>
       </div>
-      <div class="toolbar-line"><span class="fp-sub">Clic en un encabezado para ordenar. Usa ‹ › para mover columnas. Tolerancia ingreso:</span><input type="number" data-ingress-grace value="${escapeHTML(state.prefs.ingressGraceMinutes || 30)}" style="width:74px"><span class="fp-sub">minutos</span></div>` +
+      <div class="toolbar-line" style="flex-wrap:wrap;gap:10px">
+        <span class="fp-sub">Clic en un encabezado para ordenar. Usa ‹ › para mover columnas. Tolerancia ingreso:</span>
+        <input type="number" data-ingress-grace value="${escapeHTML(state.prefs.ingressGraceMinutes || 30)}" style="width:74px">
+        <span class="fp-sub">minutos</span>
+        <span class="fp-sub" style="margin-left:8px">|</span>
+        <span class="fp-sub">Fecha malla:</span>
+        <input type="date" data-malla-view-date value="${escapeHTML(state.prefs.mallaViewDate || new Date().toISOString().slice(0,10))}" style="min-height:32px;border:1px solid var(--border);border-radius:9px;background:var(--card-bg);color:var(--text-1);padding:0 10px;font:inherit">
+        <button class="dev-btn" style="padding:4px 10px;font-size:12px" data-malla-view-all>Ver todas</button>
+        <span class="fp-sub" style="color:var(--q);font-weight:700">${(state.prefs.mallaViewDate && state.prefs.mallaViewDate !== 'todos') ? 'Malla: ' + escapeHTML(state.prefs.mallaViewDate) : (state.prefs.mallaViewDate === 'todos' ? 'Mostrando historial completo' : 'Malla: hoy ' + new Date().toISOString().slice(0,10))}</span>
+      </div>` +
       (!rows.length ? `<div class="dropzone" style="margin-bottom:12px"><strong>Malla sin información</strong><span class="fp-sub">Crea una nueva malla, importa un archivo masivo o descarga la base para empezar a cargar datos.</span></div>` : '') + table(headers, rows)
     );
     const page = document.getElementById('page-mallas');
@@ -2766,11 +2882,19 @@ function toggleMode() {
       <span class="fp-sub" style="font-weight:900;text-transform:uppercase;letter-spacing:.5px">Mensajeros con más novedades</span>
       ${topQuickers.length ? topQuickers.map(([name, count]) => `<span class="status-pill st-warn">${escapeHTML(name)} · ${count}</span>`).join('') : '<span class="fp-sub">Sin novedades registradas desde malla.</span>'}
     </div>`;
+    const tiposFiltro = ['todos', 'DESVINCULACIÓN', 'INASISTENCIA', 'ACCIDENTE', 'PROCESOS', 'DESCUENTO', 'OTRO SÍ', 'Incapacidad', 'Contratación', 'Disciplinario', 'Seguridad', 'Retardo'];
+    const gestionFiltro = ['todos', 'Pendiente', 'En proceso', 'Cerrada', 'Escalada'];
     const filterbar = `<div class="nov-filterbar">
       <select data-novedades-filter-mode>
         ${['dia','mes','ano','todo'].map(mode => `<option value="${mode}" ${state.prefs.novedadesFilterMode === mode ? 'selected' : ''}>${mode === 'dia' ? 'Día' : mode === 'mes' ? 'Mes' : mode === 'ano' ? 'Año' : 'Todo'}</option>`).join('')}
       </select>
       <input type="date" data-novedades-filter-date value="${escapeHTML(state.prefs.novedadesFilterDate || new Date().toISOString().slice(0, 10))}">
+      <select data-novedades-filter-tipo>
+        ${tiposFiltro.map(t => `<option value="${t}" ${(state.prefs.novedadesFilterTipo || 'todos') === t ? 'selected' : ''}>${t === 'todos' ? 'Todos los tipos' : t}</option>`).join('')}
+      </select>
+      <select data-novedades-filter-gestion>
+        ${gestionFiltro.map(g => `<option value="${g}" ${(state.prefs.novedadesFilterGestion || 'todos') === g ? 'selected' : ''}>${g === 'todos' ? 'Toda gestión' : g}</option>`).join('')}
+      </select>
       <button class="dev-btn" data-export-current-novedades><i class="ti ti-file-spreadsheet"></i> Exportar Excel</button>
     </div>`;
     const tabbar = `<div class="module-tabs">${tabs.map(([key, label]) => `<button class="module-tab ${active === key ? 'on' : ''}" data-novedades-tab="${key}">${label}</button>`).join('')}</div>`;
@@ -2802,11 +2926,19 @@ function toggleMode() {
       ]));
       body = table(['Tipo', 'Estado', 'Fecha', 'Nombre', 'Cédula', 'Cliente', 'Punto', 'Valor', 'Acciones'], rows);
     } else {
-      const rows = allGeneral.map(n => row([
-        pill(n.type || ''), pill(n.gestionStatus || 'Pendiente'), escapeHTML(n.subtype || ''), escapeHTML(n.date || ''), escapeHTML(n.quicker || ''), escapeHTML(n.cedula || ''), escapeHTML(n.oasisId || ''),
+      const filterTipo = state.prefs.novedadesFilterTipo || 'todos';
+      const filterGestion = state.prefs.novedadesFilterGestion || 'todos';
+      const filtered = allGeneral.filter(n => {
+        const tipoOk = filterTipo === 'todos' || (n.type || '').toLowerCase() === filterTipo.toLowerCase();
+        const gestionOk = filterGestion === 'todos' || (n.gestionStatus || 'Pendiente').toLowerCase() === filterGestion.toLowerCase();
+        return tipoOk && gestionOk;
+      });
+      const rows = filtered.map(n => row([
+        novPill(n.type || ''), pill(n.gestionStatus || 'Pendiente'), escapeHTML(n.subtype || ''), escapeHTML(n.date || ''), escapeHTML(n.quicker || ''), escapeHTML(n.cedula || ''), escapeHTML(n.oasisId || ''),
         `<div class="row-actions">${iconAction('Ver y gestionar', 'viewNoveltyCase', n.id, 'ti-eye')}${iconAction('Ticket', 'ticketFromNovelty', n.id, 'ti-ticket')}</div>`
       ]));
-      body = table(['Tipo', 'Estado gestión', 'Subtipo', 'Fecha', 'Nombre', 'Cédula', 'ID OASIS', 'Acciones'], rows);
+      const emptyMsg = filtered.length === 0 ? `<div class="dropzone" style="margin:10px 0"><strong>Sin novedades</strong><span class="fp-sub">No hay registros para los filtros seleccionados.</span></div>` : '';
+      body = novDashboardCharts(allGeneral) + emptyMsg + table(['Tipo', 'Estado gestión', 'Subtipo', 'Fecha', 'Nombre', 'Cédula', 'ID OASIS', 'Acciones'], rows);
     }
     panel('novedades', 'Novedades', '',
       '',
@@ -5094,6 +5226,22 @@ function toggleMode() {
     if (event.target.matches('[data-novedades-filter-date]')) {
       state.prefs.novedadesFilterDate = event.target.value || new Date().toISOString().slice(0, 10);
       saveState('Fecha de filtro actualizada');
+    }
+    if (event.target.matches('[data-novedades-filter-tipo]')) {
+      state.prefs.novedadesFilterTipo = event.target.value;
+      saveState('Filtro de tipo actualizado');
+    }
+    if (event.target.matches('[data-novedades-filter-gestion]')) {
+      state.prefs.novedadesFilterGestion = event.target.value;
+      saveState('Filtro de gestión actualizado');
+    }
+    if (event.target.matches('[data-malla-view-date]')) {
+      state.prefs.mallaViewDate = event.target.value;
+      saveState('Fecha de malla actualizada');
+    }
+    if (event.target.matches('[data-malla-view-all]')) {
+      state.prefs.mallaViewDate = 'todos';
+      saveState('Mostrando historial completo');
     }
     if (event.target.matches('[data-form-config-type]')) {
       state.prefs.formConfigType = event.target.value;
