@@ -1844,7 +1844,23 @@ function toggleMode() {
         if (!remote) return;
         applyingRemoteState = true;
         const currentSession = state.session;
-        state = normalizeState(remote);
+        const remoteNormalized = normalizeState(remote);
+        // Preservar entradas locales que aún no llegaron a Firebase
+        // (evita que onSnapshot borre novedades/casos recién creados)
+        const remoteNovIds = new Set(remoteNormalized.novelties.map(n => n.id));
+        const localPendingNov = state.novelties.filter(n => !remoteNovIds.has(n.id));
+        if (localPendingNov.length) {
+          remoteNormalized.novelties = [...localPendingNov, ...remoteNormalized.novelties];
+          // Forzar sincronización para que Firebase también los tenga
+          setTimeout(() => scheduleCloudSave(200), 50);
+        }
+        const remoteCaseIds = new Set(remoteNormalized.cases.map(c => c.id));
+        const localPendingCases = state.cases.filter(c => !remoteCaseIds.has(c.id));
+        if (localPendingCases.length) {
+          remoteNormalized.cases = [...localPendingCases, ...remoteNormalized.cases];
+          setTimeout(() => scheduleCloudSave(200), 50);
+        }
+        state = remoteNormalized;
         state.session = currentSession;
         localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
         cloudStatus = 'Firebase en vivo';
