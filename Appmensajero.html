@@ -9,20 +9,29 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-storage-compat.js"></script>
   <script src="quick_firebase_config.js"></script>
   <style>
     :root{--q:#F5C518;--bg:#070707;--card:#15130f;--line:rgba(255,255,255,.12);--text:#fff;--muted:rgba(255,255,255,.62);--ok:#22C55E;--bad:#EF4444;--warn:#F59E0B}
     *{box-sizing:border-box} body{margin:0;min-height:100vh;background:radial-gradient(circle at 90% 0,rgba(245,197,24,.32),transparent 28%),linear-gradient(160deg,#050505,#15110a);font-family:"Aptos Narrow","Abadi","Segoe UI",Arial,sans-serif;color:var(--text)}
-    .app{width:min(460px,100%);margin:0 auto;min-height:100vh;padding:16px 14px 92px}.card{border:1px solid var(--line);background:rgba(16,14,10,.88);border-radius:24px;padding:16px;box-shadow:0 22px 60px rgba(0,0,0,.45);backdrop-filter:blur(18px);margin-bottom:14px}
-    .brand{display:flex;align-items:center;gap:12px;margin-bottom:16px}.logo{width:46px;height:46px;border-radius:16px;background:linear-gradient(135deg,var(--q),#C9A200);display:grid;place-items:center;color:#000;font-weight:900}.brand h1{font-size:26px;margin:0}.brand span{color:var(--muted);font-size:13px}
+    .app{width:min(460px,100%);margin:0 auto;min-height:100vh;padding:16px 14px 96px}.card{border:1px solid var(--line);background:rgba(16,14,10,.88);border-radius:24px;padding:16px;box-shadow:0 22px 60px rgba(0,0,0,.45);backdrop-filter:blur(18px);margin-bottom:14px}
+    .brand{display:flex;align-items:center;gap:12px;margin-bottom:16px}.logo{width:46px;height:46px;border-radius:16px;background:linear-gradient(135deg,var(--q),#C9A200);display:grid;place-items:center;color:#000;font-weight:900;font-size:22px}.brand h1{font-size:26px;margin:0}.brand span{color:var(--muted);font-size:13px}
     label{display:block;color:var(--muted);font-size:11px;font-weight:850;text-transform:uppercase;letter-spacing:.8px;margin:12px 0 6px} input,textarea,select,button{font:inherit} input,textarea,select{width:100%;border:1px solid var(--line);background:rgba(255,255,255,.06);color:#fff;border-radius:14px;padding:13px;outline:0} select option{color:#111;background:#fff} textarea{min-height:76px;resize:vertical}
-    .btn{width:100%;border:0;border-radius:16px;padding:14px 16px;background:linear-gradient(135deg,var(--q),#C9A200);color:#070707;font-weight:850;margin-top:10px}.btn.ghost{background:rgba(255,255,255,.06);color:#fff;border:1px solid var(--line)}.btn.bad{background:rgba(239,68,68,.18);color:#ff9b9b;border:1px solid rgba(239,68,68,.25)}.btn.small{padding:10px 12px;border-radius:12px;font-size:13px}
+    .btn{width:100%;border:0;border-radius:16px;padding:14px 16px;background:linear-gradient(135deg,var(--q),#C9A200);color:#070707;font-weight:850;margin-top:10px}.btn.ghost{background:rgba(255,255,255,.06);color:#fff;border:1px solid var(--line)}.btn.bad{background:rgba(239,68,68,.18);color:#ff9b9b;border:1px solid rgba(239,68,68,.25)}.btn.ok{background:rgba(34,197,94,.18);color:#86efac;border:1px solid rgba(34,197,94,.25)}.btn.small{padding:10px 12px;border-radius:12px;font-size:13px}
     .password-wrap{position:relative}.password-wrap input{padding-right:50px}.eye{position:absolute;right:8px;top:50%;transform:translateY(-50%);width:36px;height:36px;border:0;border-radius:12px;background:rgba(255,255,255,.08);color:#fff}
-    .hidden{display:none}.pill{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;background:rgba(245,197,24,.12);color:var(--q);font-size:12px;font-weight:850}.muted{color:var(--muted);font-size:13px;line-height:1.4}.turn h2{margin:12px 0 4px;font-size:24px}.meta{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:14px 0}.meta div{border:1px solid var(--line);background:rgba(255,255,255,.05);border-radius:16px;padding:12px}.meta small{display:block;color:var(--muted);font-size:11px}.meta strong{font-size:16px}
+    .hidden{display:none}.pill{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;background:rgba(245,197,24,.12);color:var(--q);font-size:12px;font-weight:850}.pill.ok{background:rgba(34,197,94,.15);color:var(--ok)}.pill.bad{background:rgba(239,68,68,.15);color:#ff9b9b}
+    .muted{color:var(--muted);font-size:13px;line-height:1.4}.turn h2{margin:12px 0 4px;font-size:24px}.meta{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:14px 0}.meta div{border:1px solid var(--line);background:rgba(255,255,255,.05);border-radius:16px;padding:12px}.meta small{display:block;color:var(--muted);font-size:11px}.meta strong{font-size:16px}
     .camera{border:1px dashed rgba(245,197,24,.45);border-radius:18px;padding:12px;margin-top:10px;background:rgba(245,197,24,.06)} video,.snapshot{width:100%;border-radius:14px;background:#050505;min-height:190px;object-fit:cover;border:1px solid var(--line)}.snapshot{display:none}.cam-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-    .map{height:360px;border-radius:20px;overflow:hidden;border:1px solid var(--line);background:#111}.map-tools{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}
-    .row{display:flex;justify-content:space-between;gap:10px;border-bottom:1px solid var(--line);padding:10px 0}.row:last-child{border-bottom:0}.toast{position:fixed;left:14px;right:14px;bottom:82px;background:#111;border:1px solid rgba(245,197,24,.3);padding:13px;border-radius:16px;opacity:0;transform:translateY(10px);transition:.2s;z-index:20}.toast.on{opacity:1;transform:none}
-    .doc-grid{display:grid;gap:10px}.doc-item{border:1px solid var(--line);border-radius:16px;padding:12px;background:rgba(255,255,255,.045)}.doc-item h4{margin:0 0 8px}.status-line{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:10px 0}.status-line div{border:1px solid var(--line);border-radius:14px;padding:10px;background:rgba(245,197,24,.06)}.tabs{position:fixed;left:0;right:0;bottom:0;background:rgba(9,8,6,.94);border-top:1px solid var(--line);backdrop-filter:blur(16px);display:grid;grid-template-columns:repeat(5,1fr);z-index:10}.tab{height:66px;border:0;background:transparent;color:var(--muted);display:grid;place-items:center;font-size:11px;font-weight:800}.tab .ti{font-size:20px}.tab.on{color:var(--q)}.screen{display:none}.screen.on{display:block}
+    .map{height:340px;border-radius:20px;overflow:hidden;border:1px solid var(--line);background:#111}.map-tools{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}
+    .row{display:flex;justify-content:space-between;gap:10px;border-bottom:1px solid var(--line);padding:10px 0}.row:last-child{border-bottom:0}.toast{position:fixed;left:14px;right:14px;bottom:86px;background:#111;border:1px solid rgba(245,197,24,.3);padding:13px;border-radius:16px;opacity:0;transform:translateY(10px);transition:.2s;z-index:20;text-align:center}.toast.on{opacity:1;transform:none}
+    .doc-grid{display:grid;gap:10px}.doc-item{border:1px solid var(--line);border-radius:16px;padding:12px;background:rgba(255,255,255,.045)}.doc-item h4{margin:0 0 4px;display:flex;align-items:center;gap:6px}
+    .status-line{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:10px 0}.status-line div{border:1px solid var(--line);border-radius:14px;padding:10px;background:rgba(245,197,24,.06)}
+    .tabs{position:fixed;left:0;right:0;bottom:0;background:rgba(9,8,6,.96);border-top:1px solid var(--line);backdrop-filter:blur(16px);display:grid;grid-template-columns:repeat(6,1fr);z-index:10}.tab{height:64px;border:0;background:transparent;color:var(--muted);display:grid;place-items:center;gap:2px;font-size:9.5px;font-weight:800;padding:0}.tab .ti{font-size:19px}.tab.on{color:var(--q)}.screen{display:none}.screen.on{display:block}
+    .lunch-head{display:flex;align-items:center;gap:10px;margin:14px 0 4px}.lunch-head .ico{width:38px;height:38px;border-radius:12px;display:grid;place-items:center;background:rgba(245,197,24,.15);color:var(--q);font-size:20px}
+    .alert{border-radius:14px;padding:11px 13px;margin-bottom:10px;font-size:13px;display:flex;gap:8px;align-items:flex-start}.alert.warn{background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.3);color:#fcd34d}.alert.bad{background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.3);color:#fca5a5}.alert.ok{background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.25);color:#86efac}
+    .tk{border:1px solid var(--line);border-radius:14px;padding:11px;margin-bottom:9px;background:rgba(255,255,255,.04)}.tk b{font-size:14px}.tk .meta-row{display:flex;justify-content:space-between;margin-top:5px;font-size:11px;color:var(--muted)}
+    .stamp-note{font-size:11px;color:var(--muted);margin-top:6px}
+    .filebox{border:1px dashed var(--line);border-radius:14px;padding:10px;background:rgba(255,255,255,.04);font-size:12px;color:var(--muted)}
   </style>
 </head>
 <body>
@@ -39,94 +48,226 @@
 
     <section id="home" class="hidden">
       <div class="brand"><div class="logo">Q</div><div><h1 id="hello">Hola</h1><span id="todayLabel"></span></div></div>
+
+      <!-- TURNO -->
       <section class="screen on" id="screen-turno">
         <div class="card turn">
           <span class="pill" id="turnStatus">Turno asignado</span>
           <h2 id="client">Cliente</h2><p class="muted" id="point">Punto</p>
-          <div class="meta"><div><small>Horario</small><strong id="schedule"></strong></div><div><small>Almuerzo</small><strong id="lunch"></strong></div></div>
+          <div class="meta">
+            <div><small>Operación</small><strong id="operation">—</strong></div>
+            <div><small>Horario de hoy</small><strong id="schedule">—</strong></div>
+          </div>
           <div class="status-line"><div><small>Tiempo turno</small><strong id="turnElapsed">00:00</strong></div><div><small>Tiempo almuerzo</small><strong id="lunchElapsed">00:00</strong></div></div>
           <p class="muted" id="gpsText">GPS pendiente. La ubicación se toma automáticamente.</p>
+
           <div class="camera">
-            <label>Cámara en tiempo real</label>
+            <label>Cámara — la foto incluirá dirección, fecha y hora</label>
             <video id="camera" autoplay playsinline muted></video>
             <img id="snapshot" class="snapshot" alt="Foto capturada">
-            <div class="cam-actions"><button class="btn ghost small" id="startCamera" type="button">Abrir cámara</button><button class="btn ghost small" id="capturePhoto" type="button">Tomar foto</button></div>
+            <div class="cam-actions"><button class="btn ghost small" id="startCamera" type="button">Abrir cámara</button><button class="btn ghost small" id="capturePhoto" type="button">Probar foto</button></div>
+            <p class="stamp-note">Al iniciar o finalizar turno se toma la foto automáticamente y se sella con la ubicación. Esa foto se refleja en la malla.</p>
           </div>
-          <button class="btn" data-turn-action="inicio">Iniciar turno</button>
-          <button class="btn ghost" data-turn-action="almuerzo_inicio" id="lunchStart">Iniciar almuerzo</button>
-          <button class="btn ghost" data-turn-action="almuerzo_fin" id="lunchEnd">Finalizar almuerzo</button>
-          <button class="btn bad" data-turn-action="cierre">Finalizar turno</button>
+          <input type="file" id="turnFileInput" accept="image/*" capture="environment" class="hidden">
+
+          <button class="btn" data-turn-action="inicio"><i class="ti ti-player-play"></i> Iniciar turno</button>
+          <button class="btn bad" data-turn-action="cierre"><i class="ti ti-player-stop"></i> Finalizar turno</button>
+
+          <div id="lunchBlock">
+            <div class="lunch-head"><div class="ico"><i class="ti ti-tools-kitchen-2"></i></div><div><strong>Almuerzo</strong><div class="muted" id="lunchInfo">Marca ingreso y salida</div></div></div>
+            <button class="btn ghost" data-turn-action="almuerzo_inicio" id="lunchStart"><i class="ti ti-login"></i> Iniciar almuerzo</button>
+            <button class="btn ghost" data-turn-action="almuerzo_fin" id="lunchEnd"><i class="ti ti-logout"></i> Finalizar almuerzo</button>
+          </div>
         </div>
       </section>
+
+      <!-- MAPA -->
       <section class="screen" id="screen-mapa">
         <div class="card">
           <div class="map-tools"><select id="mapStyle"><option value="satellite">Satelital</option><option value="road">Normal</option></select><button class="btn ghost small" id="refreshGps" type="button">Actualizar GPS</button></div>
           <div id="messengerMap" class="map"></div>
-          <p class="muted" id="zoneText">Visualización de zona KML y ubicación actual.</p>
+          <p class="muted" id="zoneText">Punto de venta, zona asignada y tu ubicación actual. Toca el punto para ver nombre y dirección.</p>
         </div>
       </section>
-      <section class="screen" id="screen-parqueadero">
+
+      <!-- GASTOS / ADICIONALES -->
+      <section class="screen" id="screen-gastos">
         <div class="card">
-          <h3 style="margin:0 0 8px">Reportar pago adicional</h3>
-          <label>Tipo de pago</label><select id="paymentType"></select>
+          <h3 style="margin:0 0 8px">Reportar adicional</h3>
+          <p class="muted" id="gastoHint">Selecciona el tipo habilitado por tu coordinador.</p>
+          <label>Tipo de solicitud</label><select id="paymentType"></select>
           <label>Valor</label><input id="parkingAmount" type="number" placeholder="Ej: 8000">
           <label>Comentario</label><textarea id="parkingNote" placeholder="Detalle del cobro"></textarea>
-          <p class="muted">Usa la foto capturada en la pestaña Turno como soporte del cobro.</p>
-          <button class="btn ghost" id="parkingBtn">Enviar parqueadero</button>
+          <label id="invoiceLabel">Factura electrónica (foto o documento)</label>
+          <input type="file" id="invoiceFile" accept="image/*,.pdf">
+          <div class="filebox" id="invoiceInfo" style="margin-top:8px">Adjunta la factura como soporte del cobro.</div>
+          <button class="btn" id="parkingBtn" type="button"><i class="ti ti-send"></i> Enviar adicional</button>
         </div>
       </section>
+
+      <!-- SOLICITUDES / PQR -->
+      <section class="screen" id="screen-solicitudes">
+        <div class="card">
+          <h3 style="margin:0 0 8px">Solicitud / PQR</h3>
+          <p class="muted">Permisos, quejas, PQR o novedades. Llega a tu coordinador.</p>
+          <label>Tipo</label><select id="tkType"><option>Permiso</option><option>Queja</option><option>PQR</option><option>Solicitud</option><option>Novedad</option><option>Incapacidad</option></select>
+          <label>Prioridad</label><select id="tkPriority"><option>Baja</option><option selected>Media</option><option>Alta</option><option>Crítica</option></select>
+          <label>Título</label><input id="tkTitle" placeholder="Resumen breve">
+          <label>Descripción</label><textarea id="tkDesc" placeholder="Cuéntanos el detalle"></textarea>
+          <label>Adjunto (opcional)</label><input type="file" id="tkFile" accept="image/*,.pdf">
+          <button class="btn" id="tkBtn" type="button"><i class="ti ti-send"></i> Enviar solicitud</button>
+        </div>
+        <div class="card"><h3 style="margin:0 0 8px">Mis solicitudes</h3><div id="tkList"><p class="muted">Sin solicitudes aún.</p></div></div>
+      </section>
+
+      <!-- MALLA -->
       <section class="screen" id="screen-malla">
         <div class="card"><h3 style="margin:0 0 8px">Mi malla</h3><div id="scheduleList"></div></div>
         <button class="btn ghost" id="logout">Cerrar sesión</button>
       </section>
+
+      <!-- DOCUMENTOS -->
       <section class="screen" id="screen-docs">
         <div class="card">
-          <h3 style="margin:0 0 8px">Mis documentos</h3>
-          <p class="muted">Actualiza documentos de la moto y fechas de vencimiento para seguimiento administrativo.</p>
+          <h3 style="margin:0 0 4px">Mi perfil y documentos</h3>
+          <p class="muted">Sube tu foto y los documentos de la moto con su vencimiento. Te avisamos (y a tu coordinador) antes de que venzan.</p>
+          <div id="docAlerts"></div>
           <div class="doc-grid" id="docGrid"></div>
-          <button class="btn" id="saveDocs" type="button">Guardar documentos</button>
+          <button class="btn" id="saveDocs" type="button"><i class="ti ti-device-floppy"></i> Guardar documentos</button>
         </div>
       </section>
     </section>
   </main>
+
   <nav class="tabs hidden" id="tabs">
     <button class="tab on" data-tab="turno"><i class="ti ti-clock"></i><span>Turno</span></button>
-    <button class="tab" data-tab="mapa"><i class="ti ti-map"></i><span>Mapa</span></button>
-    <button class="tab" data-tab="parqueadero"><i class="ti ti-receipt"></i><span>Gastos</span></button>
+    <button class="tab" data-tab="mapa"><i class="ti ti-map-2"></i><span>Mapa</span></button>
+    <button class="tab" data-tab="gastos"><i class="ti ti-receipt"></i><span>Gastos</span></button>
+    <button class="tab" data-tab="solicitudes"><i class="ti ti-ticket"></i><span>PQR</span></button>
     <button class="tab" data-tab="malla"><i class="ti ti-calendar"></i><span>Malla</span></button>
-    <button class="tab" data-tab="docs"><i class="ti ti-file-certificate"></i><span>Docs</span></button>
+    <button class="tab" data-tab="docs"><i class="ti ti-id-badge-2"></i><span>Perfil</span></button>
   </nav>
   <div class="toast" id="toast"></div>
+
   <script>
     const KEY='quick_lastmile_mvp_state_v1';
-    const fallback={users:[{name:'Carlos Mejía',username:'carlos.qk',password:'Mensajero2026!',profile:'Quicker',scope:'Carlos Mejía'}],clients:[{name:'Farmacias Andina',lunch:'Si'}],quickers:[{name:'Carlos Mejía',client:'Farmacias Andina',point:'Santa Bárbara',lat:4.6872,lng:-74.0488,paymentEnabled:'No',paymentTypes:['Parqueaderos']}],availabilities:[{id:'DIS-001',date:'2026-06-17',client:'Farmacias Andina',point:'Santa Bárbara',quicker:'Carlos Mejía',plannedStart:'08:00',plannedEnd:'18:00',realStart:'',realEnd:'',status:'Creado',evidencePhoto:'',custom:{}}],evidences:[],novelties:[],parkingReports:[],locationPings:[],prefs:{}};
-    let state=load(), session=null, current=null, lastGps=null, capturedPhoto='', stream=null, map=null, cloudRef=null;
+    const fallback={users:[{name:'Carlos Mejía',username:'carlos.qk',password:'Mensajero2026!',profile:'Quicker',scope:'Carlos Mejía'}],clients:[{name:'Farmacias Andina',lunch:'Si',lat:4.6872,lng:-74.0488,points:[{name:'Santa Bárbara',address:'Cra 7 #120-20, Bogotá',lat:4.6872,lng:-74.0488}]}],quickers:[{name:'Carlos Mejía',cedula:'1018456789',phone:'3001234567',client:'Farmacias Andina',point:'Santa Bárbara',lat:4.6872,lng:-74.0488,paymentEnabled:'No',paymentTypes:['Parqueaderos']}],availabilities:[{id:'DIS-001',date:'2026-06-17',client:'Farmacias Andina',point:'Santa Bárbara',quicker:'Carlos Mejía',plannedStart:'08:00',plannedEnd:'18:00',realStart:'',realEnd:'',status:'Creado',evidencePhoto:'',custom:{}}],evidences:[],novelties:[],parkingReports:[],locationPings:[],tickets:[],notifications:[],prefs:{}};
+    let state=load(), session=null, current=null, lastGps=null, capturedPhoto='', stream=null, map=null, cloudRef=null, storage=null, watchId=null, lastPingSave=0;
     function load(){try{return {...fallback,...(JSON.parse(localStorage.getItem(KEY))||{})}}catch{return fallback}}
-    function save(msg){localStorage.setItem(KEY,JSON.stringify(state));if(cloudRef)cloudRef.set({state:{...state,session:null},updatedAt:firebase.firestore.FieldValue.serverTimestamp(),updatedBy:session?.username||'mensajero'},{merge:true}).catch(()=>{});toast(msg)}
-    function initCloud(){try{const cfg=window.QUICK_FIREBASE_CONFIG;if(!cfg?.enabled||!window.firebase)return;firebase.initializeApp(cfg.firebaseConfig);cloudRef=firebase.firestore().collection(cfg.collection||'quick_lastmile').doc(cfg.documentId||'platform_state');cloudRef.onSnapshot(s=>{const remote=s.data()?.state;if(!remote)return;const keep=session;state={...fallback,...remote};localStorage.setItem(KEY,JSON.stringify(state));session=keep;if(session)renderHome(false)})}catch{}}
-    function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('on');setTimeout(()=>t.classList.remove('on'),1800)}
+    function save(msg){localStorage.setItem(KEY,JSON.stringify(state));if(cloudRef)cloudRef.set({state:publicState(),updatedAt:firebase.firestore.FieldValue.serverTimestamp(),updatedBy:session?.username||'mensajero'},{merge:true}).catch(()=>{});if(msg)toast(msg)}
+    // Quita base64 (dataUrl/photoData) antes de subir a Firestore; conserva las URL de Storage
+    function publicState(){const s=JSON.parse(JSON.stringify({...state,session:null}));
+      if(Array.isArray(s.evidences))s.evidences=s.evidences.map(e=>({...e,photoData:null,dataUrl:null}));
+      if(Array.isArray(s.parkingReports))s.parkingReports=s.parkingReports.map(p=>({...p,photoData:null,dataUrl:null}));
+      if(Array.isArray(s.tickets))s.tickets=s.tickets.map(t=>({...t,evidence:(t.evidence||[]).map(e=>({...e,dataUrl:null}))}));
+      if(Array.isArray(s.quickers))s.quickers=s.quickers.map(q=>({...q,documents:Object.fromEntries(Object.entries(q.documents||{}).map(([k,v])=>[k,{...v,dataUrl:null}]))}));
+      return s;}
+    function initCloud(){try{const cfg=window.QUICK_FIREBASE_CONFIG;if(!cfg?.enabled||!window.firebase)return;if(!firebase.apps.length)firebase.initializeApp(cfg.firebaseConfig);try{if(firebase.storage)storage=firebase.storage()}catch{}cloudRef=firebase.firestore().collection(cfg.collection||'quick_lastmile').doc(cfg.documentId||'platform_state');cloudRef.onSnapshot(s=>{const remote=s.data()?.state;if(!remote)return;const keep=session;state={...fallback,...remote};localStorage.setItem(KEY,JSON.stringify(state));session=keep;if(session)renderHome(false)})}catch{}}
+    function uid(p){return `${p}-${Date.now().toString(36).toUpperCase()}${Math.floor(Math.random()*90+10)}`}
+    function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('on');setTimeout(()=>t.classList.remove('on'),1900)}
     function today(){return new Date().toISOString().slice(0,10)}
-    function locate(cb){if(!navigator.geolocation){cb(null);return}navigator.geolocation.getCurrentPosition(pos=>{lastGps={lat:pos.coords.latitude,lng:pos.coords.longitude,time:new Date().toLocaleString('es-CO')};cb(lastGps)},()=>cb(null),{enableHighAccuracy:true,timeout:9000})}
+    function locate(cb){if(!navigator.geolocation){cb(null);return}navigator.geolocation.getCurrentPosition(pos=>{lastGps={lat:pos.coords.latitude,lng:pos.coords.longitude,time:new Date().toLocaleString('es-CO')};cb(lastGps)},()=>cb(lastGps),{enableHighAccuracy:true,timeout:9000})}
+    function reverseGeocode(lat,lng,cb){fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&accept-language=es`,{headers:{'Accept':'application/json'}}).then(r=>r.json()).then(d=>cb(d.display_name||'')).catch(()=>cb(''))}
+    function uploadFile(path,dataUrl,cb){if(!storage||!dataUrl){cb('');return}try{const ref=storage.ref().child(path);ref.putString(dataUrl,'data_url').then(s=>s.ref.getDownloadURL()).then(url=>cb(url)).catch(()=>cb(''))}catch{cb('')}}
+    // Sella la foto con dirección, fecha y hora
+    function stampPhoto(dataUrl,address,stamp,cb){const img=new Image();img.onload=()=>{const c=document.createElement('canvas');const W=Math.min(img.width,1280);const scale=W/img.width;c.width=W;c.height=img.height*scale;const ctx=c.getContext('2d');ctx.drawImage(img,0,0,c.width,c.height);const lines=[];const addr=address||'Ubicación no disponible';const maxLen=46;for(let i=0;i<addr.length;i+=maxLen)lines.push(addr.slice(i,i+maxLen));lines.push(stamp);const fs=Math.max(13,Math.round(c.width/38));const lh=fs*1.35;const padY=lh*0.6;const boxH=lh*lines.length+padY*2;ctx.fillStyle='rgba(0,0,0,.62)';ctx.fillRect(0,c.height-boxH,c.width,boxH);ctx.fillStyle='#F5C518';ctx.fillRect(0,c.height-boxH,6,boxH);ctx.font=`600 ${fs}px Arial`;ctx.fillStyle='#fff';ctx.textBaseline='top';lines.forEach((ln,i)=>{ctx.fillStyle=i===lines.length-1?'#F5C518':'#fff';ctx.fillText(ln,16,c.height-boxH+padY+i*lh)});cb(c.toDataURL('image/jpeg',.82))};img.onerror=()=>cb(dataUrl);img.src=dataUrl}
     function initials(name){return String(name||'Q').split(' ').map(p=>p[0]).join('').slice(0,2).toUpperCase()}
+    function myQuicker(){return (state.quickers||[]).find(x=>x.name===session.name)||{}}
+    function myCoordinators(){const cl=myQuicker().client||'';return (state.users||[]).filter(u=>u.profile==='Coordinador'&&u.name&&(!u.client||u.client==='Global'||u.client===cl)).map(u=>u.name)}
+
     document.getElementById('eye').onclick=()=>{const p=document.getElementById('pass'),i=document.querySelector('#eye .ti');const show=p.type==='password';p.type=show?'text':'password';i.className=show?'ti ti-eye-off':'ti ti-eye'}
-    document.getElementById('loginForm').onsubmit=e=>{e.preventDefault();const u=document.getElementById('user').value.trim(),p=document.getElementById('pass').value;const found=(state.users||[]).find(x=>(x.username===u||x.email===u)&&x.password===p&&x.profile==='Quicker');if(!found){toast('Usuario o contraseña incorrectos');return}session=found;renderHome()}
+    document.getElementById('loginForm').onsubmit=e=>{e.preventDefault();const u=document.getElementById('user').value.trim(),p=document.getElementById('pass').value;const found=(state.users||[]).find(x=>(x.username===u||x.email===u)&&x.password===p&&x.profile==='Quicker');if(!found){toast('Usuario o contraseña incorrectos');return}session=found;renderHome();startWatch()}
     function elapsed(start,end){if(!start)return'00:00';const now=end||new Date().toTimeString().slice(0,5);const [sh,sm]=start.split(':').map(Number),[eh,em]=now.split(':').map(Number);let mins=(eh*60+em)-(sh*60+sm);if(mins<0)mins+=1440;return `${String(Math.floor(mins/60)).padStart(2,'0')}:${String(mins%60).padStart(2,'0')}`}
-    function renderDocs(q){const docs=['SOAT','Tecnomecánica','Licencia','Cédula frente','Cédula atrás','Foto perfil','Foto moto'];q.documents=q.documents||{};document.getElementById('docGrid').innerHTML=docs.map(name=>{const d=q.documents[name]||{};return `<div class="doc-item"><h4>${name}</h4><label>Archivo</label><input type="file" data-doc-file="${name}" accept="image/*,.pdf"><label>Vencimiento</label><input type="date" data-doc-expiry="${name}" value="${d.expiry||''}"><p class="muted">${d.fileName?`Archivo actual: ${d.fileName}`:'Sin archivo cargado'}</p></div>`}).join('')}
+
+    const DOC_DEFS=[{k:'Foto perfil',exp:false},{k:'Foto moto',exp:false},{k:'SOAT',exp:true},{k:'Tecnomecánica',exp:true},{k:'Licencia de conducción',exp:true},{k:'Cédula',exp:false}];
+    function daysTo(date){if(!date)return null;const d=Math.ceil((new Date(date)-new Date())/86400000);return d}
+    function renderDocs(q){q.documents=q.documents||{};document.getElementById('docGrid').innerHTML=DOC_DEFS.map(def=>{const d=q.documents[def.k]||{};const cur=d.url||d.dataUrl;return `<div class="doc-item"><h4><i class="ti ti-file-certificate"></i> ${def.k}</h4>${cur&&/^http|^data:image/.test(cur)?`<img src="${cur}" style="width:100%;max-height:120px;object-fit:cover;border-radius:10px;margin-bottom:6px">`:''}<label>Archivo</label><input type="file" data-doc-file="${def.k}" accept="image/*,.pdf">${def.exp?`<label>Vencimiento</label><input type="date" data-doc-expiry="${def.k}" value="${d.expiry||''}">`:''}<p class="muted">${d.fileName?`Actual: ${d.fileName}`:'Sin archivo'}</p></div>`}).join('');renderDocAlerts(q)}
+    function renderDocAlerts(q){const box=document.getElementById('docAlerts');const al=[];DOC_DEFS.filter(d=>d.exp).forEach(def=>{const d=q.documents?.[def.k];if(d?.expiry){const dd=daysTo(d.expiry);if(dd<0)al.push(`<div class="alert bad"><i class="ti ti-alert-triangle"></i> ${def.k} VENCIDO (${d.expiry})</div>`);else if(dd<=30)al.push(`<div class="alert warn"><i class="ti ti-clock"></i> ${def.k} vence en ${dd} día(s) (${d.expiry})</div>`)}});box.innerHTML=al.join('')||'<div class="alert ok"><i class="ti ti-circle-check"></i> Documentos al día</div>'}
+
     function renderTimers(){if(!current)return;document.getElementById('turnElapsed').textContent=elapsed(current.realStart,current.realEnd);document.getElementById('lunchElapsed').textContent=elapsed(current.lunchStart,current.lunchEnd)}
-    function renderHome(camera=true){document.getElementById('login').classList.add('hidden');document.getElementById('home').classList.remove('hidden');document.getElementById('tabs').classList.remove('hidden');document.getElementById('hello').textContent=`Hola, ${session.name.split(' ')[0]}`;document.getElementById('todayLabel').textContent=new Date().toLocaleDateString('es-CO',{weekday:'long',day:'numeric',month:'long'});const list=(state.availabilities||[]).filter(d=>d.quicker===session.name).sort((a,b)=>a.date.localeCompare(b.date));current=list.find(d=>d.date===today())||list[0];if(!current){toast('No tienes turnos asignados');return}const client=(state.clients||[]).find(c=>c.name===current.client)||{};const q=(state.quickers||[]).find(x=>x.name===session.name)||{};const payments=q.paymentEnabled==='Si';document.querySelector('[data-tab=\"parqueadero\"]').style.display=payments?'grid':'none';document.getElementById('paymentType').innerHTML=(q.paymentTypes||['Parqueaderos']).map(t=>`<option>${t}</option>`).join('');document.getElementById('client').textContent=current.client;document.getElementById('point').textContent=current.point;document.getElementById('schedule').textContent=`${current.plannedStart||''} - ${current.plannedEnd||''}`;document.getElementById('lunch').textContent=client.lunch==='Si'?'Debe marcar':'No aplica';document.getElementById('lunchStart').style.display=client.lunch==='Si'?'block':'none';document.getElementById('lunchEnd').style.display=client.lunch==='Si'?'block':'none';document.getElementById('turnStatus').textContent=current.status||'Creado';document.getElementById('scheduleList').innerHTML=list.map(d=>`<div class="row"><span>${d.date}<br><small class="muted">${d.client} · ${d.point}</small></span><strong>${d.status||'Creado'}</strong></div>`).join('');renderTimers();renderDocs(q);setTimeout(initMap,0);if(camera)startCamera()}
-    async function startCamera(){try{stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'},audio:false});document.getElementById('camera').srcObject=stream}catch{toast('Cámara no disponible. Usa HTTPS o localhost para habilitarla.')}}
+    function renderTickets(){const mine=(state.tickets||[]).filter(t=>t.createdByName===session.name);document.getElementById('tkList').innerHTML=mine.length?mine.slice(0,20).map(t=>`<div class="tk"><b>${t.title||''}</b><div class="meta-row"><span>${t.type||''}</span><span class="pill ${/finaliz/i.test(overall(t))?'ok':''}">${overall(t)}</span></div></div>`).join(''):'<p class="muted">Sin solicitudes aún.</p>'}
+    function overall(t){const ns=(t.assignees||[]);if(!ns.length)return 'Pendiente';const f=ns.filter(n=>(t.gestion?.[n]?.status)==='Finalizado').length;return f===ns.length?'Finalizado':f>0?'En proceso':'Pendiente'}
+
+    function renderHome(camera=true){document.getElementById('login').classList.add('hidden');document.getElementById('home').classList.remove('hidden');document.getElementById('tabs').classList.remove('hidden');document.getElementById('hello').textContent=`Hola, ${session.name.split(' ')[0]}`;document.getElementById('todayLabel').textContent=new Date().toLocaleDateString('es-CO',{weekday:'long',day:'numeric',month:'long'});
+      const list=(state.availabilities||[]).filter(d=>d.quicker===session.name).sort((a,b)=>a.date.localeCompare(b.date));current=list.find(d=>d.date===today())||list[list.length-1];
+      const q=myQuicker();const client=(state.clients||[]).find(c=>c.name===(current?.client||q.client))||{};
+      if(current){document.getElementById('client').textContent=current.client;document.getElementById('point').textContent=current.point||'Sin punto asignado';document.getElementById('operation').textContent=current.client||q.client||'—';document.getElementById('schedule').textContent=`${current.plannedStart||''} - ${current.plannedEnd||''}`;document.getElementById('turnStatus').textContent=current.status||'Creado'}
+      else{document.getElementById('client').textContent=q.client||'Sin operación';document.getElementById('point').textContent=q.point||'';document.getElementById('operation').textContent=q.client||'—';document.getElementById('schedule').textContent='Sin turno hoy'}
+      const payments=q.paymentEnabled==='Si';document.querySelector('[data-tab="gastos"]').style.display=payments?'grid':'none';document.getElementById('paymentType').innerHTML=(q.paymentTypes||['Parqueaderos']).map(t=>`<option>${t}</option>`).join('');
+      const lunchOn=client.lunch==='Si';document.getElementById('lunchBlock').style.display=lunchOn?'block':'none';document.getElementById('lunchInfo').textContent=lunchOn?'Marca ingreso y salida de almuerzo':'No aplica';
+      document.getElementById('scheduleList').innerHTML=list.length?list.map(d=>`<div class="row"><span>${d.date}<br><small class="muted">${d.client} · ${d.point||''}</small></span><strong>${d.status||'Creado'}</strong></div>`).join(''):'<p class="muted">Sin turnos asignados.</p>';
+      renderTimers();renderDocs(q);renderTickets();setTimeout(initMap,0);if(camera)startCamera()}
+
+    async function startCamera(){try{if(stream)return;stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'},audio:false});document.getElementById('camera').srcObject=stream}catch{document.getElementById('camera').style.display='none'}}
     document.getElementById('startCamera').onclick=startCamera;
-    document.getElementById('capturePhoto').onclick=()=>{const v=document.getElementById('camera'),img=document.getElementById('snapshot');if(!v.videoWidth){toast('Abre la cámara primero');return}const c=document.createElement('canvas');c.width=v.videoWidth;c.height=v.videoHeight;c.getContext('2d').drawImage(v,0,0);capturedPhoto=c.toDataURL('image/jpeg',.82);img.src=capturedPhoto;img.style.display='block';toast('Foto capturada')};
+    function captureFrame(){const v=document.getElementById('camera');if(v&&v.videoWidth){const c=document.createElement('canvas');c.width=v.videoWidth;c.height=v.videoHeight;c.getContext('2d').drawImage(v,0,0);return c.toDataURL('image/jpeg',.82)}return ''}
+    document.getElementById('capturePhoto').onclick=()=>{const raw=captureFrame();if(!raw){toast('Abre la cámara primero');return}document.getElementById('snapshot').src=raw;document.getElementById('snapshot').style.display='block';toast('Vista previa lista')};
+    // Toma foto (cámara en vivo o input nativo como respaldo) y la entrega
+    function takePhotoThen(cb){const raw=captureFrame();if(raw){cb(raw);return}const inp=document.getElementById('turnFileInput');inp.value='';inp.onchange=()=>{const f=inp.files&&inp.files[0];if(!f){cb('');return}const r=new FileReader();r.onload=()=>cb(String(r.result||''));r.readAsDataURL(f)};inp.click()}
+
     document.querySelectorAll('[data-turn-action]').forEach(btn=>btn.onclick=()=>registerTurn(btn.dataset.turnAction));
-    function registerTurn(action){if(!current)return;if(!capturedPhoto)toast('Toma una foto antes de enviar');locate(gps=>{const stamp=new Date().toLocaleString('es-CO');if(action==='inicio'){current.realStart=new Date().toTimeString().slice(0,5);current.status='En turno'}if(action==='cierre'){current.realEnd=new Date().toTimeString().slice(0,5);current.status='Finalizado'}if(action==='almuerzo_inicio')current.lunchStart=new Date().toTimeString().slice(0,5);if(action==='almuerzo_fin')current.lunchEnd=new Date().toTimeString().slice(0,5);current.evidencePhoto=capturedPhoto?'captura_tiempo_real.jpg':current.evidencePhoto;state.evidences=state.evidences||[];state.evidences.unshift({id:`EVI-${Date.now()}`,availability:current.id,quicker:session.name,stage:action,type:'Foto/GPS',required:'Si',status:'Cargada',file:'captura_tiempo_real.jpg',photoData:capturedPhoto,address:gps?`${gps.lat.toFixed(6)}, ${gps.lng.toFixed(6)}`:'GPS no disponible',time:stamp});state.locationPings=state.locationPings||[];if(gps)state.locationPings.unshift({quicker:session.name,availability:current.id,client:current.client,point:current.point,...gps});document.getElementById('gpsText').textContent=gps?`Marcado en ${gps.lat.toFixed(6)}, ${gps.lng.toFixed(6)} · ${stamp}`:'No fue posible tomar GPS';save('Registro enviado');renderHome(false)})}
-    document.getElementById('parkingBtn').onclick=()=>{if(!current)return;const q=(state.quickers||[]).find(x=>x.name===session.name)||{};if(q.paymentEnabled!=='Si'){toast('No tienes pagos adicionales habilitados');return}locate(gps=>{const amount=document.getElementById('parkingAmount').value;const paymentType=document.getElementById('paymentType').value||'Pago adicional';state.parkingReports=state.parkingReports||[];state.parkingReports.unshift({id:`PK-${Date.now()}`,availability:current.id,type:paymentType,quicker:session.name,client:current.client,point:current.point,amount,file:capturedPhoto?'foto_pago.jpg':'',photoData:capturedPhoto,note:document.getElementById('parkingNote').value,status:'Pendiente aprobación',address:gps?`${gps.lat.toFixed(6)}, ${gps.lng.toFixed(6)}`:'GPS no disponible',time:new Date().toLocaleString('es-CO')});state.novelties=state.novelties||[];state.novelties.unshift({id:`NOV-${Date.now()}`,type:paymentType,origin:'Quicker',ref:`${current.date} · ${session.name}`,severity:'Baja',status:'Reportada',note:`${paymentType} por $${amount}`});save('Pago enviado para aprobación')})}
-    document.getElementById('saveDocs').onclick=()=>{const q=(state.quickers||[]).find(x=>x.name===session.name);if(!q)return;q.documents=q.documents||{};const files=[...document.querySelectorAll('[data-doc-file]')];let pending=files.length;files.forEach(input=>{const name=input.dataset.docFile,expiry=document.querySelector(`[data-doc-expiry="${name}"]`)?.value||'';q.documents[name]={...(q.documents[name]||{}),expiry};const file=input.files?.[0];if(file){const r=new FileReader();r.onload=()=>{q.documents[name]={fileName:file.name,dataUrl:String(r.result||''),expiry};if(--pending===0)save('Documentos actualizados')};r.readAsDataURL(file)}else if(--pending===0)save('Documentos actualizados')})}
+    function registerTurn(action){if(!current){toast('No tienes turno asignado hoy');return}
+      takePhotoThen(raw=>{if(!raw){toast('Necesitas tomar la foto');return}
+        toast('Tomando ubicación...');
+        locate(gps=>{const stamp=new Date().toLocaleString('es-CO');
+          const proceed=address=>stampPhoto(raw,address,stamp,stamped=>{capturedPhoto=stamped;const img=document.getElementById('snapshot');img.src=stamped;img.style.display='block';applyTurn(action,gps,address,stamp,stamped)});
+          if(gps)reverseGeocode(gps.lat,gps.lng,addr=>proceed(addr||`${gps.lat.toFixed(6)}, ${gps.lng.toFixed(6)}`));
+          else proceed('Ubicación no disponible')})})}
+    function applyTurn(action,gps,address,stamp,stamped){
+      if(action==='inicio'){current.realStart=new Date().toTimeString().slice(0,5);current.status='En turno'}
+      if(action==='cierre'){current.realEnd=new Date().toTimeString().slice(0,5);current.status='Finalizado'}
+      if(action==='almuerzo_inicio')current.lunchStart=new Date().toTimeString().slice(0,5);
+      if(action==='almuerzo_fin')current.lunchEnd=new Date().toTimeString().slice(0,5);
+      const stageLabel={inicio:'Inicio de turno',cierre:'Fin de turno',almuerzo_inicio:'Inicio almuerzo',almuerzo_fin:'Fin almuerzo'}[action]||action;
+      current.evidencePhoto=stamped;
+      const eid=uid('EVI');
+      state.evidences=state.evidences||[];
+      const ev={id:eid,availability:current.id,quicker:session.name,stage:stageLabel,type:'Foto/GPS',required:'Si',status:'Cargada',file:`${action}.jpg`,photoData:stamped,address:address,gps:gps?`${gps.lat.toFixed(6)}, ${gps.lng.toFixed(6)}`:'',time:stamp};
+      state.evidences.unshift(ev);
+      state.locationPings=state.locationPings||[];if(gps)state.locationPings.unshift({quicker:session.name,availability:current.id,client:current.client,point:current.point,address,...gps});
+      document.getElementById('gpsText').textContent=gps?`${stageLabel} · ${address} · ${stamp}`:'No fue posible tomar GPS';
+      save(`${stageLabel} registrado`);renderHome(false);
+      uploadFile(`messenger-evidence/${current.id}/${eid}.jpg`,stamped,url=>{if(url){const e=(state.evidences||[]).find(x=>x.id===eid);if(e){e.url=url;save()}}});
+    }
+
+    // GPS en tiempo real para Mapa en Vivo
+    function startWatch(){if(watchId||!navigator.geolocation)return;watchId=navigator.geolocation.watchPosition(pos=>{lastGps={lat:pos.coords.latitude,lng:pos.coords.longitude,time:new Date().toLocaleString('es-CO')};const now=Date.now();if(now-lastPingSave>120000){lastPingSave=now;state.locationPings=state.locationPings||[];state.locationPings.unshift({quicker:session.name,availability:current?.id||'',client:current?.client||myQuicker().client||'',point:current?.point||'',lat:lastGps.lat,lng:lastGps.lng,time:lastGps.time});state.locationPings=state.locationPings.slice(0,300);save()}},()=>{},{enableHighAccuracy:true,maximumAge:30000,timeout:20000})}
+
+    // GASTOS / ADICIONALES
+    document.getElementById('paymentType').onchange=()=>{const t=document.getElementById('paymentType').value||'';const needInv=/parq/i.test(t);document.getElementById('invoiceLabel').textContent=needInv?'Factura electrónica (obligatoria)':'Soporte (opcional)';};
+    let invoiceData='';document.getElementById('invoiceFile').onchange=e=>{const f=e.target.files&&e.target.files[0];if(!f){invoiceData='';return}const r=new FileReader();r.onload=()=>{invoiceData=String(r.result||'');document.getElementById('invoiceInfo').textContent=`Adjunto: ${f.name}`};r.readAsDataURL(f)};
+    document.getElementById('parkingBtn').onclick=()=>{const q=myQuicker();if(q.paymentEnabled!=='Si'){toast('No tienes adicionales habilitados');return}const paymentType=document.getElementById('paymentType').value||'Adicional';const amount=document.getElementById('parkingAmount').value;if(/parq/i.test(paymentType)&&!invoiceData){toast('Adjunta la factura electrónica');return}
+      locate(gps=>{const pid=uid('PK');state.parkingReports=state.parkingReports||[];state.parkingReports.unshift({id:pid,availability:current?.id||'',type:paymentType,quicker:session.name,client:current?.client||q.client,point:current?.point||q.point,amount,file:invoiceData?'factura':'',photoData:invoiceData,note:document.getElementById('parkingNote').value,status:'Pendiente aprobación',address:gps?`${gps.lat.toFixed(6)}, ${gps.lng.toFixed(6)}`:'',time:new Date().toLocaleString('es-CO')});
+        state.novelties=state.novelties||[];state.novelties.unshift({id:uid('NOV'),type:paymentType,origin:'Quicker',ref:`${current?.date||today()} · ${session.name}`,severity:'Baja',status:'Reportada',gestionStatus:'Pendiente',note:`${paymentType} por $${amount||0}`,date:today()});
+        save('Adicional enviado para aprobación');document.getElementById('parkingAmount').value='';document.getElementById('parkingNote').value='';document.getElementById('invoiceFile').value='';document.getElementById('invoiceInfo').textContent='Adjunta la factura como soporte del cobro.';const inv=invoiceData;invoiceData='';
+        if(inv)uploadFile(`messenger-parking/${pid}.jpg`,inv,url=>{if(url){const p=(state.parkingReports||[]).find(x=>x.id===pid);if(p){p.url=url;save()}}})})}
+
+    // SOLICITUDES / PQR → tickets
+    document.getElementById('tkBtn').onclick=()=>{const title=document.getElementById('tkTitle').value.trim();if(!title){toast('Escribe un título');return}const q=myQuicker();const assignees=myCoordinators();const gestion={};assignees.forEach(n=>gestion[n]={status:'Pendiente',done:{},at:''});const tid=uid('TIC');const tkFile=document.getElementById('tkFile');const file=tkFile.files&&tkFile.files[0];
+      const finish=(evidence)=>{const t={id:tid,title,type:document.getElementById('tkType').value,description:document.getElementById('tkDesc').value,priority:document.getElementById('tkPriority').value,assignees,gestion,requirements:[],audience:'coordinador',client:q.client||'',clientScope:q.client||'Todos los clientes',custom:{},dueDate:'',createdAt:new Date().toISOString(),createdBy:session.username||'',createdByName:session.name,closedAt:null,comments:[],evidence:evidence||[],history:[{id:uid('TH'),action:'Ticket creado',user:session.name,at:new Date().toLocaleString('es-CO')}]};
+        state.tickets=state.tickets||[];state.tickets.unshift(t);state.notifications=state.notifications||[];assignees.forEach(n=>state.notifications.unshift({id:uid('NT'),to:n,ticketId:tid,read:false,at:new Date().toLocaleString('es-CO'),text:`${session.name} creó ${t.type} ${tid}: ${title}`}));
+        save('Solicitud enviada');document.getElementById('tkTitle').value='';document.getElementById('tkDesc').value='';tkFile.value='';renderTickets()};
+      if(file){const r=new FileReader();r.onload=()=>{const data=String(r.result||'');const eid=uid('TE');finish([{id:eid,name:file.name,fileType:file.type,dataUrl:data,user:session.name,at:new Date().toLocaleString('es-CO')}]);uploadFile(`ticket-evidence/${tid}/${eid}-${file.name}`,data,url=>{if(url){const t=(state.tickets||[]).find(x=>x.id===tid);const e=t&&(t.evidence||[]).find(x=>x.id===eid);if(e){e.url=url;save()}}})};r.readAsDataURL(file)}else finish([])}
+
+    // DOCUMENTOS
+    document.getElementById('saveDocs').onclick=()=>{const q=(state.quickers||[]).find(x=>x.name===session.name);if(!q){toast('Perfil no encontrado');return}q.documents=q.documents||{};const files=[...document.querySelectorAll('[data-doc-file]')];let pending=files.length+1;
+      const done=()=>{if(--pending<=0){checkDocAlerts(q);save('Documentos actualizados');renderDocs(q)}};
+      files.forEach(input=>{const name=input.dataset.docFile;const expiry=document.querySelector(`[data-doc-expiry="${name}"]`)?.value||'';q.documents[name]={...(q.documents[name]||{}),expiry};const file=input.files&&input.files[0];
+        if(file){const r=new FileReader();r.onload=()=>{const data=String(r.result||'');q.documents[name]={...(q.documents[name]||{}),fileName:file.name,dataUrl:data,expiry};uploadFile(`messenger-docs/${session.name}/${name}`.replace(/\s+/g,'_'),data,url=>{if(url)q.documents[name].url=url;done()})};r.readAsDataURL(file)}else done()});
+      done()}
+    function checkDocAlerts(q){const coords=myCoordinators();state.notifications=state.notifications||[];DOC_DEFS.filter(d=>d.exp).forEach(def=>{const d=q.documents?.[def.k];if(!d?.expiry)return;const dd=daysTo(d.expiry);if(dd!==null&&dd<=30){coords.forEach(n=>state.notifications.unshift({id:uid('NT'),to:n,ticketId:null,read:false,at:new Date().toLocaleString('es-CO'),text:`Documento ${def.k} de ${session.name} ${dd<0?'VENCIDO':'vence en '+dd+' día(s)'} (${d.expiry})`}));}})}
+
+    // TABS
     document.querySelectorAll('[data-tab]').forEach(btn=>btn.onclick=()=>{document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('on',b===btn));document.querySelectorAll('.screen').forEach(s=>s.classList.remove('on'));document.getElementById(`screen-${btn.dataset.tab}`).classList.add('on');if(btn.dataset.tab==='mapa')setTimeout(initMap,0)});
     document.getElementById('refreshGps').onclick=()=>locate(gps=>{toast(gps?'GPS actualizado':'GPS no disponible');initMap()});
     document.getElementById('mapStyle').onchange=initMap;
     function kmlLatLngs(){const text=state.prefs?.kmlText||'';const m=text.match(/<coordinates[^>]*>([\s\S]*?)<\/coordinates>/i);if(!m)return[];return m[1].trim().split(/\s+/).map(pair=>{const [lng,lat]=pair.split(',').map(Number);return Number.isFinite(lat)&&Number.isFinite(lng)?[lat,lng]:null}).filter(Boolean).slice(0,400)}
-    function initMap(){const el=document.getElementById('messengerMap');if(!el||!window.L||!current)return;if(map){map.remove();map=null}const q=(state.quickers||[]).find(x=>x.name===session.name)||{};const here=lastGps?[lastGps.lat,lastGps.lng]:[Number(q.lat)||4.6872,Number(q.lng)||-74.0488];map=L.map(el,{zoomControl:true}).setView(here,13);const road=L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap'});const sat=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,attribution:'Tiles &copy; Esri'});(document.getElementById('mapStyle').value==='road'?road:sat).addTo(map);L.control.layers({'Normal':road,'Satelital':sat},{},{position:'topleft'}).addTo(map);L.marker(here).addTo(map).bindPopup(`<strong>${session.name}</strong><br>${current.point}`).openPopup();const zone=kmlLatLngs();if(zone.length>2){L.polygon(zone,{color:'#F5C518',weight:2,dashArray:'7 5',fillColor:'#F5C518',fillOpacity:.18}).addTo(map);map.fitBounds([here,...zone],{padding:[24,24],maxZoom:14});document.getElementById('zoneText').textContent=`Zona KML: ${state.prefs.kmlName||'cargada'}`}}
-    document.getElementById('logout').onclick=()=>location.reload();
+    function initMap(){const el=document.getElementById('messengerMap');if(!el||!window.L)return;if(map){map.remove();map=null}const q=myQuicker();const client=(state.clients||[]).find(c=>c.name===(current?.client||q.client))||{};const pt=(client.points||[]).find(p=>(p.name||p)===( current?.point||q.point))||{};const ptLat=Number(pt.lat||client.lat||q.lat)||4.6872,ptLng=Number(pt.lng||client.lng||q.lng)||-74.0488;const here=lastGps?[lastGps.lat,lastGps.lng]:[ptLat,ptLng];
+      map=L.map(el,{zoomControl:true}).setView(here,14);const road=L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap'});const sat=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,attribution:'Tiles &copy; Esri'});(document.getElementById('mapStyle').value==='road'?road:sat).addTo(map);L.control.layers({'Normal':road,'Satelital':sat},{},{position:'topleft'}).addTo(map);
+      L.marker([ptLat,ptLng]).addTo(map).bindPopup(`<strong>${pt.name||current?.point||'Punto'}</strong><br>${pt.address||client.name||''}`);
+      if(lastGps)L.circleMarker(here,{radius:9,color:'#22C55E',fillColor:'#22C55E',fillOpacity:.9}).addTo(map).bindPopup(`<strong>Tú</strong><br>${session.name}`);
+      const zone=kmlLatLngs();if(zone.length>2){L.polygon(zone,{color:'#F5C518',weight:2,dashArray:'7 5',fillColor:'#F5C518',fillOpacity:.18}).addTo(map);map.fitBounds([[ptLat,ptLng],...zone,...(lastGps?[here]:[])],{padding:[24,24],maxZoom:15});document.getElementById('zoneText').textContent=`Zona: ${state.prefs.kmlName||'cargada'} · Punto: ${pt.name||current?.point||''}`}else{document.getElementById('zoneText').textContent=`Punto: ${pt.name||current?.point||''} · ${pt.address||''}`}}
+    document.getElementById('logout').onclick=()=>{if(watchId)navigator.geolocation.clearWatch(watchId);location.reload()};
     setInterval(renderTimers,30000);
     initCloud();
   </script>

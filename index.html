@@ -1305,6 +1305,27 @@
   .ticket-req-pick { display:flex; flex-direction:column; gap:8px; margin-top:6px; }
   .ticket-req-toggle { display:flex; align-items:center; gap:8px; font-size:12px; color:var(--text-1); cursor:pointer; }
   .ticket-req-toggle input { width:16px; height:16px; accent-color:var(--q); }
+  /* Carnet */
+  .carnet-wrap { display:flex; justify-content:center; padding:8px 0; }
+  .carnet { width:320px; border-radius:20px; overflow:hidden; background:linear-gradient(160deg,#1a1a2e,#0f0f1a); border:1px solid rgba(245,197,24,.4); box-shadow:0 18px 50px rgba(0,0,0,.45); color:#fff; }
+  .light-mode .carnet { background:linear-gradient(160deg,#1f2937,#111827); }
+  .carnet-top { display:flex; align-items:center; gap:10px; padding:14px 16px; background:linear-gradient(135deg,#F5C518,#C9A200); color:#111; }
+  .carnet-logo { width:38px; height:38px; border-radius:11px; background:#111; color:#F5C518; display:grid; place-items:center; font-weight:900; font-size:20px; }
+  .carnet-brand strong { display:block; font-size:18px; letter-spacing:1px; line-height:1; }
+  .carnet-brand span { font-size:11px; opacity:.8; }
+  .carnet-photo { width:120px; height:120px; margin:18px auto 10px; border-radius:50%; overflow:hidden; border:3px solid #F5C518; background:#0b0b14; }
+  .carnet-photo img { width:100%; height:100%; object-fit:cover; }
+  .carnet-initials { width:100%; height:100%; display:grid; place-items:center; font-size:40px; font-weight:800; color:#F5C518; }
+  .carnet-name { text-align:center; font-size:20px; font-weight:800; padding:0 16px; }
+  .carnet-role { text-align:center; font-size:12px; color:#F5C518; margin:3px 0 14px; padding:0 16px; }
+  .carnet-rows { padding:0 18px 8px; display:flex; flex-direction:column; gap:8px; }
+  .carnet-rows > div { display:flex; justify-content:space-between; gap:10px; border-bottom:1px solid rgba(255,255,255,.1); padding-bottom:6px; font-size:13px; }
+  .carnet-rows span { color:rgba(255,255,255,.55); }
+  .carnet-rows strong { color:#fff; text-align:right; }
+  .carnet-moto { padding:10px 18px; }
+  .carnet-moto span { display:block; font-size:11px; color:rgba(255,255,255,.55); margin-bottom:6px; }
+  .carnet-moto img { width:100%; max-height:120px; object-fit:cover; border-radius:12px; }
+  .carnet-foot { text-align:center; font-size:10px; color:rgba(255,255,255,.45); padding:12px; border-top:1px solid rgba(255,255,255,.08); margin-top:6px; }
 </style>
 </head>
 <body>
@@ -2695,29 +2716,67 @@ function toggleMode(forceDark) {
   }
 
   function evidenceCell(d) {
-    const evidence = state.evidences.find(e => e.availability === d.id && e.photoData);
-    if (evidence?.photoData) return `<button class="evidence-button" type="button" title="Ver evidencia" data-action="viewEvidence" data-id="${evidence.id}"><img class="evidence-preview" src="${evidence.photoData}" alt="Evidencia ${escapeHTML(d.quicker)}"></button>`;
+    const evidence = state.evidences.find(e => e.availability === d.id && (e.url || e.photoData));
+    const src = evidence && (evidence.url || evidence.photoData);
+    if (src) return `<button class="evidence-button" type="button" title="Ver evidencia" data-action="viewEvidence" data-id="${evidence.id}"><img class="evidence-preview" src="${src}" alt="Evidencia ${escapeHTML(d.quicker)}"></button>`;
     if (!d.evidencePhoto) return '<span class="fp-sub">Pendiente</span>';
     return `<span class="evidence-thumb" title="${escapeHTML(d.evidencePhoto)}"><i class="ti ti-photo"></i></span>`;
   }
 
   function evidencePreview(e) {
-    if (e.photoData) return `<img class="evidence-preview" src="${e.photoData}" alt="Evidencia ${escapeHTML(e.quicker)}">`;
+    const src = e.url || e.photoData;
+    if (src) return `<img class="evidence-preview" src="${src}" alt="Evidencia ${escapeHTML(e.quicker)}">`;
     return escapeHTML(e.file || e.status || '');
   }
 
   function openEvidenceModal(id) {
     const evidence = state.evidences.find(e => e.id === id);
-    if (!evidence?.photoData) { toast('No hay foto disponible para ampliar'); return; }
+    const src = evidence && (evidence.url || evidence.photoData);
+    if (!src) { toast('No hay foto disponible para ampliar'); return; }
     const form = document.getElementById('modal-form');
     document.getElementById('modal-title').textContent = `Evidencia · ${evidence.quicker || ''}`;
     document.getElementById('modal-subtitle').textContent = `${evidence.stage || 'Registro'} · ${evidence.time || ''} · ${evidence.address || ''}`;
     form.innerHTML = `<div class="form-grid">
-      <div class="form-field full"><img class="evidence-large" src="${evidence.photoData}" alt="Evidencia ampliada"></div>
-    </div><div class="modal-foot"><button class="dev-btn" type="button" id="cancel-form">Cerrar</button><a class="dev-btn primary" href="${evidence.photoData}" download="${escapeHTML(evidence.file || 'evidencia.jpg')}"><i class="ti ti-download"></i> Descargar</a></div>`;
+      <div class="form-field full"><img class="evidence-large" src="${src}" alt="Evidencia ampliada"></div>
+    </div><div class="modal-foot"><button class="dev-btn" type="button" id="cancel-form">Cerrar</button><a class="dev-btn primary" href="${src}" download="${escapeHTML(evidence.file || 'evidencia.jpg')}" target="_blank"><i class="ti ti-download"></i> Descargar</a></div>`;
     document.getElementById('cancel-form').onclick = closeModal;
     document.getElementById('app-modal').classList.add('open');
     document.getElementById('app-modal').setAttribute('aria-hidden', 'false');
+  }
+
+  // Carnet tipo tarjeta de presentación del Quicker
+  function openQuickerCarnet(id) {
+    const q = state.quickers.find(x => x.id === id);
+    if (!q) return;
+    const docs = q.documents || {};
+    const photo = docs['Foto perfil']?.url || docs['Foto perfil']?.dataUrl || q.avatarUrl || '';
+    const moto = docs['Foto moto']?.url || docs['Foto moto']?.dataUrl || '';
+    const photoHTML = photo ? `<img src="${photo}" alt="${escapeHTML(q.name)}">` : `<div class="carnet-initials">${initials(q.name)}</div>`;
+    const form = document.getElementById('modal-form');
+    document.getElementById('modal-title').textContent = 'Carnet del Quicker';
+    document.getElementById('modal-subtitle').textContent = 'Tarjeta de presentación';
+    form.innerHTML = `<div class="carnet-wrap">
+      <div class="carnet">
+        <div class="carnet-top"><div class="carnet-logo">Q</div><div class="carnet-brand"><strong>QUICK</strong><span>Last Mile</span></div></div>
+        <div class="carnet-photo">${photoHTML}</div>
+        <div class="carnet-name">${escapeHTML(q.name)}</div>
+        <div class="carnet-role">${escapeHTML(q.client || 'Operación sin asignar')}${q.point ? ' · ' + escapeHTML(q.point) : ''}</div>
+        <div class="carnet-rows">
+          <div><span>Cédula</span><strong>${escapeHTML(q.cedula || '—')}</strong></div>
+          <div><span>Teléfono</span><strong>${escapeHTML(q.phone || '—')}</strong></div>
+          <div><span>Operación</span><strong>${escapeHTML(q.client || '—')}</strong></div>
+          <div><span>Estado</span><strong>${escapeHTML(q.status || 'Activo')}</strong></div>
+        </div>
+        ${moto ? `<div class="carnet-moto"><span>Vehículo</span><img src="${moto}" alt="Moto"></div>` : ''}
+        <div class="carnet-foot">Quick Last Mile · Documento interno</div>
+      </div>
+    </div>
+    <div class="modal-foot"><button class="dev-btn" type="button" id="cancel-form">Cerrar</button></div>`;
+    document.getElementById('cancel-form').onclick = closeModal;
+    const modal = document.getElementById('app-modal');
+    modal.classList.remove('wide');
+    modal.classList.add('open');
+    modal.setAttribute('aria-hidden', 'false');
   }
 
   function customCell(d, col) {
@@ -3556,7 +3615,7 @@ function toggleMode(forceDark) {
         escapeHTML(q.id), escapeHTML(q.name), escapeHTML(q.phone), escapeHTML(q.email), escapeHTML(q.client), escapeHTML(q.point), escapeHTML(q.zone),
         `${escapeHTML(q.docName)} · ${escapeHTML(q.docExpires)}`,
         pill(expired ? 'Documento vencido' : q.status),
-        `<div class="row-actions">${action('Seguimiento', 'followQuicker', q.id)}${action('Bloquear', 'blockQuicker', q.id)}</div>`
+        `<div class="row-actions">${iconAction('Carnet', 'quickerCarnet', q.id, 'ti-id-badge-2')}${action('Seguimiento', 'followQuicker', q.id)}${action('Bloquear', 'blockQuicker', q.id)}</div>`
       ]);
     });
     panel('quickers', 'Maestra funcional de Quickers', 'Usuarios, contacto, cliente/punto, zona KML y alertas de documentos.',
@@ -5193,6 +5252,7 @@ function toggleMode(forceDark) {
     if (actionName === 'permissionsUser') { openPermissionsForm(id); return; }
     if (actionName === 'editMessenger') { openMessengerUserForm(id); return; }
     if (actionName === 'viewEvidence') { openEvidenceModal(id); return; }
+    if (actionName === 'quickerCarnet') { openQuickerCarnet(id); return; }
     if (actionName === 'viewNoveltyCase') { openNoveltyCaseDetail(id); return; }
     if (actionName === 'viewDelay') { openDelayDetail(id); return; }
     if (actionName === 'viewGestionRow') { openGestionRowDetail(id); return; }

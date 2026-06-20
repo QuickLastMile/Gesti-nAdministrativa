@@ -1,10 +1,10 @@
 rules_version = '2';
 
-// Reglas de Firebase Storage para evidencias de tickets.
-// Deben publicarse en la consola de Firebase (Storage → Rules) o con `firebase deploy --only storage`.
+// Reglas de Firebase Storage para evidencias, fotos de turno, soportes y documentos.
+// Publícalas en la consola de Firebase (Storage → Rules) o con `firebase deploy --only storage`.
 service firebase.storage {
   match /b/{bucket}/o {
-    match /ticket-evidence/{ticketId}/{fileName=**} {
+    match /{allPaths=**} {
       allow read, write: if true;
     }
   }
