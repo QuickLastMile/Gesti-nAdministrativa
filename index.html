@@ -2716,32 +2716,30 @@ function toggleMode(forceDark) {
   }
 
   function evidenceCell(d) {
-    const evidence = state.evidences.find(e => e.availability === d.id && (e.url || e.photoData));
-    const src = evidence && (evidence.url || evidence.photoData);
-    if (src) return `<button class="evidence-button" type="button" title="Ver evidencia" data-action="viewEvidence" data-id="${evidence.id}"><img class="evidence-preview" src="${src}" alt="Evidencia ${escapeHTML(d.quicker)}"></button>`;
+    const evidence = state.evidences.find(e => e.availability === d.id && hasMedia(e));
+    if (evidence) return `<button class="evidence-button" type="button" title="Ver evidencia" data-action="viewEvidence" data-id="${evidence.id}"><img class="evidence-preview" ${mediaAttr(evidence)} alt="Evidencia ${escapeHTML(d.quicker)}"></button>`;
     if (!d.evidencePhoto) return '<span class="fp-sub">Pendiente</span>';
     return `<span class="evidence-thumb" title="${escapeHTML(d.evidencePhoto)}"><i class="ti ti-photo"></i></span>`;
   }
 
   function evidencePreview(e) {
-    const src = e.url || e.photoData;
-    if (src) return `<img class="evidence-preview" src="${src}" alt="Evidencia ${escapeHTML(e.quicker)}">`;
+    if (hasMedia(e)) return `<img class="evidence-preview" ${mediaAttr(e)} alt="Evidencia ${escapeHTML(e.quicker)}">`;
     return escapeHTML(e.file || e.status || '');
   }
 
   function openEvidenceModal(id) {
     const evidence = state.evidences.find(e => e.id === id);
-    const src = evidence && (evidence.url || evidence.photoData);
-    if (!src) { toast('No hay foto disponible para ampliar'); return; }
+    if (!hasMedia(evidence)) { toast('No hay foto disponible para ampliar'); return; }
     const form = document.getElementById('modal-form');
     document.getElementById('modal-title').textContent = `Evidencia · ${evidence.quicker || ''}`;
     document.getElementById('modal-subtitle').textContent = `${evidence.stage || 'Registro'} · ${evidence.time || ''} · ${evidence.address || ''}`;
     form.innerHTML = `<div class="form-grid">
-      <div class="form-field full"><img class="evidence-large" src="${src}" alt="Evidencia ampliada"></div>
-    </div><div class="modal-foot"><button class="dev-btn" type="button" id="cancel-form">Cerrar</button><a class="dev-btn primary" href="${src}" download="${escapeHTML(evidence.file || 'evidencia.jpg')}" target="_blank"><i class="ti ti-download"></i> Descargar</a></div>`;
+      <div class="form-field full"><img class="evidence-large" ${mediaAttr(evidence)} alt="Evidencia ampliada"></div>
+    </div><div class="modal-foot"><button class="dev-btn" type="button" id="cancel-form">Cerrar</button><a class="dev-btn primary" ${(evidence.dataUrl || evidence.photoData || evidence.url) ? `href="${evidence.dataUrl || evidence.photoData || evidence.url}"` : `data-media-id="${escapeHTML(evidence.mediaId)}"`} download="${escapeHTML(evidence.file || 'evidencia.jpg')}" target="_blank"><i class="ti ti-download"></i> Descargar</a></div>`;
     document.getElementById('cancel-form').onclick = closeModal;
     document.getElementById('app-modal').classList.add('open');
     document.getElementById('app-modal').setAttribute('aria-hidden', 'false');
+    loadMediaImages();
   }
 
   // Carnet tipo tarjeta de presentación del Quicker
@@ -2749,9 +2747,10 @@ function toggleMode(forceDark) {
     const q = state.quickers.find(x => x.id === id);
     if (!q) return;
     const docs = q.documents || {};
-    const photo = docs['Foto perfil']?.url || docs['Foto perfil']?.dataUrl || q.avatarUrl || '';
-    const moto = docs['Foto moto']?.url || docs['Foto moto']?.dataUrl || '';
-    const photoHTML = photo ? `<img src="${photo}" alt="${escapeHTML(q.name)}">` : `<div class="carnet-initials">${initials(q.name)}</div>`;
+    const photoRef = docs['Foto perfil'] || (q.avatarUrl ? { dataUrl: q.avatarUrl } : null);
+    const motoRef = docs['Foto moto'];
+    const photoHTML = hasMedia(photoRef) ? `<img ${mediaAttr(photoRef)} alt="${escapeHTML(q.name)}">` : `<div class="carnet-initials">${initials(q.name)}</div>`;
+    const moto = hasMedia(motoRef);
     const form = document.getElementById('modal-form');
     document.getElementById('modal-title').textContent = 'Carnet del Quicker';
     document.getElementById('modal-subtitle').textContent = 'Tarjeta de presentación';
@@ -2767,7 +2766,7 @@ function toggleMode(forceDark) {
           <div><span>Operación</span><strong>${escapeHTML(q.client || '—')}</strong></div>
           <div><span>Estado</span><strong>${escapeHTML(q.status || 'Activo')}</strong></div>
         </div>
-        ${moto ? `<div class="carnet-moto"><span>Vehículo</span><img src="${moto}" alt="Moto"></div>` : ''}
+        ${moto ? `<div class="carnet-moto"><span>Vehículo</span><img ${mediaAttr(motoRef)} alt="Moto"></div>` : ''}
         <div class="carnet-foot">Quick Last Mile · Documento interno</div>
       </div>
     </div>
@@ -2777,6 +2776,7 @@ function toggleMode(forceDark) {
     modal.classList.remove('wide');
     modal.classList.add('open');
     modal.setAttribute('aria-hidden', 'false');
+    loadMediaImages();
   }
 
   function customCell(d, col) {
@@ -3859,10 +3859,10 @@ function toggleMode(forceDark) {
 
     const evidenceHTML = (t.evidence || []).length
       ? `<div class="ticket-evidence-grid">${t.evidence.map(e => {
-          const src = ticketEvidenceSrc(e);
-          const isImg = (e.fileType || '').startsWith('image/') && src;
-          const thumb = isImg ? `<img src="${src}" alt="${escapeHTML(e.name)}">` : `<i class="ti ti-file-text"></i>`;
-          const link = src ? `<a href="${src}" download="${escapeHTML(e.name)}" target="_blank" rel="noopener">${escapeHTML(e.name)}</a>` : `${escapeHTML(e.name)} <span class="fp-sub">(no sincronizado)</span>`;
+          const localSrc = e.dataUrl || e.url;
+          const isImg = (e.fileType || '').startsWith('image/') && hasMedia(e);
+          const thumb = isImg ? `<img ${mediaAttr(e)} alt="${escapeHTML(e.name)}">` : `<i class="ti ti-file-text"></i>`;
+          const link = hasMedia(e) ? `<a ${localSrc ? `href="${localSrc}"` : `data-media-id="${escapeHTML(e.mediaId)}"`} download="${escapeHTML(e.name)}" target="_blank" rel="noopener">${escapeHTML(e.name)}</a>` : `${escapeHTML(e.name)} <span class="fp-sub">(no sincronizado)</span>`;
           return `<div class="ticket-evidence-item">${thumb}<div class="ticket-evidence-meta">${link}<span class="fp-sub">${escapeHTML(e.user)} · ${escapeHTML(e.at)}</span></div></div>`;
         }).join('')}</div>`
       : '<div class="fp-sub">Sin evidencias adjuntas.</div>';
@@ -3955,6 +3955,7 @@ function toggleMode(forceDark) {
       </div>`;
 
     openModal(`Ticket ${t.id}`, t.title || '', html, null, true);
+    loadMediaImages();
   }
 
   function inputStyleGlobal() {
@@ -4151,22 +4152,50 @@ function toggleMode(forceDark) {
     state.notifications = state.notifications.slice(0, 200);
   }
   // Sube la evidencia a Firebase Storage y guarda la URL pública (visible entre usuarios)
-  function uploadTicketEvidence(ticket, ev, file) {
-    if (!cloudStorage) return; // modo local: queda solo el dataUrl
+  // Guarda la evidencia como documento de medios en Firestore (visible entre usuarios sin Storage)
+  function uploadTicketEvidence(ticket, ev) {
+    uploadMedia(ev.id, ev.dataUrl, mid => {
+      if (!mid) return;
+      const live = (state.tickets || []).find(x => x.id === ticket.id);
+      const target = live && (live.evidence || []).find(e => e.id === ev.id);
+      if (target) {
+        target.mediaId = mid;
+        saveState('Evidencia sincronizada');
+        if (document.getElementById('app-modal')?.classList.contains('open')) openTicketDetail(ticket.id);
+      }
+    });
+  }
+
+  // Capa de medios sobre Firestore (alternativa gratuita a Storage)
+  const mediaCache = {};
+  function uploadMedia(id, dataUrl, cb) {
+    if (!cloudDb || !dataUrl) { cb && cb(''); return; }
+    if (dataUrl.length > 980000) { toast('Archivo muy grande; quedó solo en este equipo'); cb && cb(''); return; }
     try {
-      const path = `ticket-evidence/${ticket.id}/${ev.id}-${file.name}`;
-      const refS = cloudStorage.ref().child(path);
-      refS.put(file).then(snap => snap.ref.getDownloadURL()).then(url => {
-        const live = (state.tickets || []).find(x => x.id === ticket.id);
-        const target = live && (live.evidence || []).find(e => e.id === ev.id);
-        if (target) {
-          target.url = url;
-          target.storagePath = path;
-          saveState('Evidencia sincronizada');
-          if (document.getElementById('app-modal')?.classList.contains('open')) openTicketDetail(ticket.id);
-        }
-      }).catch(err => console.warn('Error subiendo evidencia:', err.message));
-    } catch (e) { console.warn('Storage no disponible:', e.message); }
+      cloudDb.collection('quick_media').doc(id).set({ data: dataUrl, at: Date.now(), by: state.session?.name || '' })
+        .then(() => { mediaCache[id] = dataUrl; cb && cb(id); })
+        .catch(() => cb && cb(''));
+    } catch (e) { cb && cb(''); }
+  }
+  function mediaAttr(item) {
+    const local = item && (item.dataUrl || item.photoData || item.url);
+    if (local) return `src="${local}"`;
+    if (item && item.mediaId) return `data-media-id="${escapeHTML(item.mediaId)}"`;
+    return '';
+  }
+  function hasMedia(item) { return !!(item && (item.dataUrl || item.photoData || item.url || item.mediaId)); }
+  function loadMediaImages() {
+    if (!cloudDb) return;
+    document.querySelectorAll('[data-media-id]:not([data-mloaded])').forEach(el => {
+      const id = el.dataset.mediaId;
+      const apply = data => { if (el.tagName === 'IMG') el.src = data; else if (el.tagName === 'A') el.href = data; el.dataset.mloaded = '1'; };
+      if (mediaCache[id]) { apply(mediaCache[id]); return; }
+      el.dataset.mloaded = 'pending';
+      cloudDb.collection('quick_media').doc(id).get().then(s => {
+        const d = s.data();
+        if (d && d.data) { mediaCache[id] = d.data; apply(d.data); }
+      }).catch(() => {});
+    });
   }
 
   function notifyUser(name, text, ticketId) {
@@ -4928,6 +4957,7 @@ function toggleMode(forceDark) {
     renderConfig();
     updateNavBadges();
     updateNotifDot();
+    requestAnimationFrame(loadMediaImages);
   }
 
   const schemas = {
@@ -6941,8 +6971,8 @@ function toggleMode(forceDark) {
         ticketHist(t, `Adjuntó evidencia: ${file.name}`);
         log('Tickets', 'Adjuntó evidencia', `${t.id}: ${file.name}`);
         saveState('Evidencia adjuntada'); openTicketDetail(t.id);
-        // Subir a Firebase Storage para que sea visible entre usuarios
-        uploadTicketEvidence(t, ev, file);
+        // Guardar como documento de medios (visible entre usuarios sin Storage de pago)
+        uploadTicketEvidence(t, ev);
       };
       reader.readAsDataURL(file);
       return;
