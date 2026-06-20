@@ -1111,8 +1111,19 @@
   .password-wrap input { width: 100%; padding-right: 48px; }
   .password-toggle {
     position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
-    width: 34px; height: 34px; border-radius: 10px; border: 0;
-    background: rgba(255,255,255,.08); color: #fff;
+    width: 38px; height: 38px; border-radius: 10px; border: 1px solid rgba(255,255,255,.2);
+    background: rgba(255,255,255,.12); color: #fff; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px; transition: all .2s;
+  }
+  .password-toggle:hover {
+    background: rgba(255,255,255,.2); border-color: rgba(255,255,255,.4);
+  }
+  .light-mode .password-toggle {
+    background: #f3f4f6; border-color: #d1d5db; color: #374151;
+  }
+  .light-mode .password-toggle:hover {
+    background: #e5e7eb; border-color: #3b82f6; color: #3b82f6;
   }
   .bootstrap-note {
     margin-top: 12px; padding: 12px; border-radius: 14px;
