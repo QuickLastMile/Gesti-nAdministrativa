@@ -1292,6 +1292,11 @@
   .ticket-chip { display:inline-flex; align-items:center; gap:5px; padding:4px 9px; border-radius:20px; background:rgba(245,197,24,.15); color:var(--text-1); font-size:11px; border:1px solid rgba(245,197,24,.3); }
   .ticket-chip button { background:none; border:none; color:inherit; cursor:pointer; font-size:14px; line-height:1; padding:0; opacity:.7; }
   .ticket-chip button:hover { opacity:1; color:#F87171; }
+  .notif-row { display:flex; gap:10px; align-items:flex-start; width:100%; text-align:left; background:none; border:0; border-bottom:1px solid var(--border); padding:10px 4px; cursor:pointer; color:var(--text-1); }
+  .notif-row:hover { background:rgba(245,197,24,.06); }
+  .light-mode .notif-row:hover { background:#FEF9E7; }
+  .notif-row.unread .tl-body-title { font-weight:700; }
+  .notif-row.unread { background:rgba(96,165,250,.06); }
 </style>
 </head>
 <body>
@@ -2126,10 +2131,15 @@ function toggleMode(forceDark) {
       };
     });
     next.ticketComments = value?.ticketComments || [];
+    next.notifications = Array.isArray(value?.notifications) ? value.notifications : [];
     next.files = value?.files || [];
     next.assetMatrix = value?.assetMatrix || [];
     next.hsqReports = value?.hsqReports || seed.hsqReports || [];
     next.prefs = { ...seed.prefs, ...(value?.prefs || {}) };
+    // Tickets: configuración de preguntas adicionales del formulario
+    next.prefs.ticketFields = Array.isArray(next.prefs.ticketFields) ? next.prefs.ticketFields : [];
+    // Borrado único de tickets para iniciar desde 0 con el nuevo sistema
+    if (!next.prefs.ticketsClearedV1) { next.tickets = []; next.notifications = []; next.prefs.ticketsClearedV1 = true; }
     const requiredMallaCols = seed.prefs.mallaColumns;
     next.prefs.mallaColumns = [...requiredMallaCols, ...(next.prefs.mallaColumns || []).filter(col => !requiredMallaCols.includes(col) && !['planned', 'executed', 'approval', 'serviceType', 'type', 'idGo', 'statusId', 'absenceReport', 'status'].includes(col))];
     next.prefs.contractTypes = next.prefs.contractTypes || seed.prefs.contractTypes;
@@ -3534,17 +3544,35 @@ function toggleMode(forceDark) {
 
   // ════════════════════ SISTEMA DE TICKETS ════════════════════
   const TICKET_PRIORITIES = ['Baja', 'Media', 'Alta', 'Crítica'];
-  const TICKET_STATUSES = ['Abierto', 'En proceso', 'Pendiente', 'Resuelto', 'Cerrado'];
+  const TICKET_STATUSES = ['Pendiente', 'En proceso', 'Finalizado'];
   const TICKET_TYPES = ['Problema', 'Solicitud', 'Requerimiento', 'Tarea', 'Mejora'];
   const ticketFilters = { estado: 'todos', prioridad: 'todos', responsable: 'todos', cliente: 'todos', q: '' };
 
+  function nextTicketId() {
+    const nums = (state.tickets || []).map(t => { const m = String(t.id || '').match(/(\d+)\s*$/); return m ? Number(m[1]) : 0; });
+    const next = (nums.length ? Math.max(...nums) : 0) + 1;
+    return `TK-${String(next).padStart(3, '0')}`;
+  }
   function ticketPriorityBadge(p) {
     const cls = { 'Baja': 'b-blue', 'Media': 'b-yellow', 'Alta': 'b-orange', 'Crítica': 'b-red' }[p] || 'b-blue';
     return `<span class="b ${cls}">${escapeHTML(p || 'Media')}</span>`;
   }
   function ticketStatusBadge(s) {
-    const cls = { 'Abierto': 'st-info', 'En proceso': 'st-warn', 'Pendiente': 'st-warn', 'Resuelto': 'st-ok', 'Cerrado': 'st-ok' }[s] || 'st-info';
-    return `<span class="status-pill ${cls}">${escapeHTML(s || 'Abierto')}</span>`;
+    const cls = { 'Pendiente': 'st-warn', 'En proceso': 'st-info', 'Finalizado': 'st-ok' }[s] || 'st-warn';
+    return `<span class="status-pill ${cls}">${escapeHTML(s || 'Pendiente')}</span>`;
+  }
+  function canCreateTickets() {
+    const p = currentUser().profile || state.session?.profile || '';
+    return !p || p === 'Administrador' || p === 'Coordinador';
+  }
+  function ticketCanManage(t) {
+    const u = currentUser();
+    const p = u.profile || '';
+    if (!p || p === 'Administrador') return true;
+    return t.createdBy === u.id || t.createdBy === u.username || t.createdByName === u.name;
+  }
+  function ticketIsAssignee(t) {
+    return ticketAssigneeNames(t).includes(currentUser().name);
   }
   function userName(idOrName) {
     if (!idOrName) return '';
@@ -3555,7 +3583,7 @@ function toggleMode(forceDark) {
     const list = t.assignees && t.assignees.length ? t.assignees : (t.assignedTo ? [t.assignedTo] : []);
     return list.map(userName).filter(Boolean);
   }
-  function isTicketOpen(t) { return !/resuelto|cerrado/i.test(t.status || ''); }
+  function isTicketOpen(t) { return !/finalizado/i.test(t.status || ''); }
   function ticketDueState(t) {
     if (!t.dueDate || !isTicketOpen(t)) return { label: t.dueDate ? t.dueDate.slice(0, 10) : '—', cls: '' };
     const today = new Date().toISOString().slice(0, 10);
@@ -3570,7 +3598,7 @@ function toggleMode(forceDark) {
       { key: 'asignado', label: 'Responsable asignado', done: ticketAssigneeNames(t).length > 0 },
       { key: 'respuesta', label: 'Respuesta / comentario', done: (t.comments || []).length > 0 },
       { key: 'evidencia', label: 'Evidencia adjunta', done: (t.evidence || []).length > 0 },
-      { key: 'resuelto', label: 'Resuelto o cerrado', done: !isTicketOpen(t) }
+      { key: 'finalizado', label: 'Finalizado', done: !isTicketOpen(t) }
     ];
     const done = checks.filter(c => c.done).length;
     return { checks, pct: Math.round((done / checks.length) * 100), done, total: checks.length };
@@ -3636,7 +3664,7 @@ function toggleMode(forceDark) {
       <div class="kpi-card q-accent"><i class="ti ti-ticket kpi-icon"></i><div class="kpi-label">Tickets abiertos</div><div class="kpi-value yellow">${stats.abiertos}</div><div class="kpi-delta"><i class="ti ti-progress"></i> ${stats.enProceso} en proceso</div></div>
       <div class="kpi-card grad-orange"><i class="ti ti-alarm kpi-icon"></i><div class="kpi-label">Vencen hoy</div><div class="kpi-value">${stats.venceHoy}</div><div class="kpi-delta ${stats.venceHoy ? 'down' : ''}"><i class="ti ti-alert-triangle"></i> Requiere acción</div></div>
       <div class="kpi-card grad-purple"><i class="ti ti-clock-exclamation kpi-icon"></i><div class="kpi-label">SLA vencido</div><div class="kpi-value">${stats.vencidos}</div><div class="kpi-delta"><i class="ti ti-calendar-x"></i> Fuera de plazo</div></div>
-      <div class="kpi-card grad-teal"><i class="ti ti-circle-check kpi-icon"></i><div class="kpi-label">Resueltos / cerrados</div><div class="kpi-value">${stats.cerrados}</div><div class="kpi-delta up"><i class="ti ti-checks"></i> Completados</div></div>
+      <div class="kpi-card grad-teal"><i class="ti ti-circle-check kpi-icon"></i><div class="kpi-label">Finalizados</div><div class="kpi-value">${stats.cerrados}</div><div class="kpi-delta up"><i class="ti ti-checks"></i> Completados</div></div>
     </div>`;
 
     const tableHTML = rows.length
@@ -3644,7 +3672,7 @@ function toggleMode(forceDark) {
       : `<div class="dropzone" style="text-align:center"><strong>No hay tickets que coincidan</strong><span class="fp-sub">Crea un ticket o ajusta los filtros para ver resultados.</span></div>`;
 
     panel('tickets', 'Gestión de Tickets', 'Reporta, asigna, prioriza y haz seguimiento a problemas, solicitudes y tareas con SLA en tiempo real.',
-      `<button class="dev-btn primary" data-open="ticket"><i class="ti ti-ticket-plus"></i> Crear ticket</button><button class="dev-btn" data-export="tickets"><i class="ti ti-download"></i> Exportar CSV</button>`,
+      `${canCreateTickets() ? '<button class="dev-btn primary" data-open-ticket-form><i class="ti ti-ticket-plus"></i> Crear ticket</button>' : ''}<button class="dev-btn" data-export="tickets"><i class="ti ti-download"></i> Exportar CSV</button>`,
       `${kpisHTML}${filtersHTML}${tableHTML}`
     );
   }
@@ -3653,11 +3681,20 @@ function toggleMode(forceDark) {
   function openTicketDetail(id) {
     const t = (state.tickets || []).find(x => x.id === id);
     if (!t) return;
+    // Marcar notificaciones de este ticket como leídas
+    const me = currentUser().name;
+    let changed = false;
+    (state.notifications || []).forEach(n => { if (n.ticketId === id && n.to === me && !n.read) { n.read = true; changed = true; } });
+    if (changed) { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); updateNotifDot(); }
     const comp = ticketCompleteness(t);
     const due = ticketDueState(t);
     const assignees = ticketAssigneeNames(t);
-    const allUsers = (state.users || []).filter(u => u.name);
-    const addOptions = allUsers.filter(u => !assignees.includes(u.name)).map(u => `<option value="${escapeHTML(u.id || u.name)}">${escapeHTML(u.name)} · ${escapeHTML(u.profile || '')}</option>`).join('');
+    const canManage = ticketCanManage(t);     // creador / admin: control total
+    const isAssignee = ticketIsAssignee(t);
+    const canRespond = canManage || isAssignee; // puede actualizar info solicitada
+    const coordUsers = (state.users || []).filter(u => u.profile === 'Coordinador' && u.name);
+    const addOptions = coordUsers.filter(u => !assignees.includes(u.name)).map(u => `<option value="${escapeHTML(u.name)}">${escapeHTML(u.name)}${u.client ? ' · ' + escapeHTML(u.client) : ''}</option>`).join('');
+    const roleLabel = canManage ? 'Creador / Administrador — control total' : isAssignee ? 'Asignado — actualiza la información solicitada' : 'Solo lectura';
 
     const commentsHTML = (t.comments || []).length
       ? t.comments.map(c => `<div class="ticket-comment"><div class="ticket-comment-head"><strong>${escapeHTML(c.user)}</strong><span class="fp-sub">${escapeHTML(c.at)}</span></div><div>${escapeHTML(c.text)}</div></div>`).join('')
@@ -3691,11 +3728,11 @@ function toggleMode(forceDark) {
           <div class="ticket-detail-desc">${t.description ? escapeHTML(t.description) : '<span class="fp-sub">Sin descripción.</span>'}</div>
 
           <div class="ticket-section"><h4><i class="ti ti-messages"></i> Comentarios y respuestas</h4>${commentsHTML}
-            <div class="ticket-add-row"><textarea id="ticket-comment-input" placeholder="Escribe una respuesta o nota de seguimiento..."></textarea><button class="dev-btn primary" data-ticket-comment="${t.id}"><i class="ti ti-send"></i> Enviar</button></div>
+            ${canRespond ? `<div class="ticket-add-row"><textarea id="ticket-comment-input" placeholder="Escribe una respuesta o nota de seguimiento..."></textarea><button class="dev-btn primary" data-ticket-comment="${t.id}"><i class="ti ti-send"></i> Enviar</button></div>` : ''}
           </div>
 
           <div class="ticket-section"><h4><i class="ti ti-paperclip"></i> Evidencias y archivos</h4>${evidenceHTML}
-            <label class="dev-btn" style="margin-top:10px"><i class="ti ti-upload"></i> Subir archivo / foto<input type="file" data-ticket-evidence="${t.id}" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt" style="display:none"></label>
+            ${canRespond ? `<label class="dev-btn" style="margin-top:10px"><i class="ti ti-upload"></i> Subir archivo / foto<input type="file" data-ticket-evidence="${t.id}" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt" style="display:none"></label>` : ''}
           </div>
 
           <div class="ticket-section"><h4><i class="ti ti-history"></i> Historial de cambios</h4><div class="ticket-hist">${historyHTML}</div></div>
@@ -3708,27 +3745,35 @@ function toggleMode(forceDark) {
             ${pendientes.length ? `<div class="ticket-pending"><strong>Falta:</strong> ${pendientes.map(escapeHTML).join(', ')}</div>` : '<div class="ticket-pending done"><i class="ti ti-circle-check"></i> Ticket completo</div>'}
           </div>
 
+          <div class="ticket-side-card" style="border-color:rgba(245,197,24,.35)"><label class="fp-sub" style="margin:0">Tu rol en este ticket</label><div style="font-size:12px;color:var(--text-1);font-weight:600;margin-top:4px">${escapeHTML(roleLabel)}</div></div>
+
           <div class="ticket-side-card">
             <label class="fp-sub">Estado</label>
-            <select data-ticket-status="${t.id}" style="${inputStyleGlobal()}">${TICKET_STATUSES.map(s => `<option ${s === t.status ? 'selected' : ''}>${s}</option>`).join('')}</select>
+            ${canRespond
+              ? `<select data-ticket-status="${t.id}" style="${inputStyleGlobal()}">${TICKET_STATUSES.map(s => `<option ${s === t.status ? 'selected' : ''}>${s}</option>`).join('')}</select>`
+              : `<div style="margin-top:4px">${ticketStatusBadge(t.status)}</div>`}
+            ${canManage ? `
             <label class="fp-sub" style="margin-top:10px">Prioridad</label>
             <select data-ticket-priority="${t.id}" style="${inputStyleGlobal()}">${TICKET_PRIORITIES.map(p => `<option ${p === t.priority ? 'selected' : ''}>${p}</option>`).join('')}</select>
             <label class="fp-sub" style="margin-top:10px">Vencimiento</label>
-            <input type="date" data-ticket-due="${t.id}" value="${escapeHTML((t.dueDate || '').slice(0, 10))}" style="${inputStyleGlobal()}">
+            <input type="date" data-ticket-due="${t.id}" value="${escapeHTML((t.dueDate || '').slice(0, 10))}" style="${inputStyleGlobal()}">`
+              : `<label class="fp-sub" style="margin-top:10px">Prioridad</label><div style="margin-top:4px">${ticketPriorityBadge(t.priority)}</div>
+                 <label class="fp-sub" style="margin-top:10px">Vencimiento</label><div style="margin-top:4px">${escapeHTML((t.dueDate || '').slice(0, 10) || '—')}</div>`}
           </div>
 
           <div class="ticket-side-card">
             <label class="fp-sub">Responsables</label>
-            <div class="ticket-assignees">${assignees.length ? assignees.map(a => `<span class="ticket-chip">${escapeHTML(a)} <button data-ticket-unassign="${t.id}" data-name="${escapeHTML(a)}" title="Quitar">×</button></span>`).join('') : '<span class="fp-sub">Sin asignar</span>'}</div>
-            ${addOptions ? `<div class="ticket-add-row" style="margin-top:8px"><select data-ticket-assign-sel="${t.id}" style="${inputStyleGlobal()}"><option value="">Agregar responsable...</option>${addOptions}</select><button class="dev-btn" data-ticket-assign="${t.id}"><i class="ti ti-user-plus"></i></button></div>` : ''}
+            <div class="ticket-assignees">${assignees.length ? assignees.map(a => `<span class="ticket-chip">${escapeHTML(a)}${canManage ? ` <button data-ticket-unassign="${t.id}" data-name="${escapeHTML(a)}" title="Quitar">×</button>` : ''}</span>`).join('') : '<span class="fp-sub">Sin asignar</span>'}</div>
+            ${canManage && addOptions ? `<div class="ticket-add-row" style="margin-top:8px"><select data-ticket-assign-sel="${t.id}" style="${inputStyleGlobal()}"><option value="">Agregar coordinador...</option>${addOptions}</select><button class="dev-btn" data-ticket-assign="${t.id}"><i class="ti ti-user-plus"></i></button></div>` : ''}
           </div>
 
-          ${t.client ? `<div class="ticket-side-card"><label class="fp-sub">Cliente relacionado</label><div>${escapeHTML(t.client)}</div></div>` : ''}
+          <div class="ticket-side-card"><label class="fp-sub">Alcance de cliente</label><div>${escapeHTML(t.clientScope || (t.client || 'Todos los clientes'))}</div></div>
+          ${(t.custom && Object.keys(t.custom).length) ? `<div class="ticket-side-card"><label class="fp-sub">Información adicional</label>${Object.entries(t.custom).map(([k, v]) => `<div style="font-size:12px;margin-top:4px"><strong>${escapeHTML(k)}:</strong> ${escapeHTML(v)}</div>`).join('')}</div>` : ''}
           ${(t.tags && t.tags.length) ? `<div class="ticket-side-card"><label class="fp-sub">Etiquetas</label><div>${t.tags.map(tag => `<span class="ticket-chip">${escapeHTML(tag)}</span>`).join('')}</div></div>` : ''}
         </div>
       </div>
       <div class="modal-foot" style="margin-top:16px">
-        ${isTicketOpen(t) ? `<button class="dev-btn" data-ticket-resolve="${t.id}"><i class="ti ti-circle-check"></i> Marcar resuelto</button>` : ''}
+        ${canRespond && isTicketOpen(t) ? `<button class="dev-btn primary" data-ticket-resolve="${t.id}"><i class="ti ti-circle-check"></i> Marcar finalizado</button>` : ''}
         <button class="dev-btn" type="button" id="cancel-form">Cerrar</button>
       </div>`;
 
@@ -3746,15 +3791,17 @@ function toggleMode(forceDark) {
 
   function makeTicket(data = {}) {
     return {
-      id: uid('TIC'),
+      id: nextTicketId(),
       title: data.title || 'Sin título',
       type: data.type || 'Requerimiento',
       description: data.description || '',
       priority: data.priority || 'Media',
-      status: 'Abierto',
+      status: 'Pendiente',
       assignees: data.assignees || [],
       client: data.client || '',
+      clientScope: data.clientScope || 'Todos los clientes',
       tags: data.tags || [],
+      custom: data.custom || {},
       dueDate: data.dueDate || '',
       createdAt: new Date().toISOString(),
       createdBy: state.session?.id || state.session?.username || '',
@@ -3764,6 +3811,118 @@ function toggleMode(forceDark) {
       evidence: [],
       history: [{ id: uid('TH'), action: 'Ticket creado', user: state.session?.name || 'Usuario', at: todayTime() }]
     };
+  }
+
+  // Coordinadores disponibles según alcance de cliente
+  function coordinatorsForClient(clientName) {
+    const coords = (state.users || []).filter(u => u.profile === 'Coordinador' && u.name);
+    if (!clientName || clientName === 'Todos los clientes') return coords;
+    return coords.filter(u => !u.client || u.client === 'Global' || u.client === clientName);
+  }
+
+  function ticketCustomFields() {
+    return Array.isArray(state.prefs.ticketFields) ? state.prefs.ticketFields : [];
+  }
+
+  // Formulario personalizado de creación de ticket (solo admin / coordinador)
+  function openTicketForm() {
+    if (!canCreateTickets()) { toast('Solo administradores y coordinadores pueden crear tickets'); return; }
+    const form = document.getElementById('modal-form');
+    const coords = (state.users || []).filter(u => u.profile === 'Coordinador' && u.name);
+    const clients = (state.clients || []).map(c => c.name);
+    const inS = 'width:100%;min-height:40px;border:1px solid var(--border);border-radius:10px;background:var(--card-bg);color:var(--text-1);padding:0 10px;font:inherit;margin-top:4px';
+    const taS = inS.replace('min-height:40px', 'min-height:70px;padding:8px 10px');
+
+    const customHTML = ticketCustomFields().map((f, i) => {
+      const req = f.optional ? '' : ' required';
+      const reqMark = f.optional ? '' : ' <span style="color:#ef4444">*</span>';
+      let input;
+      if (f.type === 'select') input = `<select name="custom_${i}"${req} style="${inS}">${(f.options || []).map(o => `<option>${escapeHTML(o)}</option>`).join('')}</select>`;
+      else if (f.type === 'textarea') input = `<textarea name="custom_${i}"${req} style="${taS}"></textarea>`;
+      else input = `<input name="custom_${i}" type="${f.type || 'text'}"${req} style="${inS}">`;
+      return `<div class="form-field full"><label>${escapeHTML(f.label)}${reqMark}</label>${input}</div>`;
+    }).join('');
+
+    document.getElementById('modal-title').textContent = 'Crear ticket / tarea';
+    document.getElementById('modal-subtitle').textContent = 'Reporta un problema o tarea, define urgencia y asigna responsables.';
+    form.innerHTML = `<div class="form-grid">
+      <div class="form-field full"><label>Título <span style="color:#ef4444">*</span></label><input name="title" required style="${inS}" placeholder="Resumen breve del ticket"></div>
+      <div class="form-field"><label>Tipo</label><select name="type" style="${inS}">${TICKET_TYPES.map(t => `<option>${t}</option>`).join('')}</select></div>
+      <div class="form-field"><label>Prioridad (urgencia)</label><select name="priority" style="${inS}">${TICKET_PRIORITIES.map(p => `<option ${p === 'Media' ? 'selected' : ''}>${p}</option>`).join('')}</select></div>
+      <div class="form-field full"><label>Descripción</label><textarea name="description" style="${taS}" placeholder="Detalle de lo solicitado"></textarea></div>
+      <div class="form-field"><label>Alcance de cliente</label><select name="clientScope" style="${inS}"><option>Todos los clientes</option>${clients.map(c => `<option>${escapeHTML(c)}</option>`).join('')}</select></div>
+      <div class="form-field"><label>Asignar a <span style="color:#ef4444">*</span></label><select name="assignTo" required style="${inS}"><option value="__all__">Todos los coordinadores</option>${coords.map(u => `<option value="${escapeHTML(u.name)}">${escapeHTML(u.name)}${u.client ? ' · ' + escapeHTML(u.client) : ''}</option>`).join('')}</select></div>
+      <div class="form-field"><label>Fecha de vencimiento</label><input name="dueDate" type="date" style="${inS}"></div>
+      <div class="form-field"><label>Etiquetas (coma)</label><input name="tags" style="${inS}" placeholder="opcional"></div>
+      ${customHTML}
+    </div>
+    <div class="modal-foot"><button class="dev-btn" type="button" id="cancel-form">Cancelar</button><button class="dev-btn primary" type="submit"><i class="ti ti-ticket-plus"></i> Crear ticket</button></div>`;
+
+    form.onsubmit = event => {
+      event.preventDefault();
+      const data = Object.fromEntries(new FormData(form).entries());
+      const clientScope = data.clientScope || 'Todos los clientes';
+      let assignees;
+      if (data.assignTo === '__all__') {
+        assignees = coordinatorsForClient(clientScope).map(u => u.name);
+        if (!assignees.length) { toast('No hay coordinadores para ese cliente'); return; }
+      } else {
+        assignees = [data.assignTo];
+      }
+      const custom = {};
+      ticketCustomFields().forEach((f, i) => { if (data[`custom_${i}`] !== undefined) custom[f.label] = data[`custom_${i}`]; });
+      const ticket = makeTicket({
+        title: data.title,
+        type: data.type,
+        description: data.description,
+        priority: data.priority,
+        assignees,
+        client: clientScope === 'Todos los clientes' ? '' : clientScope,
+        clientScope,
+        tags: (data.tags || '').split(',').map(s => s.trim()).filter(Boolean),
+        custom,
+        dueDate: data.dueDate || ''
+      });
+      state.tickets = state.tickets || [];
+      state.tickets.unshift(ticket);
+      notifyAssignees(ticket, assignees);
+      log('Tickets', 'Creó ticket', `${ticket.id} → ${assignees.join(', ')}`);
+      closeModal();
+      saveState('Ticket creado');
+    };
+    document.getElementById('cancel-form').onclick = closeModal;
+    const modal = document.getElementById('app-modal');
+    modal.classList.add('wide', 'open');
+    modal.setAttribute('aria-hidden', 'false');
+  }
+
+  // ── Notificaciones ──
+  function notifyAssignees(ticket, names) {
+    state.notifications = state.notifications || [];
+    const creator = state.session?.name;
+    [...new Set(names)].filter(n => n && n !== creator).forEach(name => {
+      state.notifications.unshift({
+        id: uid('NT'), to: name, ticketId: ticket.id, read: false, at: todayTime(),
+        text: `Te asignaron el ticket ${ticket.id}: ${ticket.title}`
+      });
+    });
+    state.notifications = state.notifications.slice(0, 200);
+  }
+  function notifyUser(name, text, ticketId) {
+    if (!name || name === state.session?.name) return;
+    state.notifications = state.notifications || [];
+    state.notifications.unshift({ id: uid('NT'), to: name, ticketId, read: false, at: todayTime(), text });
+    state.notifications = state.notifications.slice(0, 200);
+  }
+  function myNotifications() {
+    const me = currentUser().name;
+    return (state.notifications || []).filter(n => n.to === me);
+  }
+  function updateNotifDot() {
+    const dot = document.querySelector('[data-show-notifications] .notif-dot');
+    if (!dot) return;
+    const unread = myNotifications().filter(n => !n.read).length;
+    dot.style.display = unread > 0 ? 'block' : 'none';
   }
 
   function renderHSQ() {
@@ -3846,7 +4005,7 @@ function toggleMode(forceDark) {
     const profile = user.profile || state.session?.profile || '';
     const isAdmin = profile === 'Administrador' || !profile;
     const isCoordinator = profile === 'Coordinador';
-    const allowedTabs = ['miUsuario', ...(isAdmin ? ['clientes', 'usuarios', 'quickers', 'modulos'] : []), ...(isCoordinator ? ['quickers'] : []), 'apariencia'];
+    const allowedTabs = ['miUsuario', ...(isAdmin ? ['clientes', 'usuarios', 'quickers', 'modulos', 'tickets'] : []), ...(isCoordinator ? ['quickers'] : []), 'apariencia'];
     const tab = allowedTabs.includes(state.prefs.configTab) ? state.prefs.configTab : 'miUsuario';
     const navBtn = (id, icon, label) => `<button class="settings-tab ${tab === id ? 'on' : ''}" data-config-tab="${id}"><i class="ti ${icon}"></i><span>${label}</span></button>`;
     const userPhoto = user.avatarUrl ? `<img src="${user.avatarUrl}" alt="${escapeHTML(user.name)}">` : initials(user.name);
@@ -3890,6 +4049,11 @@ function toggleMode(forceDark) {
       <span>${field.optional ? 'Opcional' : 'Obligatorio'}</span>
       <div class="row-actions">${iconAction('Editar pregunta', 'editFormQuestion', `${formType}::${index}`, 'ti-pencil')}${iconAction('Eliminar pregunta', 'deleteFormQuestion', `${formType}::${index}`, 'ti-trash')}</div>
     </div>`).join('');
+    const ticketFieldCards = (state.prefs.ticketFields || []).map((field, index) => `<div class="form-field-card">
+      <div><strong>${escapeHTML(field.label)}</strong><br><span>${escapeHTML(field.type || 'text')}${field.options?.length ? ` · ${escapeHTML(field.options.join(', '))}` : ''}</span></div>
+      <span>${field.optional ? 'Opcional' : 'Obligatorio'}</span>
+      <div class="row-actions">${iconAction('Editar pregunta', 'editTicketField', String(index), 'ti-pencil')}${iconAction('Eliminar pregunta', 'deleteTicketField', String(index), 'ti-trash')}</div>
+    </div>`).join('');
     const isDarkNow = !document.body.classList.contains('light-mode');
     const aparienciaSection = `<section class="settings-block">
       <div class="settings-block-title">Apariencia</div>
@@ -3923,7 +4087,11 @@ function toggleMode(forceDark) {
       </div><div class="settings-block-title">Columnas adicionales de la malla</div><div class="module-pill-grid">${customCols || '<div class="fp-sub">No hay títulos adicionales creados.</div>'}</div>
       <div class="settings-block-title" style="margin-top:18px">Formularios de novedades</div>
       <div class="settings-actions"><select class="form-config-select" data-form-config-type>${formOptions}</select><button class="dev-btn primary" data-add-form-question><i class="ti ti-plus"></i> Agregar pregunta</button></div>
-      <div class="form-builder-list">${formCards || '<div class="fp-sub">Este formulario no tiene preguntas configuradas.</div>'}</div></section>`
+      <div class="form-builder-list">${formCards || '<div class="fp-sub">Este formulario no tiene preguntas configuradas.</div>'}</div></section>`,
+      tickets: `<section class="settings-block">
+        <div class="settings-block-desc" style="margin-bottom:14px;color:var(--text-2)">Configura las preguntas o listas adicionales que aparecen al crear un ticket y marca cuáles son obligatorias.</div>
+        <div class="settings-actions"><button class="dev-btn primary" data-add-ticket-field><i class="ti ti-plus"></i> Agregar pregunta</button></div>
+        <div class="form-builder-list">${ticketFieldCards || '<div class="fp-sub">No hay preguntas adicionales. El ticket usa los campos base (título, tipo, prioridad, descripción, asignación, cliente y vencimiento).</div>'}</div></section>`
     };
     panel('config', 'Configuración', '', '',
       `<div class="settings-shell">
@@ -3933,13 +4101,13 @@ function toggleMode(forceDark) {
           ${(isAdmin || isCoordinator) ? '<div class="settings-section-label">Espacio de trabajo</div>' : ''}
           ${isAdmin ? navBtn('clientes', 'ti-building-store', 'Clientes') + navBtn('usuarios', 'ti-users', 'Usuarios') : ''}
           ${(isAdmin || isCoordinator) ? navBtn('quickers', 'ti-motorbike', 'Quickers') : ''}
-          ${isAdmin ? '<div class="settings-section-label">Módulos</div>' + navBtn('modulos', 'ti-layout-grid-add', 'Módulos') : ''}
+          ${isAdmin ? '<div class="settings-section-label">Módulos</div>' + navBtn('modulos', 'ti-layout-grid-add', 'Módulos') + navBtn('tickets', 'ti-ticket', 'Tickets') : ''}
           <div class="settings-section-label">Apariencia</div>
           ${navBtn('apariencia', 'ti-palette', 'Apariencia')}
         </aside>
         <main class="settings-main">
-          <div class="settings-title">${tab === 'miUsuario' ? 'Mi usuario' : tab === 'clientes' ? 'Clientes' : tab === 'usuarios' ? 'Usuarios' : tab === 'quickers' ? 'Quickers' : 'Módulos'}</div>
-          <div class="settings-desc">${tab === 'miUsuario' ? 'Administra la información de la cuenta con la que ingresaste.' : tab === 'clientes' ? 'Crea clientes, reglas de operación y puntos de venta.' : tab === 'usuarios' ? 'Crea usuarios, perfiles, alcance operativo y permisos.' : tab === 'quickers' ? 'Crea usuarios mensajeros desde matriz de activos y habilita pagos adicionales.' : 'Configura títulos, plantillas y listas que alimentan la malla.'}</div>
+          <div class="settings-title">${tab === 'miUsuario' ? 'Mi usuario' : tab === 'clientes' ? 'Clientes' : tab === 'usuarios' ? 'Usuarios' : tab === 'quickers' ? 'Quickers' : tab === 'tickets' ? 'Tickets' : tab === 'apariencia' ? 'Apariencia' : 'Módulos'}</div>
+          <div class="settings-desc">${tab === 'miUsuario' ? 'Administra la información de la cuenta con la que ingresaste.' : tab === 'clientes' ? 'Crea clientes, reglas de operación y puntos de venta.' : tab === 'usuarios' ? 'Crea usuarios, perfiles, alcance operativo y permisos.' : tab === 'quickers' ? 'Crea usuarios mensajeros desde matriz de activos y habilita pagos adicionales.' : tab === 'tickets' ? 'Configura las preguntas y listas del formulario de creación de tickets.' : tab === 'apariencia' ? 'Elige el tema visual de la plataforma.' : 'Configura títulos, plantillas y listas que alimentan la malla.'}</div>
           ${sections[tab] || sections.miUsuario}
         </main>
       </div>`
@@ -4489,6 +4657,7 @@ function toggleMode(forceDark) {
     renderArchivos();
     renderConfig();
     updateNavBadges();
+    updateNotifDot();
   }
 
   const schemas = {
@@ -4824,6 +4993,8 @@ function toggleMode(forceDark) {
       return;
     }
     if (actionName === 'deleteFormQuestion') { deleteFormQuestion(id); return; }
+    if (actionName === 'editTicketField') { openTicketFieldForm(Number(id)); return; }
+    if (actionName === 'deleteTicketField') { deleteTicketField(id); return; }
     if (actionName === 'justifyDelay' || actionName === 'rejectDelay') {
       const item = ensureDelayNovelty(id);
       if (item) {
@@ -5511,17 +5682,27 @@ function toggleMode(forceDark) {
 
   function openNotificationsPanel() {
     const form = document.getElementById('modal-form');
+    const mine = myNotifications().slice(0, 30);
+    const ticketNotifsHTML = mine.length ? mine.map(n => `<button type="button" class="notif-row ${n.read ? '' : 'unread'}" data-open-ticket-notif="${escapeHTML(n.ticketId || '')}">
+      <div class="tl-dot ${n.read ? 'b' : 'y'}"><i class="ti ti-ticket" style="font-size:10px"></i></div>
+      <div class="tl-body"><div class="tl-body-title">${escapeHTML(n.text)}</div><div class="tl-body-meta">${escapeHTML(n.at)}${n.read ? '' : ' · nuevo'}</div></div>
+    </button>`).join('') : '<div class="fp-sub">No tienes notificaciones de tickets.</div>';
+
     const alerts = [
-      ...state.novelties.filter(n => !/cerrada|rechazada/i.test(n.status)).slice(0, 8).map(n => ({ icon: 'ti-alert-triangle', title: n.type, meta: `${n.status || 'Pendiente'} · ${n.ref || ''}` })),
-      ...state.logs.slice(0, 6).map(l => ({ icon: 'ti-history', title: l.action, meta: `${l.entity} · ${l.time}` }))
+      ...state.novelties.filter(n => !/cerrada|rechazada/i.test(n.status)).slice(0, 6).map(n => ({ icon: 'ti-alert-triangle', title: n.type, meta: `${n.status || 'Pendiente'} · ${n.ref || ''}` })),
+      ...state.logs.slice(0, 4).map(l => ({ icon: 'ti-history', title: l.action, meta: `${l.entity} · ${l.time}` }))
     ];
     document.getElementById('modal-title').textContent = 'Notificaciones';
-    document.getElementById('modal-subtitle').textContent = 'Resumen de novedades abiertas y actividad reciente.';
-    form.innerHTML = `<div class="tl-list">${alerts.map(item => `<div class="tl-item">
+    document.getElementById('modal-subtitle').textContent = 'Tickets asignados, respuestas y actividad reciente.';
+    form.innerHTML = `
+    <div class="settings-block-title" style="margin-bottom:8px"><i class="ti ti-ticket"></i> Mis tickets</div>
+    <div class="tl-list">${ticketNotifsHTML}</div>
+    <div class="settings-block-title" style="margin:16px 0 8px"><i class="ti ti-bell"></i> Actividad general</div>
+    <div class="tl-list">${alerts.map(item => `<div class="tl-item">
       <div class="tl-dot y"><i class="ti ${item.icon}" style="font-size:10px"></i></div>
       <div class="tl-body"><div class="tl-body-title">${escapeHTML(item.title || 'Notificación')}</div><div class="tl-body-meta">${escapeHTML(item.meta || '')}</div></div>
-    </div>`).join('') || '<div class="fp-sub">No hay notificaciones pendientes.</div>'}</div>
-    <div class="modal-foot"><button class="dev-btn primary" type="button" id="cancel-form">Cerrar</button></div>`;
+    </div>`).join('') || '<div class="fp-sub">Sin actividad reciente.</div>'}</div>
+    <div class="modal-foot"><button class="dev-btn" type="button" data-mark-all-notif>Marcar todo leído</button><button class="dev-btn primary" type="button" id="cancel-form">Cerrar</button></div>`;
     document.getElementById('cancel-form').onclick = closeModal;
     const modal = document.getElementById('app-modal');
     modal.classList.remove('wide');
@@ -6032,6 +6213,41 @@ function toggleMode(forceDark) {
       });
   }
 
+  function openTicketFieldForm(index = -1) {
+    const fields = [...(state.prefs.ticketFields || [])];
+    const current = fields[index] || { label: '', type: 'text', options: [], optional: false };
+    openModal(index >= 0 ? 'Editar pregunta de ticket' : 'Nueva pregunta de ticket', 'Aparecerá al crear un ticket. Marca si es obligatoria u opcional.',
+      `<div class="form-grid">
+        <div class="form-field full"><label>Título visible</label><input name="label" value="${escapeHTML(current.label || '')}" placeholder="Ej: Punto de venta afectado" required></div>
+        <div class="form-field"><label>Tipo de campo</label><select name="type">${['text','textarea','select','date','time','number'].map(v => `<option value="${v}" ${current.type === v ? 'selected' : ''}>${v}</option>`).join('')}</select></div>
+        <div class="form-field"><label>Obligatoriedad</label><select name="optional"><option value="false" ${!current.optional ? 'selected' : ''}>Obligatorio</option><option value="true" ${current.optional ? 'selected' : ''}>Opcional</option></select></div>
+        <div class="form-field full"><label>Opciones si es lista desplegable</label><textarea name="options" placeholder="Una opción por línea o separadas por coma">${escapeHTML((current.options || []).join('\n'))}</textarea></div>
+      </div><div class="modal-foot"><button class="dev-btn" type="button" id="cancel-form">Cancelar</button><button class="dev-btn primary" type="submit">Guardar pregunta</button></div>`,
+      event => {
+        event.preventDefault();
+        const data = Object.fromEntries(new FormData(event.currentTarget).entries());
+        const payload = { label: data.label.trim(), type: data.type, optional: data.optional === 'true' };
+        if (payload.type === 'select') payload.options = String(data.options || '').split(/\n|,/).map(v => v.trim()).filter(Boolean);
+        const next = [...(state.prefs.ticketFields || [])];
+        if (index >= 0) next[index] = payload; else next.push(payload);
+        state.prefs.ticketFields = next;
+        closeModal();
+        log('Configuración', index >= 0 ? 'Editó pregunta de ticket' : 'Agregó pregunta de ticket', payload.label);
+        saveState('Pregunta guardada');
+      });
+  }
+
+  function deleteTicketField(index) {
+    const i = Number(index);
+    const fields = [...(state.prefs.ticketFields || [])];
+    if (!fields[i]) return;
+    if (!confirm(`¿Eliminar la pregunta "${fields[i].label}"?`)) return;
+    fields.splice(i, 1);
+    state.prefs.ticketFields = fields;
+    log('Configuración', 'Eliminó pregunta de ticket', String(i));
+    saveState('Pregunta eliminada');
+  }
+
   function deleteFormQuestion(encoded) {
     const [type, rawIndex] = String(encoded || '').split('::');
     const index = Number(rawIndex);
@@ -6053,6 +6269,7 @@ function toggleMode(forceDark) {
       else if (open.dataset.open === 'usuario') openUserForm();
       else if (open.dataset.open === 'messengerUser') openMessengerUserForm();
       else if (open.dataset.open === 'malla') openMallaCreateOptions();
+      else if (open.dataset.open === 'ticket') openTicketForm();
       else openForm(open.dataset.open);
     }
     const cfgTab = event.target.closest('[data-config-tab]');
@@ -6079,6 +6296,8 @@ function toggleMode(forceDark) {
     }
     const addFormQuestion = event.target.closest('[data-add-form-question]');
     if (addFormQuestion) openFormQuestionForm(state.prefs.formConfigType || 'INASISTENCIA');
+    const addTicketField = event.target.closest('[data-add-ticket-field]');
+    if (addTicketField) openTicketFieldForm();
     const editSelected = event.target.closest('[data-edit-selected-user]');
     if (editSelected) {
       const id = document.querySelector('[data-edit-user-select]')?.value;
@@ -6122,6 +6341,8 @@ function toggleMode(forceDark) {
     if (act) handleAction(act.dataset.action, act.dataset.id);
 
     // ── Tickets ──
+    const ticketFormBtn = event.target.closest('[data-open-ticket-form]');
+    if (ticketFormBtn) { openTicketForm(); return; }
     const ticketOpen = event.target.closest('[data-ticket-open]');
     if (ticketOpen) { openTicketDetail(ticketOpen.dataset.ticketOpen); return; }
     const ticketClear = event.target.closest('[data-ticket-clear]');
@@ -6135,6 +6356,10 @@ function toggleMode(forceDark) {
         t.comments = t.comments || [];
         t.comments.push({ id: uid('TC'), user: state.session?.name || 'Usuario', text, at: todayTime() });
         ticketHist(t, 'Agregó un comentario');
+        // Avisar a la otra parte (creador ↔ responsables)
+        const me = state.session?.name;
+        const targets = me === t.createdByName ? ticketAssigneeNames(t) : [t.createdByName];
+        targets.forEach(name => notifyUser(name, `Nuevo comentario en ${t.id}: ${t.title}`, t.id));
         log('Tickets', 'Comentó ticket', t.id);
         saveState('Comentario agregado');
         openTicketDetail(t.id);
@@ -6151,6 +6376,7 @@ function toggleMode(forceDark) {
         if (!t.assignees.includes(name)) {
           t.assignees.push(name);
           ticketHist(t, `Asignó a ${name}`);
+          notifyAssignees(t, [name]);
           log('Tickets', 'Asignó responsable', `${t.id} → ${name}`);
           saveState('Responsable asignado');
           openTicketDetail(t.id);
@@ -6174,10 +6400,10 @@ function toggleMode(forceDark) {
     if (ticketResolve) {
       const t = (state.tickets || []).find(x => x.id === ticketResolve.dataset.ticketResolve);
       if (t) {
-        t.status = 'Resuelto'; t.closedAt = new Date().toISOString();
-        ticketHist(t, 'Marcó como resuelto');
-        log('Tickets', 'Resolvió ticket', t.id);
-        saveState('Ticket resuelto');
+        t.status = 'Finalizado'; t.closedAt = new Date().toISOString();
+        ticketHist(t, 'Marcó como finalizado');
+        log('Tickets', 'Finalizó ticket', t.id);
+        saveState('Ticket finalizado');
         openTicketDetail(t.id);
       }
       return;
@@ -6312,7 +6538,26 @@ function toggleMode(forceDark) {
       openMallaRecords(document.querySelector('.malla-day-btn.on')?.dataset.recordDate || '');
     }
     const showNotifications = event.target.closest('[data-show-notifications]');
-    if (showNotifications) openNotificationsPanel();
+    if (showNotifications) { openNotificationsPanel(); return; }
+    const openTicketNotif = event.target.closest('[data-open-ticket-notif]');
+    if (openTicketNotif) {
+      const tid = openTicketNotif.dataset.openTicketNotif;
+      const me = currentUser().name;
+      (state.notifications || []).forEach(n => { if (n.ticketId === tid && n.to === me) n.read = true; });
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      if (tid && (state.tickets || []).some(x => x.id === tid)) { closeModal(); openTicketDetail(tid); }
+      else openNotificationsPanel();
+      updateNotifDot();
+      return;
+    }
+    const markAllNotif = event.target.closest('[data-mark-all-notif]');
+    if (markAllNotif) {
+      const me = currentUser().name;
+      (state.notifications || []).forEach(n => { if (n.to === me) n.read = true; });
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      updateNotifDot(); openNotificationsPanel();
+      return;
+    }
     const sortCol = event.target.closest('[data-sort-col]');
     if (sortCol) {
       const key = sortCol.dataset.sortCol;
@@ -6334,6 +6579,7 @@ function toggleMode(forceDark) {
         const before = t.status; t.status = tStatus.value;
         if (!isTicketOpen(t)) t.closedAt = t.closedAt || new Date().toISOString();
         ticketHist(t, `Estado: ${before} → ${t.status}`);
+        notifyUser(t.createdByName, `Ticket ${t.id} cambió a "${t.status}"`, t.id);
         log('Tickets', 'Cambió estado', `${t.id}: ${t.status}`);
         saveState('Estado actualizado'); openTicketDetail(t.id);
       }
