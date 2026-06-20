@@ -711,7 +711,6 @@
   .light-mode .nov-filterbar select,.light-mode .nov-filterbar input,.light-mode .form-config-select { background:#fff; color:#15130c; border-color:#ded5b8; }
   #page-mallas > :not(.functional-panel),
   #page-novedades > :not(.functional-panel),
-  #page-calendario > :not(.functional-panel),
   #page-archivos > :not(.functional-panel),
   #page-gestion > :not(.functional-panel),
   #page-config > :not(.functional-panel) { display: none !important; }
@@ -3150,6 +3149,22 @@ function toggleMode(forceDark) {
   }
 
   function normalizeAssetRow(row) {
+    const formatDate = (val) => {
+      if (!val) return '';
+      const str = String(val).trim();
+      // Si es un número (timestamp de Excel)
+      if (/^\d+$/.test(str)) {
+        const num = parseInt(str);
+        // Excel dates are days since 1900-01-01
+        if (num > 20000 && num < 50000) {
+          const d = new Date(1900, 0, num);
+          return d.toISOString().slice(0, 10);
+        }
+      }
+      // Si es una fecha en formato string, limpiar
+      if (str.length >= 10) return str.slice(0, 10);
+      return str;
+    };
     return {
       cedula: row.ClientId || row.Cedula || row.CEDULA || row.cedula || '',
       name: row.ClientName || row.Nombre || row['NOMBRE Y APELLIDOS'] || row.nombre || '',
@@ -3158,7 +3173,7 @@ function toggleMode(forceDark) {
       rodamiento: row.Rodamientos || row.Rodamiento || '',
       projectId: row.ProjectId || row.Proyecto || '',
       projectName: row.ProjectName || row['Nombre proyecto'] || '',
-      dateIngress: String(row.DateIngress || row['Fecha ingreso'] || '').slice(0, 10),
+      dateIngress: formatDate(row.DateIngress || row['Fecha ingreso']),
       phone: row.Phone || row.Telefono || '',
       cellPhone: row.CelPhone || row.Celular || '',
       email: row.Email || row.Correo || ''
