@@ -13,6 +13,7 @@
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-storage-compat.js"></script>
 <script src="quick_firebase_config.js"></script>
 <style>
   /* ───── RESET & BASE ───── */
@@ -1297,6 +1298,13 @@
   .light-mode .notif-row:hover { background:#FEF9E7; }
   .notif-row.unread .tl-body-title { font-weight:700; }
   .notif-row.unread { background:rgba(96,165,250,.06); }
+  .ticket-tab { display:inline-flex; align-items:center; gap:6px; padding:8px 14px; border-radius:10px; border:1px solid var(--border); background:var(--card-bg); color:var(--text-2); font-weight:700; font-size:12px; cursor:pointer; }
+  .ticket-tab:hover { color:var(--text-1); }
+  .ticket-tab.on { background:rgba(245,197,24,.15); color:var(--text-1); border-color:rgba(245,197,24,.4); }
+  .light-mode .ticket-tab.on { background:#eff6ff; color:#1e40af; border-color:#3b82f6; }
+  .ticket-req-pick { display:flex; flex-direction:column; gap:8px; margin-top:6px; }
+  .ticket-req-toggle { display:flex; align-items:center; gap:8px; font-size:12px; color:var(--text-1); cursor:pointer; }
+  .ticket-req-toggle input { width:16px; height:16px; accent-color:var(--q); }
 </style>
 </head>
 <body>
@@ -1979,6 +1987,7 @@ function toggleMode(forceDark) {
   const FIREBASE_SETTINGS = window.QUICK_FIREBASE_CONFIG || {};
   let activeModule = 'mallas';
   let cloudDb = null;
+  let cloudStorage = null;
   let cloudUnsubscribe = null;
   let applyingRemoteState = false;
   let cloudSaveTimer = null;
@@ -2121,10 +2130,15 @@ function toggleMode(forceDark) {
           history: [{ id: `TH-${Math.random().toString(36).slice(2, 8)}`, action: 'Ticket migrado', user: 'Sistema', at: t.createdAt || '' }]
         };
       }
+      const assignees = Array.isArray(t.assignees) ? t.assignees : (t.assignedTo ? [t.assignedTo] : []);
+      const gestion = (t.gestion && typeof t.gestion === 'object') ? t.gestion : {};
+      assignees.forEach(n => { if (!gestion[n]) gestion[n] = { status: /finaliz|cerrad/i.test(t.status || '') ? 'Finalizado' : 'Pendiente', done: {}, at: '' }; });
       return {
         ...t,
-        assignees: Array.isArray(t.assignees) ? t.assignees : (t.assignedTo ? [t.assignedTo] : []),
-        tags: Array.isArray(t.tags) ? t.tags : (typeof t.tags === 'string' && t.tags ? t.tags.split(',').map(s => s.trim()).filter(Boolean) : []),
+        assignees,
+        gestion,
+        requirements: Array.isArray(t.requirements) ? t.requirements : [],
+        audience: t.audience || 'administrativo',
         comments: Array.isArray(t.comments) ? t.comments : [],
         evidence: Array.isArray(t.evidence) ? t.evidence : [],
         history: Array.isArray(t.history) ? t.history : []
@@ -2138,8 +2152,10 @@ function toggleMode(forceDark) {
     next.prefs = { ...seed.prefs, ...(value?.prefs || {}) };
     // Tickets: configuración de preguntas adicionales del formulario
     next.prefs.ticketFields = Array.isArray(next.prefs.ticketFields) ? next.prefs.ticketFields : [];
-    // Borrado único de tickets para iniciar desde 0 con el nuevo sistema
-    if (!next.prefs.ticketsClearedV1) { next.tickets = []; next.notifications = []; next.prefs.ticketsClearedV1 = true; }
+    // Tickets: requisitos de gestión personalizados (además de Comentario y Evidencia)
+    next.prefs.ticketRequirementOptions = Array.isArray(next.prefs.ticketRequirementOptions) ? next.prefs.ticketRequirementOptions : [];
+    // Borrado único de tickets para iniciar desde 0 con el nuevo sistema de gestión
+    if (!next.prefs.ticketsClearedV2) { next.tickets = []; next.notifications = []; next.prefs.ticketsClearedV2 = true; }
     const requiredMallaCols = seed.prefs.mallaColumns;
     next.prefs.mallaColumns = [...requiredMallaCols, ...(next.prefs.mallaColumns || []).filter(col => !requiredMallaCols.includes(col) && !['planned', 'executed', 'approval', 'serviceType', 'type', 'idGo', 'statusId', 'absenceReport', 'status'].includes(col))];
     next.prefs.contractTypes = next.prefs.contractTypes || seed.prefs.contractTypes;
@@ -2238,9 +2254,10 @@ function toggleMode(forceDark) {
       stripped.parkingReports = stripped.parkingReports.map(p => ({ ...p, photoData: null, dataUrl: null }));
     }
     if (Array.isArray(stripped.tickets)) {
+      // Conservar URL de Storage; quitar base64 (dataUrl) para no exceder el límite de Firestore
       stripped.tickets = stripped.tickets.map(t => ({
         ...t,
-        evidence: (t.evidence || []).map(e => ({ ...e, dataUrl: e.dataUrl ? '[archivo_local]' : null }))
+        evidence: (t.evidence || []).map(e => ({ ...e, dataUrl: null }))
       }));
     }
     if (Array.isArray(stripped.availabilities)) {
@@ -2274,6 +2291,7 @@ function toggleMode(forceDark) {
     try {
       if (!firebase.apps.length) firebase.initializeApp(FIREBASE_SETTINGS.firebaseConfig);
       cloudDb = firebase.firestore();
+      try { if (firebase.storage) cloudStorage = firebase.storage(); } catch (e) { cloudStorage = null; }
       cloudStatus = 'Firebase conectando...';
       renderCloudStatus();
       const ref = cloudDocRef();
@@ -2303,6 +2321,23 @@ function toggleMode(forceDark) {
           remoteNormalized.cases = [...localPendingCases, ...remoteNormalized.cases];
           setTimeout(() => scheduleCloudSave(200), 50);
         }
+        // Preservar tickets locales aún no sincronizados y dataUrls de evidencias en subida
+        const remoteTicketIds = new Set((remoteNormalized.tickets || []).map(t => t.id));
+        const localPendingTickets = (state.tickets || []).filter(t => !remoteTicketIds.has(t.id));
+        if (localPendingTickets.length) {
+          remoteNormalized.tickets = [...localPendingTickets, ...(remoteNormalized.tickets || [])];
+          setTimeout(() => scheduleCloudSave(200), 50);
+        }
+        (remoteNormalized.tickets || []).forEach(rt => {
+          const lt = (state.tickets || []).find(x => x.id === rt.id);
+          if (!lt) return;
+          (rt.evidence || []).forEach(re => {
+            if (!re.url && !re.dataUrl) {
+              const le = (lt.evidence || []).find(e => e.id === re.id);
+              if (le && le.dataUrl) re.dataUrl = le.dataUrl;
+            }
+          });
+        });
         state = remoteNormalized;
         state.session = currentSession;
         localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
@@ -3035,7 +3070,7 @@ function toggleMode(forceDark) {
     const openNov = state.novelties.filter(n => !/cerrada|rechazada/i.test(n.status)).length;
     const activeQuickers = state.quickers.filter(q => q.status === 'Activo').length;
     const inProgress = state.availabilities.filter(d => /iniciado|en turno|novedad/i.test(d.status)).length;
-    const openTickets = state.tickets.filter(t => !/cerrado/i.test(t.status)).length;
+    const openTickets = state.tickets.filter(isTicketOpen).length;
     const logs = state.logs.slice(0, 5).map(l => row([escapeHTML(l.time), escapeHTML(l.user), escapeHTML(l.entity), escapeHTML(l.action), escapeHTML(l.detail)]));
     panel('dashboard', 'MVP funcional conectado a datos locales', 'Estos indicadores ya salen de registros creados/editados en el navegador.',
       `<button class="dev-btn primary" data-open="malla"><i class="ti ti-calendar-plus"></i> Crear malla</button>
@@ -3544,9 +3579,15 @@ function toggleMode(forceDark) {
 
   // ════════════════════ SISTEMA DE TICKETS ════════════════════
   const TICKET_PRIORITIES = ['Baja', 'Media', 'Alta', 'Crítica'];
-  const TICKET_STATUSES = ['Pendiente', 'En proceso', 'Finalizado'];
+  const TICKET_COORD_STATUSES = ['Pendiente', 'Finalizado']; // estados que gestiona el coordinador
   const TICKET_TYPES = ['Problema', 'Solicitud', 'Requerimiento', 'Tarea', 'Mejora'];
-  const ticketFilters = { estado: 'todos', prioridad: 'todos', responsable: 'todos', cliente: 'todos', q: '' };
+  const TICKET_AUDIENCES = [
+    { key: 'administrativo', label: 'Administrativo', icon: 'ti-briefcase' },
+    { key: 'coordinador', label: 'Coordinador', icon: 'ti-headset' },
+    { key: 'cliente', label: 'Cliente', icon: 'ti-building-store' }
+  ];
+  const DEFAULT_TICKET_REQS = [{ key: 'comment', label: 'Comentario / respuesta' }, { key: 'evidence', label: 'Evidencia adjunta' }];
+  const ticketFilters = { estado: 'todos', prioridad: 'todos', responsable: 'todos', q: '', tab: 'todos' };
 
   function nextTicketId() {
     const nums = (state.tickets || []).map(t => { const m = String(t.id || '').match(/(\d+)\s*$/); return m ? Number(m[1]) : 0; });
@@ -3561,19 +3602,6 @@ function toggleMode(forceDark) {
     const cls = { 'Pendiente': 'st-warn', 'En proceso': 'st-info', 'Finalizado': 'st-ok' }[s] || 'st-warn';
     return `<span class="status-pill ${cls}">${escapeHTML(s || 'Pendiente')}</span>`;
   }
-  function canCreateTickets() {
-    const p = currentUser().profile || state.session?.profile || '';
-    return !p || p === 'Administrador' || p === 'Coordinador';
-  }
-  function ticketCanManage(t) {
-    const u = currentUser();
-    const p = u.profile || '';
-    if (!p || p === 'Administrador') return true;
-    return t.createdBy === u.id || t.createdBy === u.username || t.createdByName === u.name;
-  }
-  function ticketIsAssignee(t) {
-    return ticketAssigneeNames(t).includes(currentUser().name);
-  }
   function userName(idOrName) {
     if (!idOrName) return '';
     const u = state.users?.find(u => u.id === idOrName || u.username === idOrName || u.name === idOrName);
@@ -3583,7 +3611,49 @@ function toggleMode(forceDark) {
     const list = t.assignees && t.assignees.length ? t.assignees : (t.assignedTo ? [t.assignedTo] : []);
     return list.map(userName).filter(Boolean);
   }
-  function isTicketOpen(t) { return !/finalizado/i.test(t.status || ''); }
+  function userProfile() { return currentUser().profile || state.session?.profile || ''; }
+  function canCreateTickets() { return true; } // todos los roles pueden crear (con audiencia/asignación según rol)
+
+  // El creador o admin gestiona/supervisa; NO cambia el estado de gestión del coordinador
+  function ticketIsCreator(t) {
+    const u = currentUser();
+    return t.createdBy === u.id || t.createdBy === u.username || t.createdByName === u.name;
+  }
+  function ticketIsAdmin() { const p = userProfile(); return !p || p === 'Administrador' || p === 'Gerencia'; }
+  function ticketIsAssignee(t) { return ticketAssigneeNames(t).includes(currentUser().name); }
+  function ticketCanSupervise(t) { return ticketIsAdmin() || ticketIsCreator(t); } // ve todo, lleva seguimiento
+  function ticketCanEditMeta(t) { return ticketIsAdmin() || ticketIsCreator(t); } // prioridad, vencimiento, reasignar
+
+  // Gestión por coordinador
+  function ticketGestion(t, name) {
+    t.gestion = t.gestion || {};
+    if (!t.gestion[name]) t.gestion[name] = { status: 'Pendiente', done: {}, at: '' };
+    return t.gestion[name];
+  }
+  function ticketRequirements(t) { return Array.isArray(t.requirements) ? t.requirements : []; }
+  function ticketReqDone(t, name, req) {
+    if (req.key === 'comment') return (t.comments || []).some(c => c.user === name);
+    if (req.key === 'evidence') return (t.evidence || []).some(e => e.user === name);
+    return !!ticketGestion(t, name).done?.[req.key]; // custom
+  }
+  // Completitud por coordinador: requisitos + finalizado
+  function ticketCoordCompleteness(t, name) {
+    const reqs = ticketRequirements(t);
+    const checks = reqs.map(r => ({ key: r.key, label: r.label, done: ticketReqDone(t, name, r) }));
+    checks.push({ key: 'finalizado', label: 'Finalizado', done: ticketGestion(t, name).status === 'Finalizado' });
+    const done = checks.filter(c => c.done).length;
+    return { checks, pct: Math.round((done / checks.length) * 100), done, total: checks.length };
+  }
+  // Estado general del ticket derivado de la gestión de los coordinadores
+  function ticketOverallStatus(t) {
+    const names = ticketAssigneeNames(t);
+    if (!names.length) return 'Pendiente';
+    const finals = names.filter(n => ticketGestion(t, n).status === 'Finalizado').length;
+    if (finals === names.length) return 'Finalizado';
+    if (finals > 0) return 'En proceso';
+    return 'Pendiente';
+  }
+  function isTicketOpen(t) { return ticketOverallStatus(t) !== 'Finalizado'; }
   function ticketDueState(t) {
     if (!t.dueDate || !isTicketOpen(t)) return { label: t.dueDate ? t.dueDate.slice(0, 10) : '—', cls: '' };
     const today = new Date().toISOString().slice(0, 10);
@@ -3592,92 +3662,119 @@ function toggleMode(forceDark) {
     if (due === today) return { label: 'Vence hoy', cls: 'st-warn' };
     return { label: due, cls: '' };
   }
-  // Completitud: avance según asignación, respuesta, evidencia y resolución
+  // Completitud global (promedio de coordinadores) para la columna de la tabla
   function ticketCompleteness(t) {
-    const checks = [
-      { key: 'asignado', label: 'Responsable asignado', done: ticketAssigneeNames(t).length > 0 },
-      { key: 'respuesta', label: 'Respuesta / comentario', done: (t.comments || []).length > 0 },
-      { key: 'evidencia', label: 'Evidencia adjunta', done: (t.evidence || []).length > 0 },
-      { key: 'finalizado', label: 'Finalizado', done: !isTicketOpen(t) }
-    ];
-    const done = checks.filter(c => c.done).length;
-    return { checks, pct: Math.round((done / checks.length) * 100), done, total: checks.length };
+    const names = ticketAssigneeNames(t);
+    if (!names.length) return { pct: 0, done: 0, total: 1, checks: [] };
+    const pcts = names.map(n => ticketCoordCompleteness(t, n).pct);
+    const pct = Math.round(pcts.reduce((a, b) => a + b, 0) / pcts.length);
+    return { pct, done: pcts.filter(p => p === 100).length, total: names.length, checks: [] };
+  }
+  function ticketEvidenceSrc(e) { return e.url || e.dataUrl || ''; }
+  function ticketAvailableReqs() {
+    const opts = Array.isArray(state.prefs.ticketRequirementOptions) ? state.prefs.ticketRequirementOptions : [];
+    return [...DEFAULT_TICKET_REQS, ...opts];
+  }
+  // ¿Qué tickets ve el usuario actual según su rol?
+  function ticketVisibleTo(t) {
+    const u = currentUser();
+    const p = u.profile || '';
+    if (!p || p === 'Administrador' || p === 'Gerencia') return true;
+    const mine = ticketIsCreator(t);
+    const assigned = ticketAssigneeNames(t).includes(u.name);
+    if (p === 'Coordinador') return mine || assigned;
+    if (p === 'Cliente Admin') return mine || assigned || (u.client && (t.client === u.client || t.clientScope === u.client));
+    if (p === 'Usuario Punto') return mine || assigned;
+    if (p === 'Quicker') return mine || assigned;
+    return mine || assigned;
+  }
+  function ticketAudienceFor(profile) {
+    if (!profile || profile === 'Administrador' || profile === 'Gerencia') return 'administrativo';
+    if (profile === 'Coordinador' || profile === 'Quicker') return 'coordinador';
+    return 'cliente'; // Cliente Admin, Usuario Punto (regente)
   }
 
   function renderTickets() {
     const today = new Date().toISOString().slice(0, 10);
     const all = state.tickets || [];
-    const user = currentUser();
-    // Coordinador solo ve los que creó o le asignaron
-    const visible = all.filter(t => {
-      if (!user.profile || ['Administrador', 'Gerencia'].includes(user.profile)) return true;
-      const mine = t.createdBy === user.id || t.createdBy === user.username || t.createdByName === user.name;
-      const assigned = ticketAssigneeNames(t).includes(user.name);
-      return mine || assigned;
-    });
+    // Visibilidad por rol
+    const visible = all.filter(ticketVisibleTo);
+
+    // Ventanas/tabs por audiencia (solo las que tienen tickets visibles, o todas para admin)
+    const audienceCounts = {};
+    TICKET_AUDIENCES.forEach(a => { audienceCounts[a.key] = visible.filter(t => (t.audience || 'administrativo') === a.key).length; });
+    const availableTabs = TICKET_AUDIENCES.filter(a => ticketIsAdmin() || audienceCounts[a.key] > 0);
+    if (!['todos', ...availableTabs.map(a => a.key)].includes(ticketFilters.tab)) ticketFilters.tab = 'todos';
+    const tabScoped = ticketFilters.tab === 'todos' ? visible : visible.filter(t => (t.audience || 'administrativo') === ticketFilters.tab);
 
     const stats = {
-      abiertos: visible.filter(isTicketOpen).length,
-      enProceso: visible.filter(t => /proceso/i.test(t.status || '')).length,
-      venceHoy: visible.filter(t => isTicketOpen(t) && t.dueDate && t.dueDate.slice(0, 10) === today).length,
-      vencidos: visible.filter(t => isTicketOpen(t) && t.dueDate && t.dueDate.slice(0, 10) < today).length,
-      cerrados: visible.filter(t => !isTicketOpen(t)).length
+      pendientes: tabScoped.filter(t => ticketOverallStatus(t) === 'Pendiente').length,
+      enProceso: tabScoped.filter(t => ticketOverallStatus(t) === 'En proceso').length,
+      venceHoy: tabScoped.filter(t => isTicketOpen(t) && t.dueDate && t.dueDate.slice(0, 10) === today).length,
+      vencidos: tabScoped.filter(t => isTicketOpen(t) && t.dueDate && t.dueDate.slice(0, 10) < today).length,
+      finalizados: tabScoped.filter(t => !isTicketOpen(t)).length
     };
 
-    const rows = visible.filter(t => {
-      const estadoOk = ticketFilters.estado === 'todos' || t.status === ticketFilters.estado;
+    const rows = tabScoped.filter(t => {
+      const status = ticketOverallStatus(t);
+      const estadoOk = ticketFilters.estado === 'todos' || status === ticketFilters.estado;
       const prioOk = ticketFilters.prioridad === 'todos' || t.priority === ticketFilters.prioridad;
       const respOk = ticketFilters.responsable === 'todos' || ticketAssigneeNames(t).includes(ticketFilters.responsable);
-      const cliOk = ticketFilters.cliente === 'todos' || t.client === ticketFilters.cliente;
       const q = ticketFilters.q.trim().toLowerCase();
       const qOk = !q || [t.id, t.title, t.description, t.type, ...(ticketAssigneeNames(t))].join(' ').toLowerCase().includes(q);
-      return estadoOk && prioOk && respOk && cliOk && qOk;
+      return estadoOk && prioOk && respOk && qOk;
     }).map(t => {
       const comp = ticketCompleteness(t);
       const due = ticketDueState(t);
+      const names = ticketAssigneeNames(t);
+      const finals = names.filter(n => ticketGestion(t, n).status === 'Finalizado').length;
       const compColor = comp.pct === 100 ? '#10b981' : comp.pct >= 50 ? '#f59e0b' : '#ef4444';
       return `<tr class="ticket-row" data-ticket-open="${t.id}" style="cursor:pointer">
         <td><strong>${escapeHTML(t.id)}</strong></td>
-        <td>${escapeHTML(t.title || '')}<div class="fp-sub" style="margin-top:2px">${escapeHTML(t.type || '')}</div></td>
+        <td>${escapeHTML(t.title || '')}<div class="fp-sub" style="margin-top:2px">${escapeHTML(t.type || '')} · ${escapeHTML(t.createdByName || '')}</div></td>
         <td>${ticketPriorityBadge(t.priority)}</td>
-        <td>${ticketStatusBadge(t.status)}</td>
-        <td>${escapeHTML(ticketAssigneeNames(t).join(', ') || 'Sin asignar')}</td>
+        <td>${ticketStatusBadge(ticketOverallStatus(t))}</td>
+        <td>${escapeHTML(names.join(', ') || 'Sin asignar')}${names.length > 1 ? `<div class="fp-sub" style="margin-top:2px">${finals}/${names.length} finalizaron</div>` : ''}</td>
         <td><span class="status-pill ${due.cls}">${escapeHTML(due.label)}</span></td>
         <td><div style="display:flex;align-items:center;gap:6px"><div style="flex:1;height:7px;border-radius:999px;background:var(--border);overflow:hidden;min-width:48px"><div style="height:100%;width:${comp.pct}%;background:${compColor}"></div></div><span style="font-size:11px;font-weight:700;color:${compColor}">${comp.pct}%</span></div></td>
       </tr>`;
     });
 
-    const respOptions = [...new Set(visible.flatMap(ticketAssigneeNames))].filter(Boolean);
-    const cliOptions = [...new Set(visible.map(t => t.client).filter(Boolean))];
+    const respOptions = [...new Set(tabScoped.flatMap(ticketAssigneeNames))].filter(Boolean);
     const sel = (val, cur) => val === cur ? 'selected' : '';
     const inputStyle = 'min-height:38px;border:1px solid var(--border);border-radius:10px;background:var(--card-bg);color:var(--text-1);padding:0 10px;font:inherit';
+
+    const tabsHTML = availableTabs.length > 1 ? `<div class="ticket-tabs" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">
+      <button class="ticket-tab ${ticketFilters.tab === 'todos' ? 'on' : ''}" data-ticket-tab="todos"><i class="ti ti-layout-grid"></i> Todas (${visible.length})</button>
+      ${availableTabs.map(a => `<button class="ticket-tab ${ticketFilters.tab === a.key ? 'on' : ''}" data-ticket-tab="${a.key}"><i class="ti ${a.icon}"></i> ${a.label} (${audienceCounts[a.key]})</button>`).join('')}
+    </div>` : '';
+
     const filtersHTML = `<div class="ticket-filters" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:14px">
       <input type="search" data-ticket-filter="q" value="${escapeHTML(ticketFilters.q)}" placeholder="Buscar por ID, título, responsable..." style="flex:1;min-width:200px;${inputStyle};padding:0 12px">
-      <select data-ticket-filter="estado" style="${inputStyle}"><option value="todos">Todo estado</option>${TICKET_STATUSES.map(s => `<option ${sel(s, ticketFilters.estado)}>${s}</option>`).join('')}</select>
+      <select data-ticket-filter="estado" style="${inputStyle}"><option value="todos">Todo estado</option>${['Pendiente', 'En proceso', 'Finalizado'].map(s => `<option ${sel(s, ticketFilters.estado)}>${s}</option>`).join('')}</select>
       <select data-ticket-filter="prioridad" style="${inputStyle}"><option value="todos">Toda prioridad</option>${TICKET_PRIORITIES.map(p => `<option ${sel(p, ticketFilters.prioridad)}>${p}</option>`).join('')}</select>
       <select data-ticket-filter="responsable" style="${inputStyle}"><option value="todos">Todo responsable</option>${respOptions.map(r => `<option ${sel(r, ticketFilters.responsable)}>${escapeHTML(r)}</option>`).join('')}</select>
-      ${cliOptions.length ? `<select data-ticket-filter="cliente" style="${inputStyle}"><option value="todos">Todo cliente</option>${cliOptions.map(c => `<option ${sel(c, ticketFilters.cliente)}>${escapeHTML(c)}</option>`).join('')}</select>` : ''}
-      ${(ticketFilters.estado !== 'todos' || ticketFilters.prioridad !== 'todos' || ticketFilters.responsable !== 'todos' || ticketFilters.cliente !== 'todos' || ticketFilters.q) ? `<button class="dev-btn" data-ticket-clear style="padding:6px 12px;font-size:12px"><i class="ti ti-x"></i> Limpiar</button>` : ''}
+      ${(ticketFilters.estado !== 'todos' || ticketFilters.prioridad !== 'todos' || ticketFilters.responsable !== 'todos' || ticketFilters.q) ? `<button class="dev-btn" data-ticket-clear style="padding:6px 12px;font-size:12px"><i class="ti ti-x"></i> Limpiar</button>` : ''}
     </div>`;
 
     const kpisHTML = `<div class="kpi-row module-kpi-row" style="margin-bottom:16px">
-      <div class="kpi-card q-accent"><i class="ti ti-ticket kpi-icon"></i><div class="kpi-label">Tickets abiertos</div><div class="kpi-value yellow">${stats.abiertos}</div><div class="kpi-delta"><i class="ti ti-progress"></i> ${stats.enProceso} en proceso</div></div>
+      <div class="kpi-card q-accent"><i class="ti ti-ticket kpi-icon"></i><div class="kpi-label">Pendientes</div><div class="kpi-value yellow">${stats.pendientes}</div><div class="kpi-delta"><i class="ti ti-progress"></i> ${stats.enProceso} en proceso</div></div>
       <div class="kpi-card grad-orange"><i class="ti ti-alarm kpi-icon"></i><div class="kpi-label">Vencen hoy</div><div class="kpi-value">${stats.venceHoy}</div><div class="kpi-delta ${stats.venceHoy ? 'down' : ''}"><i class="ti ti-alert-triangle"></i> Requiere acción</div></div>
       <div class="kpi-card grad-purple"><i class="ti ti-clock-exclamation kpi-icon"></i><div class="kpi-label">SLA vencido</div><div class="kpi-value">${stats.vencidos}</div><div class="kpi-delta"><i class="ti ti-calendar-x"></i> Fuera de plazo</div></div>
-      <div class="kpi-card grad-teal"><i class="ti ti-circle-check kpi-icon"></i><div class="kpi-label">Finalizados</div><div class="kpi-value">${stats.cerrados}</div><div class="kpi-delta up"><i class="ti ti-checks"></i> Completados</div></div>
+      <div class="kpi-card grad-teal"><i class="ti ti-circle-check kpi-icon"></i><div class="kpi-label">Finalizados</div><div class="kpi-value">${stats.finalizados}</div><div class="kpi-delta up"><i class="ti ti-checks"></i> Completados</div></div>
     </div>`;
 
     const tableHTML = rows.length
       ? `<div class="data-table-wrap"><table class="data-table"><thead><tr><th>ID</th><th>Título / Tipo</th><th>Prioridad</th><th>Estado</th><th>Responsable(s)</th><th>Vencimiento</th><th>Completitud</th></tr></thead><tbody>${rows.join('')}</tbody></table></div>`
       : `<div class="dropzone" style="text-align:center"><strong>No hay tickets que coincidan</strong><span class="fp-sub">Crea un ticket o ajusta los filtros para ver resultados.</span></div>`;
 
-    panel('tickets', 'Gestión de Tickets', 'Reporta, asigna, prioriza y haz seguimiento a problemas, solicitudes y tareas con SLA en tiempo real.',
-      `${canCreateTickets() ? '<button class="dev-btn primary" data-open-ticket-form><i class="ti ti-ticket-plus"></i> Crear ticket</button>' : ''}<button class="dev-btn" data-export="tickets"><i class="ti ti-download"></i> Exportar CSV</button>`,
-      `${kpisHTML}${filtersHTML}${tableHTML}`
+    panel('tickets', 'Gestión de Tickets', 'Reporta, asigna, prioriza y haz seguimiento. Cada coordinador gestiona su parte; el creador lleva el seguimiento.',
+      `<button class="dev-btn primary" data-open-ticket-form><i class="ti ti-ticket-plus"></i> Crear ticket</button><button class="dev-btn" data-export="tickets"><i class="ti ti-download"></i> Exportar CSV</button>`,
+      `${tabsHTML}${kpisHTML}${filtersHTML}${tableHTML}`
     );
   }
 
-  // Detalle de ticket: comentarios, evidencias, historial, completitud, gestión de estado/responsables
+  // Detalle de ticket: comentarios, evidencias, historial, gestión por coordinador
   function openTicketDetail(id) {
     const t = (state.tickets || []).find(x => x.id === id);
     if (!t) return;
@@ -3686,15 +3783,16 @@ function toggleMode(forceDark) {
     let changed = false;
     (state.notifications || []).forEach(n => { if (n.ticketId === id && n.to === me && !n.read) { n.read = true; changed = true; } });
     if (changed) { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); updateNotifDot(); }
-    const comp = ticketCompleteness(t);
+
     const due = ticketDueState(t);
     const assignees = ticketAssigneeNames(t);
-    const canManage = ticketCanManage(t);     // creador / admin: control total
+    const supervise = ticketCanSupervise(t);   // creador/admin: ve todo y lleva seguimiento (no cambia gestión)
     const isAssignee = ticketIsAssignee(t);
-    const canRespond = canManage || isAssignee; // puede actualizar info solicitada
+    const canEditMeta = ticketCanEditMeta(t);
     const coordUsers = (state.users || []).filter(u => u.profile === 'Coordinador' && u.name);
     const addOptions = coordUsers.filter(u => !assignees.includes(u.name)).map(u => `<option value="${escapeHTML(u.name)}">${escapeHTML(u.name)}${u.client ? ' · ' + escapeHTML(u.client) : ''}</option>`).join('');
-    const roleLabel = canManage ? 'Creador / Administrador — control total' : isAssignee ? 'Asignado — actualiza la información solicitada' : 'Solo lectura';
+    const roleLabel = supervise ? 'Creador / Supervisor — seguimiento (no cambia la gestión)' : isAssignee ? 'Responsable — gestiona y actualiza lo solicitado' : 'Solo lectura';
+    const reqs = ticketRequirements(t);
 
     const commentsHTML = (t.comments || []).length
       ? t.comments.map(c => `<div class="ticket-comment"><div class="ticket-comment-head"><strong>${escapeHTML(c.user)}</strong><span class="fp-sub">${escapeHTML(c.at)}</span></div><div>${escapeHTML(c.text)}</div></div>`).join('')
@@ -3702,9 +3800,10 @@ function toggleMode(forceDark) {
 
     const evidenceHTML = (t.evidence || []).length
       ? `<div class="ticket-evidence-grid">${t.evidence.map(e => {
-          const isImg = (e.fileType || '').startsWith('image/') && e.dataUrl;
-          const thumb = isImg ? `<img src="${e.dataUrl}" alt="${escapeHTML(e.name)}">` : `<i class="ti ti-file-text"></i>`;
-          const link = e.dataUrl ? `<a href="${e.dataUrl}" download="${escapeHTML(e.name)}" target="_blank">${escapeHTML(e.name)}</a>` : escapeHTML(e.name);
+          const src = ticketEvidenceSrc(e);
+          const isImg = (e.fileType || '').startsWith('image/') && src;
+          const thumb = isImg ? `<img src="${src}" alt="${escapeHTML(e.name)}">` : `<i class="ti ti-file-text"></i>`;
+          const link = src ? `<a href="${src}" download="${escapeHTML(e.name)}" target="_blank" rel="noopener">${escapeHTML(e.name)}</a>` : `${escapeHTML(e.name)} <span class="fp-sub">(no sincronizado)</span>`;
           return `<div class="ticket-evidence-item">${thumb}<div class="ticket-evidence-meta">${link}<span class="fp-sub">${escapeHTML(e.user)} · ${escapeHTML(e.at)}</span></div></div>`;
         }).join('')}</div>`
       : '<div class="fp-sub">Sin evidencias adjuntas.</div>';
@@ -3713,15 +3812,66 @@ function toggleMode(forceDark) {
       ? t.history.slice().reverse().map(h => `<div class="ticket-hist-item"><i class="ti ti-point"></i><div><span>${escapeHTML(h.action)}</span><span class="fp-sub">${escapeHTML(h.user)} · ${escapeHTML(h.at)}</span></div></div>`).join('')
       : '<div class="fp-sub">Sin cambios registrados.</div>';
 
-    const checklistHTML = comp.checks.map(c => `<div class="ticket-check ${c.done ? 'done' : ''}"><i class="ti ${c.done ? 'ti-circle-check' : 'ti-circle'}"></i> ${escapeHTML(c.label)}</div>`).join('');
-    const pendientes = comp.checks.filter(c => !c.done).map(c => c.label);
-    const compColor = comp.pct === 100 ? '#10b981' : comp.pct >= 50 ? '#f59e0b' : '#ef4444';
+    // Tarjeta de gestión de un coordinador (vista supervisor: solo lectura)
+    const coordCard = (name, editable) => {
+      const g = ticketGestion(t, name);
+      const cc = ticketCoordCompleteness(t, name);
+      const col = cc.pct === 100 ? '#10b981' : cc.pct >= 50 ? '#f59e0b' : '#ef4444';
+      const checklist = cc.checks.map(c => `<div class="ticket-check ${c.done ? 'done' : ''}"><i class="ti ${c.done ? 'ti-circle-check' : 'ti-circle'}"></i> ${escapeHTML(c.label)}</div>`).join('');
+      // Items personalizados marcables por el coordinador responsable
+      const customChecks = editable ? reqs.filter(r => r.key !== 'comment' && r.key !== 'evidence').map(r => `<label class="ticket-req-toggle"><input type="checkbox" data-ticket-req-check="${t.id}" data-req="${escapeHTML(r.key)}" ${ticketReqDone(t, name, r) ? 'checked' : ''}> ${escapeHTML(r.label)}</label>`).join('') : '';
+      return `<div class="ticket-side-card">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+          <strong style="font-size:13px">${escapeHTML(name)}</strong>${ticketStatusBadge(g.status)}
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;margin:10px 0">
+          <div style="flex:1;height:8px;border-radius:999px;background:var(--border);overflow:hidden"><div style="height:100%;width:${cc.pct}%;background:${col}"></div></div>
+          <span style="font-size:11px;font-weight:800;color:${col}">${cc.pct}%</span>
+        </div>
+        <div class="ticket-checklist">${checklist}</div>
+        ${editable ? `
+          ${customChecks ? `<div style="margin-top:10px;display:flex;flex-direction:column;gap:6px">${customChecks}</div>` : ''}
+          <label class="fp-sub" style="margin-top:10px">Mi estado</label>
+          <select data-ticket-gestion-status="${t.id}" style="${inputStyleGlobal()}">${TICKET_COORD_STATUSES.map(s => `<option ${s === g.status ? 'selected' : ''}>${s}</option>`).join('')}</select>
+        ` : ''}
+      </div>`;
+    };
 
+    // Panel lateral según rol
+    let sideCards = `<div class="ticket-side-card" style="border-color:rgba(245,197,24,.35)"><label class="fp-sub" style="margin:0">Tu rol</label><div style="font-size:12px;color:var(--text-1);font-weight:600;margin-top:4px">${escapeHTML(roleLabel)}</div></div>`;
+
+    if (supervise) {
+      // Seguimiento: estado de gestión de cada coordinador (solo lectura)
+      sideCards += `<div class="ticket-side-card" style="background:none;border:0;padding:0"><label class="fp-sub" style="margin-bottom:6px"><i class="ti ti-users"></i> Gestión de coordinadores</label></div>`;
+      sideCards += assignees.length ? assignees.map(n => coordCard(n, false)).join('') : '<div class="ticket-side-card"><span class="fp-sub">Sin coordinadores asignados.</span></div>';
+    }
+    if (isAssignee) {
+      // El coordinador gestiona SU parte
+      sideCards += `<div class="ticket-side-card" style="background:none;border:0;padding:0"><label class="fp-sub" style="margin-bottom:6px"><i class="ti ti-user-check"></i> Mi gestión</label></div>`;
+      sideCards += coordCard(me, true);
+    }
+
+    // Meta (prioridad/vencimiento) y responsables
+    sideCards += `<div class="ticket-side-card">
+      <label class="fp-sub">Prioridad</label>
+      ${canEditMeta ? `<select data-ticket-priority="${t.id}" style="${inputStyleGlobal()}">${TICKET_PRIORITIES.map(p => `<option ${p === t.priority ? 'selected' : ''}>${p}</option>`).join('')}</select>` : `<div style="margin-top:4px">${ticketPriorityBadge(t.priority)}</div>`}
+      <label class="fp-sub" style="margin-top:10px">Vencimiento</label>
+      ${canEditMeta ? `<input type="date" data-ticket-due="${t.id}" value="${escapeHTML((t.dueDate || '').slice(0, 10))}" style="${inputStyleGlobal()}">` : `<div style="margin-top:4px">${escapeHTML((t.dueDate || '').slice(0, 10) || '—')}</div>`}
+    </div>`;
+    sideCards += `<div class="ticket-side-card">
+      <label class="fp-sub">Responsables</label>
+      <div class="ticket-assignees">${assignees.length ? assignees.map(a => `<span class="ticket-chip">${escapeHTML(a)}${canEditMeta ? ` <button data-ticket-unassign="${t.id}" data-name="${escapeHTML(a)}" title="Quitar">×</button>` : ''}</span>`).join('') : '<span class="fp-sub">Sin asignar</span>'}</div>
+      ${canEditMeta && addOptions ? `<div class="ticket-add-row" style="margin-top:8px"><select data-ticket-assign-sel="${t.id}" style="${inputStyleGlobal()}"><option value="">Agregar coordinador...</option>${addOptions}</select><button class="dev-btn" data-ticket-assign="${t.id}"><i class="ti ti-user-plus"></i></button></div>` : ''}
+    </div>`;
+    sideCards += `<div class="ticket-side-card"><label class="fp-sub">Alcance de cliente</label><div>${escapeHTML(t.clientScope || (t.client || 'Todos los clientes'))}</div></div>`;
+    if (t.custom && Object.keys(t.custom).length) sideCards += `<div class="ticket-side-card"><label class="fp-sub">Información adicional</label>${Object.entries(t.custom).map(([k, v]) => `<div style="font-size:12px;margin-top:4px"><strong>${escapeHTML(k)}:</strong> ${escapeHTML(v)}</div>`).join('')}</div>`;
+
+    const canRespond = supervise || isAssignee;
     const html = `
       <div class="ticket-detail">
         <div class="ticket-detail-main">
           <div class="ticket-detail-head">
-            <div>${ticketPriorityBadge(t.priority)} ${ticketStatusBadge(t.status)} <span class="fp-sub">${escapeHTML(t.type || '')}</span></div>
+            <div>${ticketPriorityBadge(t.priority)} ${ticketStatusBadge(ticketOverallStatus(t))} <span class="fp-sub">${escapeHTML(t.type || '')}</span></div>
             <h3 style="margin:8px 0 4px">${escapeHTML(t.title || '')}</h3>
             <div class="fp-sub">${escapeHTML(t.id)} · Creado por ${escapeHTML(t.createdByName || userName(t.createdBy) || '—')} · ${escapeHTML((t.createdAt || '').slice(0, 16).replace('T', ' '))}</div>
           </div>
@@ -3738,42 +3888,10 @@ function toggleMode(forceDark) {
           <div class="ticket-section"><h4><i class="ti ti-history"></i> Historial de cambios</h4><div class="ticket-hist">${historyHTML}</div></div>
         </div>
 
-        <div class="ticket-detail-side">
-          <div class="ticket-side-card">
-            <div class="ticket-completeness"><div class="ticket-comp-ring" style="--pct:${comp.pct};--col:${compColor}"><span>${comp.pct}%</span></div><div><strong>Completitud</strong><div class="fp-sub">${comp.done} de ${comp.total} pasos</div></div></div>
-            <div class="ticket-checklist">${checklistHTML}</div>
-            ${pendientes.length ? `<div class="ticket-pending"><strong>Falta:</strong> ${pendientes.map(escapeHTML).join(', ')}</div>` : '<div class="ticket-pending done"><i class="ti ti-circle-check"></i> Ticket completo</div>'}
-          </div>
-
-          <div class="ticket-side-card" style="border-color:rgba(245,197,24,.35)"><label class="fp-sub" style="margin:0">Tu rol en este ticket</label><div style="font-size:12px;color:var(--text-1);font-weight:600;margin-top:4px">${escapeHTML(roleLabel)}</div></div>
-
-          <div class="ticket-side-card">
-            <label class="fp-sub">Estado</label>
-            ${canRespond
-              ? `<select data-ticket-status="${t.id}" style="${inputStyleGlobal()}">${TICKET_STATUSES.map(s => `<option ${s === t.status ? 'selected' : ''}>${s}</option>`).join('')}</select>`
-              : `<div style="margin-top:4px">${ticketStatusBadge(t.status)}</div>`}
-            ${canManage ? `
-            <label class="fp-sub" style="margin-top:10px">Prioridad</label>
-            <select data-ticket-priority="${t.id}" style="${inputStyleGlobal()}">${TICKET_PRIORITIES.map(p => `<option ${p === t.priority ? 'selected' : ''}>${p}</option>`).join('')}</select>
-            <label class="fp-sub" style="margin-top:10px">Vencimiento</label>
-            <input type="date" data-ticket-due="${t.id}" value="${escapeHTML((t.dueDate || '').slice(0, 10))}" style="${inputStyleGlobal()}">`
-              : `<label class="fp-sub" style="margin-top:10px">Prioridad</label><div style="margin-top:4px">${ticketPriorityBadge(t.priority)}</div>
-                 <label class="fp-sub" style="margin-top:10px">Vencimiento</label><div style="margin-top:4px">${escapeHTML((t.dueDate || '').slice(0, 10) || '—')}</div>`}
-          </div>
-
-          <div class="ticket-side-card">
-            <label class="fp-sub">Responsables</label>
-            <div class="ticket-assignees">${assignees.length ? assignees.map(a => `<span class="ticket-chip">${escapeHTML(a)}${canManage ? ` <button data-ticket-unassign="${t.id}" data-name="${escapeHTML(a)}" title="Quitar">×</button>` : ''}</span>`).join('') : '<span class="fp-sub">Sin asignar</span>'}</div>
-            ${canManage && addOptions ? `<div class="ticket-add-row" style="margin-top:8px"><select data-ticket-assign-sel="${t.id}" style="${inputStyleGlobal()}"><option value="">Agregar coordinador...</option>${addOptions}</select><button class="dev-btn" data-ticket-assign="${t.id}"><i class="ti ti-user-plus"></i></button></div>` : ''}
-          </div>
-
-          <div class="ticket-side-card"><label class="fp-sub">Alcance de cliente</label><div>${escapeHTML(t.clientScope || (t.client || 'Todos los clientes'))}</div></div>
-          ${(t.custom && Object.keys(t.custom).length) ? `<div class="ticket-side-card"><label class="fp-sub">Información adicional</label>${Object.entries(t.custom).map(([k, v]) => `<div style="font-size:12px;margin-top:4px"><strong>${escapeHTML(k)}:</strong> ${escapeHTML(v)}</div>`).join('')}</div>` : ''}
-          ${(t.tags && t.tags.length) ? `<div class="ticket-side-card"><label class="fp-sub">Etiquetas</label><div>${t.tags.map(tag => `<span class="ticket-chip">${escapeHTML(tag)}</span>`).join('')}</div></div>` : ''}
-        </div>
+        <div class="ticket-detail-side">${sideCards}</div>
       </div>
       <div class="modal-foot" style="margin-top:16px">
-        ${canRespond && isTicketOpen(t) ? `<button class="dev-btn primary" data-ticket-resolve="${t.id}"><i class="ti ti-circle-check"></i> Marcar finalizado</button>` : ''}
+        ${isAssignee && ticketGestion(t, me).status !== 'Finalizado' ? `<button class="dev-btn primary" data-ticket-finish="${t.id}"><i class="ti ti-circle-check"></i> Marcar mi gestión finalizada</button>` : ''}
         <button class="dev-btn" type="button" id="cancel-form">Cerrar</button>
       </div>`;
 
@@ -3790,17 +3908,21 @@ function toggleMode(forceDark) {
   }
 
   function makeTicket(data = {}) {
+    const assignees = data.assignees || [];
+    const gestion = {};
+    assignees.forEach(n => { gestion[n] = { status: 'Pendiente', done: {}, at: '' }; });
     return {
       id: nextTicketId(),
       title: data.title || 'Sin título',
       type: data.type || 'Requerimiento',
       description: data.description || '',
       priority: data.priority || 'Media',
-      status: 'Pendiente',
-      assignees: data.assignees || [],
+      assignees,
+      gestion,
+      requirements: data.requirements || [],
+      audience: data.audience || ticketAudienceFor(userProfile()),
       client: data.client || '',
       clientScope: data.clientScope || 'Todos los clientes',
-      tags: data.tags || [],
       custom: data.custom || {},
       dueDate: data.dueDate || '',
       createdAt: new Date().toISOString(),
@@ -3824,14 +3946,26 @@ function toggleMode(forceDark) {
     return Array.isArray(state.prefs.ticketFields) ? state.prefs.ticketFields : [];
   }
 
-  // Formulario personalizado de creación de ticket (solo admin / coordinador)
-  function openTicketForm() {
-    if (!canCreateTickets()) { toast('Solo administradores y coordinadores pueden crear tickets'); return; }
+  // Formulario de creación de ticket. La asignación depende del rol del creador.
+  function openTicketForm(preset = {}) {
     const form = document.getElementById('modal-form');
-    const coords = (state.users || []).filter(u => u.profile === 'Coordinador' && u.name);
+    const profile = userProfile();
+    const me = currentUser();
     const clients = (state.clients || []).map(c => c.name);
     const inS = 'width:100%;min-height:40px;border:1px solid var(--border);border-radius:10px;background:var(--card-bg);color:var(--text-1);padding:0 10px;font:inherit;margin-top:4px';
     const taS = inS.replace('min-height:40px', 'min-height:70px;padding:8px 10px');
+
+    // Pool de asignación según rol del creador
+    const admins = (state.users || []).filter(u => ['Administrador', 'Gerencia'].includes(u.profile) && u.name);
+    const coords = (state.users || []).filter(u => u.profile === 'Coordinador' && u.name);
+    let pool, allLabel, poolNoun, showClientScope, lockedScope;
+    if (!profile || profile === 'Administrador' || profile === 'Gerencia') {
+      pool = coords; allLabel = 'Todos los coordinadores'; poolNoun = 'coordinador'; showClientScope = true; lockedScope = '';
+    } else if (profile === 'Coordinador') {
+      pool = admins; allLabel = 'Todos los administradores / jefes'; poolNoun = 'jefe / administrador'; showClientScope = false; lockedScope = 'Todos los clientes';
+    } else { // Cliente Admin / Usuario Punto (regente)
+      pool = coordinatorsForClient(me.client); allLabel = 'Coordinador(es) de mi cliente'; poolNoun = 'coordinador'; showClientScope = false; lockedScope = me.client || 'Todos los clientes';
+    }
 
     const customHTML = ticketCustomFields().map((f, i) => {
       const req = f.optional ? '' : ' required';
@@ -3843,45 +3977,47 @@ function toggleMode(forceDark) {
       return `<div class="form-field full"><label>${escapeHTML(f.label)}${reqMark}</label>${input}</div>`;
     }).join('');
 
-    document.getElementById('modal-title').textContent = 'Crear ticket / tarea';
-    document.getElementById('modal-subtitle').textContent = 'Reporta un problema o tarea, define urgencia y asigna responsables.';
+    // Requisitos de gestión (qué debe cumplir el responsable) — solo admin/jefe los define
+    const canSetReqs = !profile || profile === 'Administrador' || profile === 'Gerencia' || profile === 'Coordinador';
+    const reqHTML = canSetReqs ? `<div class="form-field full"><label>Requisitos de gestión <span class="fp-sub">(qué debe cumplir el responsable para finalizar)</span></label>
+      <div class="ticket-req-pick">${ticketAvailableReqs().map(r => `<label class="ticket-req-toggle"><input type="checkbox" name="req_${r.key}" value="${escapeHTML(r.label)}"> ${escapeHTML(r.label)}</label>`).join('')}</div></div>` : '';
+
+    document.getElementById('modal-title').textContent = 'Crear ticket / solicitud';
+    document.getElementById('modal-subtitle').textContent = profile === 'Coordinador' ? 'Crea una queja o solicitud y asígnala al jefe correspondiente.' : 'Reporta un problema o tarea, define urgencia y asigna responsables.';
     form.innerHTML = `<div class="form-grid">
-      <div class="form-field full"><label>Título <span style="color:#ef4444">*</span></label><input name="title" required style="${inS}" placeholder="Resumen breve del ticket"></div>
-      <div class="form-field"><label>Tipo</label><select name="type" style="${inS}">${TICKET_TYPES.map(t => `<option>${t}</option>`).join('')}</select></div>
+      <div class="form-field full"><label>Título <span style="color:#ef4444">*</span></label><input name="title" required style="${inS}" value="${escapeHTML(preset.title || '')}" placeholder="Resumen breve"></div>
+      <div class="form-field"><label>Tipo</label><select name="type" style="${inS}">${TICKET_TYPES.map(tp => `<option ${preset.type === tp ? 'selected' : ''}>${tp}</option>`).join('')}</select></div>
       <div class="form-field"><label>Prioridad (urgencia)</label><select name="priority" style="${inS}">${TICKET_PRIORITIES.map(p => `<option ${p === 'Media' ? 'selected' : ''}>${p}</option>`).join('')}</select></div>
-      <div class="form-field full"><label>Descripción</label><textarea name="description" style="${taS}" placeholder="Detalle de lo solicitado"></textarea></div>
-      <div class="form-field"><label>Alcance de cliente</label><select name="clientScope" style="${inS}"><option>Todos los clientes</option>${clients.map(c => `<option>${escapeHTML(c)}</option>`).join('')}</select></div>
-      <div class="form-field"><label>Asignar a <span style="color:#ef4444">*</span></label><select name="assignTo" required style="${inS}"><option value="__all__">Todos los coordinadores</option>${coords.map(u => `<option value="${escapeHTML(u.name)}">${escapeHTML(u.name)}${u.client ? ' · ' + escapeHTML(u.client) : ''}</option>`).join('')}</select></div>
+      <div class="form-field full"><label>Descripción</label><textarea name="description" style="${taS}" placeholder="Detalle de lo solicitado">${escapeHTML(preset.description || '')}</textarea></div>
+      ${showClientScope ? `<div class="form-field"><label>Alcance de cliente</label><select name="clientScope" style="${inS}"><option>Todos los clientes</option>${clients.map(c => `<option>${escapeHTML(c)}</option>`).join('')}</select></div>` : ''}
+      <div class="form-field"><label>Asignar a <span style="color:#ef4444">*</span></label><select name="assignTo" required style="${inS}"><option value="__all__">${escapeHTML(allLabel)}</option>${pool.map(u => `<option value="${escapeHTML(u.name)}">${escapeHTML(u.name)}${u.client ? ' · ' + escapeHTML(u.client) : ''}</option>`).join('')}</select></div>
       <div class="form-field"><label>Fecha de vencimiento</label><input name="dueDate" type="date" style="${inS}"></div>
-      <div class="form-field"><label>Etiquetas (coma)</label><input name="tags" style="${inS}" placeholder="opcional"></div>
+      ${reqHTML}
       ${customHTML}
     </div>
-    <div class="modal-foot"><button class="dev-btn" type="button" id="cancel-form">Cancelar</button><button class="dev-btn primary" type="submit"><i class="ti ti-ticket-plus"></i> Crear ticket</button></div>`;
+    <div class="modal-foot"><button class="dev-btn" type="button" id="cancel-form">Cancelar</button><button class="dev-btn primary" type="submit"><i class="ti ti-ticket-plus"></i> Crear</button></div>`;
 
     form.onsubmit = event => {
       event.preventDefault();
       const data = Object.fromEntries(new FormData(form).entries());
-      const clientScope = data.clientScope || 'Todos los clientes';
+      const clientScope = showClientScope ? (data.clientScope || 'Todos los clientes') : lockedScope;
       let assignees;
       if (data.assignTo === '__all__') {
-        assignees = coordinatorsForClient(clientScope).map(u => u.name);
-        if (!assignees.length) { toast('No hay coordinadores para ese cliente'); return; }
+        assignees = pool.map(u => u.name);
+        if (!assignees.length) { toast(`No hay ${poolNoun} disponible para asignar`); return; }
       } else {
         assignees = [data.assignTo];
       }
+      const requirements = ticketAvailableReqs().filter(r => data[`req_${r.key}`]).map(r => ({ key: r.key, label: r.label }));
       const custom = {};
       ticketCustomFields().forEach((f, i) => { if (data[`custom_${i}`] !== undefined) custom[f.label] = data[`custom_${i}`]; });
       const ticket = makeTicket({
-        title: data.title,
-        type: data.type,
-        description: data.description,
-        priority: data.priority,
+        title: data.title, type: data.type, description: data.description, priority: data.priority,
         assignees,
         client: clientScope === 'Todos los clientes' ? '' : clientScope,
         clientScope,
-        tags: (data.tags || '').split(',').map(s => s.trim()).filter(Boolean),
-        custom,
-        dueDate: data.dueDate || ''
+        audience: preset.audience || ticketAudienceFor(profile),
+        requirements, custom, dueDate: data.dueDate || ''
       });
       state.tickets = state.tickets || [];
       state.tickets.unshift(ticket);
@@ -3893,6 +4029,53 @@ function toggleMode(forceDark) {
     document.getElementById('cancel-form').onclick = closeModal;
     const modal = document.getElementById('app-modal');
     modal.classList.add('wide', 'open');
+    modal.setAttribute('aria-hidden', 'false');
+  }
+
+  // Solicitud / PQR del mensajero → va a su coordinador y queda en la ventana Coordinador
+  function openQuickerTicketForm() {
+    const form = document.getElementById('modal-form');
+    const me = currentUser();
+    const session = state.session || {};
+    const quickerName = session.profile === 'Quicker' ? session.name : (me.name || 'Carlos Mejía');
+    const qk = (state.quickers || []).find(q => q.name === quickerName) || {};
+    const clientName = qk.client || me.client || '';
+    const coords = coordinatorsForClient(clientName);
+    const inS = 'width:100%;min-height:40px;border:1px solid var(--border);border-radius:10px;background:var(--card-bg);color:var(--text-1);padding:0 10px;font:inherit;margin-top:4px';
+    const taS = inS.replace('min-height:40px', 'min-height:80px;padding:8px 10px');
+    document.getElementById('modal-title').textContent = 'Solicitud / PQR';
+    document.getElementById('modal-subtitle').textContent = 'Permisos, quejas o solicitudes. Llega a tu coordinador.';
+    form.innerHTML = `<div class="form-grid">
+      <div class="form-field"><label>Tipo</label><select name="type" style="${inS}">${['Permiso', 'Queja', 'Solicitud', 'PQR', 'Incapacidad', 'Otro'].map(o => `<option>${o}</option>`).join('')}</select></div>
+      <div class="form-field"><label>Prioridad</label><select name="priority" style="${inS}">${TICKET_PRIORITIES.map(p => `<option ${p === 'Media' ? 'selected' : ''}>${p}</option>`).join('')}</select></div>
+      <div class="form-field full"><label>Título <span style="color:#ef4444">*</span></label><input name="title" required style="${inS}" placeholder="Resumen de tu solicitud"></div>
+      <div class="form-field full"><label>Descripción</label><textarea name="description" style="${taS}" placeholder="Cuéntanos el detalle"></textarea></div>
+      <div class="form-field full"><div class="fp-sub">Se asignará a: ${coords.length ? escapeHTML(coords.map(c => c.name).join(', ')) : 'tu coordinador asignado'}${clientName ? ` · ${escapeHTML(clientName)}` : ''}</div></div>
+    </div>
+    <div class="modal-foot"><button class="dev-btn" type="button" id="cancel-form">Cancelar</button><button class="dev-btn primary" type="submit"><i class="ti ti-send"></i> Enviar</button></div>`;
+    form.onsubmit = event => {
+      event.preventDefault();
+      const data = Object.fromEntries(new FormData(form).entries());
+      const assignees = coords.map(c => c.name);
+      const ticket = makeTicket({
+        title: data.title, type: data.type, description: data.description, priority: data.priority,
+        assignees, client: clientName, clientScope: clientName || 'Todos los clientes',
+        audience: 'coordinador'
+      });
+      // El creador es el mensajero
+      ticket.createdByName = quickerName;
+      ticket.createdBy = session.id || session.username || '';
+      state.tickets = state.tickets || [];
+      state.tickets.unshift(ticket);
+      notifyAssignees(ticket, assignees);
+      log('Tickets', 'Mensajero creó solicitud', `${ticket.id} · ${quickerName}`);
+      closeModal();
+      saveState('Solicitud enviada');
+    };
+    document.getElementById('cancel-form').onclick = closeModal;
+    const modal = document.getElementById('app-modal');
+    modal.classList.remove('wide');
+    modal.classList.add('open');
     modal.setAttribute('aria-hidden', 'false');
   }
 
@@ -3908,6 +4091,25 @@ function toggleMode(forceDark) {
     });
     state.notifications = state.notifications.slice(0, 200);
   }
+  // Sube la evidencia a Firebase Storage y guarda la URL pública (visible entre usuarios)
+  function uploadTicketEvidence(ticket, ev, file) {
+    if (!cloudStorage) return; // modo local: queda solo el dataUrl
+    try {
+      const path = `ticket-evidence/${ticket.id}/${ev.id}-${file.name}`;
+      const refS = cloudStorage.ref().child(path);
+      refS.put(file).then(snap => snap.ref.getDownloadURL()).then(url => {
+        const live = (state.tickets || []).find(x => x.id === ticket.id);
+        const target = live && (live.evidence || []).find(e => e.id === ev.id);
+        if (target) {
+          target.url = url;
+          target.storagePath = path;
+          saveState('Evidencia sincronizada');
+          if (document.getElementById('app-modal')?.classList.contains('open')) openTicketDetail(ticket.id);
+        }
+      }).catch(err => console.warn('Error subiendo evidencia:', err.message));
+    } catch (e) { console.warn('Storage no disponible:', e.message); }
+  }
+
   function notifyUser(name, text, ticketId) {
     if (!name || name === state.session?.name) return;
     state.notifications = state.notifications || [];
@@ -3949,7 +4151,7 @@ function toggleMode(forceDark) {
       `<div class="row-actions">${action('Iniciar', 'startAvailability', d.id)}${action('Cerrar', 'closeAvailability', d.id)}${action('Reportar novedad', 'reportQuickerNovelty', d.id)}</div>`
     ]));
     panel('mensajero', 'Página del mensajero / Quicker', 'Pantalla mobile first: solo ve sus turnos, registra ubicación automática y carga evidencias.',
-      `<button class="dev-btn" data-open="novedad"><i class="ti ti-alert-triangle"></i> Reportar novedad</button>`,
+      `<button class="dev-btn" data-open="novedad"><i class="ti ti-alert-triangle"></i> Reportar novedad</button><button class="dev-btn primary" data-open-quicker-ticket><i class="ti ti-ticket"></i> Solicitud / PQR</button>`,
       `<div class="messenger-shell">
         <div class="mobile-preview"><div class="mobile-screen"><span class="status-pill st-warn">Usuario: ${escapeHTML(name)}</span><h2 style="margin:18px 0 6px">Turno asignado</h2><p style="color:rgba(255,255,255,.65)">Ubicación automática, sin selección manual.</p><div class="sat-map" style="min-height:150px;margin:16px 0"><div class="kml-zone"></div><button class="map-dot-live" style="left:54%;top:48%"></button></div><button class="dev-btn primary" style="width:100%;justify-content:center" data-action="startAvailability" data-id="${assigned[0]?.id || ''}">Iniciar jornada</button><button class="dev-btn" style="width:100%;justify-content:center;margin-top:8px" data-action="closeAvailability" data-id="${assigned[0]?.id || ''}">Cerrar jornada</button></div></div>
         <div>${table(['Fecha', 'Cliente', 'Punto', 'Horario', 'Estado', 'Evidencia', 'Acciones'], rows)}</div>
@@ -4054,6 +4256,10 @@ function toggleMode(forceDark) {
       <span>${field.optional ? 'Opcional' : 'Obligatorio'}</span>
       <div class="row-actions">${iconAction('Editar pregunta', 'editTicketField', String(index), 'ti-pencil')}${iconAction('Eliminar pregunta', 'deleteTicketField', String(index), 'ti-trash')}</div>
     </div>`).join('');
+    const ticketReqCards = [
+      ...DEFAULT_TICKET_REQS.map(r => `<div class="form-field-card"><div><strong>${escapeHTML(r.label)}</strong><br><span class="fp-sub">Requisito base</span></div><span>Sistema</span><div class="row-actions"></div></div>`),
+      ...(state.prefs.ticketRequirementOptions || []).map((r, index) => `<div class="form-field-card"><div><strong>${escapeHTML(r.label)}</strong><br><span class="fp-sub">Personalizado · marcable por el coordinador</span></div><span>Manual</span><div class="row-actions">${iconAction('Eliminar requisito', 'deleteTicketReq', String(index), 'ti-trash')}</div></div>`)
+    ].join('');
     const isDarkNow = !document.body.classList.contains('light-mode');
     const aparienciaSection = `<section class="settings-block">
       <div class="settings-block-title">Apariencia</div>
@@ -4089,7 +4295,12 @@ function toggleMode(forceDark) {
       <div class="settings-actions"><select class="form-config-select" data-form-config-type>${formOptions}</select><button class="dev-btn primary" data-add-form-question><i class="ti ti-plus"></i> Agregar pregunta</button></div>
       <div class="form-builder-list">${formCards || '<div class="fp-sub">Este formulario no tiene preguntas configuradas.</div>'}</div></section>`,
       tickets: `<section class="settings-block">
-        <div class="settings-block-desc" style="margin-bottom:14px;color:var(--text-2)">Configura las preguntas o listas adicionales que aparecen al crear un ticket y marca cuáles son obligatorias.</div>
+        <div class="settings-block-title">Requisitos de gestión</div>
+        <div class="settings-block-desc" style="margin-bottom:14px;color:var(--text-2)">Define qué puede exigirle el creador al coordinador para finalizar (comentario, evidencia o tus propios ítems). Al crear el ticket se eligen cuáles aplican.</div>
+        <div class="settings-actions"><button class="dev-btn primary" data-add-ticket-req><i class="ti ti-plus"></i> Agregar requisito</button></div>
+        <div class="form-builder-list">${ticketReqCards}</div>
+        <div class="settings-block-title" style="margin-top:22px">Preguntas adicionales</div>
+        <div class="settings-block-desc" style="margin-bottom:14px;color:var(--text-2)">Preguntas o listas extra que aparecen al crear un ticket. Marca cuáles son obligatorias.</div>
         <div class="settings-actions"><button class="dev-btn primary" data-add-ticket-field><i class="ti ti-plus"></i> Agregar pregunta</button></div>
         <div class="form-builder-list">${ticketFieldCards || '<div class="fp-sub">No hay preguntas adicionales. El ticket usa los campos base (título, tipo, prioridad, descripción, asignación, cliente y vencimiento).</div>'}</div></section>`
     };
@@ -4638,7 +4849,7 @@ function toggleMode(forceDark) {
   function updateNavBadges() {
     setNavBadge('mallas', null);
     setNavBadge('novedades', realNovedadesCount());
-    setNavBadge('tickets', state.tickets.filter(t => !/cerrado|finalizado|cancelado/i.test(t.status || '')).length);
+    setNavBadge('tickets', (state.tickets || []).filter(t => ticketVisibleTo(t) && isTicketOpen(t)).length);
   }
 
   function renderAll() {
@@ -4995,6 +5206,7 @@ function toggleMode(forceDark) {
     if (actionName === 'deleteFormQuestion') { deleteFormQuestion(id); return; }
     if (actionName === 'editTicketField') { openTicketFieldForm(Number(id)); return; }
     if (actionName === 'deleteTicketField') { deleteTicketField(id); return; }
+    if (actionName === 'deleteTicketReq') { deleteTicketReq(id); return; }
     if (actionName === 'justifyDelay' || actionName === 'rejectDelay') {
       const item = ensureDelayNovelty(id);
       if (item) {
@@ -5151,11 +5363,11 @@ function toggleMode(forceDark) {
         id: t.id,
         titulo: t.title,
         tipo: t.type,
+        ventana: t.audience || 'administrativo',
         prioridad: t.priority,
-        estado: t.status,
-        responsables: ticketAssigneeNames(t).join('; '),
-        cliente: t.client || '',
-        etiquetas: (t.tags || []).join('; '),
+        estado: ticketOverallStatus(t),
+        responsables: ticketAssigneeNames(t).map(n => `${n} (${ticketGestion(t, n).status})`).join('; '),
+        cliente: t.clientScope || t.client || '',
         creadoPor: t.createdByName || userName(t.createdBy) || '',
         creado: (t.createdAt || '').slice(0, 16).replace('T', ' '),
         vencimiento: (t.dueDate || '').slice(0, 10),
@@ -6237,6 +6449,33 @@ function toggleMode(forceDark) {
       });
   }
 
+  function openTicketReqForm() {
+    openModal('Nuevo requisito de gestión', 'Un ítem que el coordinador deberá marcar como cumplido (ej: "Llamó al cliente", "Adjuntó acta").',
+      `<div class="form-grid"><div class="form-field full"><label>Nombre del requisito</label><input name="label" placeholder="Ej: Confirmó con el cliente" required></div></div>
+       <div class="modal-foot"><button class="dev-btn" type="button" id="cancel-form">Cancelar</button><button class="dev-btn primary" type="submit">Guardar requisito</button></div>`,
+      event => {
+        event.preventDefault();
+        const data = Object.fromEntries(new FormData(event.currentTarget).entries());
+        const label = (data.label || '').trim();
+        if (!label) { toast('Escribe un nombre'); return; }
+        const key = 'custom_' + uid('R').toLowerCase().replace(/[^a-z0-9]/g, '');
+        state.prefs.ticketRequirementOptions = [...(state.prefs.ticketRequirementOptions || []), { key, label }];
+        closeModal();
+        log('Configuración', 'Agregó requisito de ticket', label);
+        saveState('Requisito agregado');
+      });
+  }
+  function deleteTicketReq(index) {
+    const i = Number(index);
+    const list = [...(state.prefs.ticketRequirementOptions || [])];
+    if (!list[i]) return;
+    if (!confirm(`¿Eliminar el requisito "${list[i].label}"?`)) return;
+    list.splice(i, 1);
+    state.prefs.ticketRequirementOptions = list;
+    log('Configuración', 'Eliminó requisito de ticket', String(i));
+    saveState('Requisito eliminado');
+  }
+
   function deleteTicketField(index) {
     const i = Number(index);
     const fields = [...(state.prefs.ticketFields || [])];
@@ -6298,6 +6537,8 @@ function toggleMode(forceDark) {
     if (addFormQuestion) openFormQuestionForm(state.prefs.formConfigType || 'INASISTENCIA');
     const addTicketField = event.target.closest('[data-add-ticket-field]');
     if (addTicketField) openTicketFieldForm();
+    const addTicketReq = event.target.closest('[data-add-ticket-req]');
+    if (addTicketReq) openTicketReqForm();
     const editSelected = event.target.closest('[data-edit-selected-user]');
     if (editSelected) {
       const id = document.querySelector('[data-edit-user-select]')?.value;
@@ -6343,10 +6584,14 @@ function toggleMode(forceDark) {
     // ── Tickets ──
     const ticketFormBtn = event.target.closest('[data-open-ticket-form]');
     if (ticketFormBtn) { openTicketForm(); return; }
+    const quickerTicketBtn = event.target.closest('[data-open-quicker-ticket]');
+    if (quickerTicketBtn) { openQuickerTicketForm(); return; }
     const ticketOpen = event.target.closest('[data-ticket-open]');
     if (ticketOpen) { openTicketDetail(ticketOpen.dataset.ticketOpen); return; }
+    const ticketTab = event.target.closest('[data-ticket-tab]');
+    if (ticketTab) { ticketFilters.tab = ticketTab.dataset.ticketTab; renderTickets(); return; }
     const ticketClear = event.target.closest('[data-ticket-clear]');
-    if (ticketClear) { ticketFilters.estado = 'todos'; ticketFilters.prioridad = 'todos'; ticketFilters.responsable = 'todos'; ticketFilters.cliente = 'todos'; ticketFilters.q = ''; renderTickets(); return; }
+    if (ticketClear) { ticketFilters.estado = 'todos'; ticketFilters.prioridad = 'todos'; ticketFilters.responsable = 'todos'; ticketFilters.q = ''; renderTickets(); return; }
     const ticketComment = event.target.closest('[data-ticket-comment]');
     if (ticketComment) {
       const t = (state.tickets || []).find(x => x.id === ticketComment.dataset.ticketComment);
@@ -6396,14 +6641,32 @@ function toggleMode(forceDark) {
       }
       return;
     }
-    const ticketResolve = event.target.closest('[data-ticket-resolve]');
-    if (ticketResolve) {
-      const t = (state.tickets || []).find(x => x.id === ticketResolve.dataset.ticketResolve);
-      if (t) {
-        t.status = 'Finalizado'; t.closedAt = new Date().toISOString();
-        ticketHist(t, 'Marcó como finalizado');
-        log('Tickets', 'Finalizó ticket', t.id);
-        saveState('Ticket finalizado');
+    const ticketFinish = event.target.closest('[data-ticket-finish]');
+    if (ticketFinish) {
+      const t = (state.tickets || []).find(x => x.id === ticketFinish.dataset.ticketFinish);
+      const me2 = currentUser().name;
+      if (t && ticketAssigneeNames(t).includes(me2)) {
+        const g = ticketGestion(t, me2);
+        g.status = 'Finalizado'; g.at = todayTime();
+        ticketHist(t, `${me2} finalizó su gestión`);
+        if (!isTicketOpen(t)) t.closedAt = t.closedAt || new Date().toISOString();
+        notifyUser(t.createdByName, `${me2} finalizó su gestión del ticket ${t.id}`, t.id);
+        log('Tickets', 'Coordinador finalizó gestión', `${t.id} · ${me2}`);
+        saveState('Gestión finalizada');
+        openTicketDetail(t.id);
+      }
+      return;
+    }
+    const ticketReqCheck = event.target.closest('[data-ticket-req-check]');
+    if (ticketReqCheck) {
+      const t = (state.tickets || []).find(x => x.id === ticketReqCheck.dataset.ticketReqCheck);
+      const me3 = currentUser().name;
+      if (t && ticketAssigneeNames(t).includes(me3)) {
+        const g = ticketGestion(t, me3);
+        g.done = g.done || {};
+        g.done[ticketReqCheck.dataset.req] = ticketReqCheck.checked;
+        ticketHist(t, `Actualizó requisito (${ticketReqCheck.dataset.req})`);
+        saveState('Requisito actualizado');
         openTicketDetail(t.id);
       }
       return;
@@ -6571,17 +6834,21 @@ function toggleMode(forceDark) {
     // ── Tickets: filtros ──
     const tFilter = event.target.closest('[data-ticket-filter]');
     if (tFilter) { ticketFilters[tFilter.dataset.ticketFilter] = tFilter.value; renderTickets(); return; }
-    // ── Tickets: cambio de estado / prioridad / vencimiento ──
-    const tStatus = event.target.closest('[data-ticket-status]');
-    if (tStatus) {
-      const t = (state.tickets || []).find(x => x.id === tStatus.dataset.ticketStatus);
-      if (t && t.status !== tStatus.value) {
-        const before = t.status; t.status = tStatus.value;
-        if (!isTicketOpen(t)) t.closedAt = t.closedAt || new Date().toISOString();
-        ticketHist(t, `Estado: ${before} → ${t.status}`);
-        notifyUser(t.createdByName, `Ticket ${t.id} cambió a "${t.status}"`, t.id);
-        log('Tickets', 'Cambió estado', `${t.id}: ${t.status}`);
-        saveState('Estado actualizado'); openTicketDetail(t.id);
+    // ── Tickets: cambio de estado de gestión del coordinador ──
+    const tGestion = event.target.closest('[data-ticket-gestion-status]');
+    if (tGestion) {
+      const t = (state.tickets || []).find(x => x.id === tGestion.dataset.ticketGestionStatus);
+      const meG = currentUser().name;
+      if (t && ticketAssigneeNames(t).includes(meG)) {
+        const g = ticketGestion(t, meG);
+        if (g.status !== tGestion.value) {
+          const before = g.status; g.status = tGestion.value; g.at = todayTime();
+          if (!isTicketOpen(t)) t.closedAt = t.closedAt || new Date().toISOString();
+          ticketHist(t, `${meG}: ${before} → ${g.status}`);
+          notifyUser(t.createdByName, `${meG} cambió su gestión del ticket ${t.id} a "${g.status}"`, t.id);
+          log('Tickets', 'Coordinador cambió gestión', `${t.id} · ${meG}: ${g.status}`);
+          saveState('Gestión actualizada'); openTicketDetail(t.id);
+        }
       }
       return;
     }
@@ -6608,11 +6875,14 @@ function toggleMode(forceDark) {
       const file = tEvidence.files[0];
       const reader = new FileReader();
       reader.onload = () => {
+        const ev = { id: uid('TE'), name: file.name, fileType: file.type, dataUrl: reader.result, user: state.session?.name || 'Usuario', at: todayTime() };
         t.evidence = t.evidence || [];
-        t.evidence.push({ id: uid('TE'), name: file.name, fileType: file.type, dataUrl: reader.result, user: state.session?.name || 'Usuario', at: todayTime() });
+        t.evidence.push(ev);
         ticketHist(t, `Adjuntó evidencia: ${file.name}`);
         log('Tickets', 'Adjuntó evidencia', `${t.id}: ${file.name}`);
         saveState('Evidencia adjuntada'); openTicketDetail(t.id);
+        // Subir a Firebase Storage para que sea visible entre usuarios
+        uploadTicketEvidence(t, ev, file);
       };
       reader.readAsDataURL(file);
       return;

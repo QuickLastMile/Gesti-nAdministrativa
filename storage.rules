@@ -1,0 +1,11 @@
+rules_version = '2';
+
+// Reglas de Firebase Storage para evidencias de tickets.
+// Deben publicarse en la consola de Firebase (Storage → Rules) o con `firebase deploy --only storage`.
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /ticket-evidence/{ticketId}/{fileName=**} {
+      allow read, write: if true;
+    }
+  }
+}
