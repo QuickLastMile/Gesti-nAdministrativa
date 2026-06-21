@@ -1306,31 +1306,30 @@
   .ticket-req-pick { display:flex; flex-direction:column; gap:8px; margin-top:6px; }
   .ticket-req-toggle { display:flex; align-items:center; gap:8px; font-size:12px; color:var(--text-1); cursor:pointer; }
   .ticket-req-toggle input { width:16px; height:16px; accent-color:var(--q); }
-  /* Carnet profesional (amarillo/blanco/negro) */
+  /* Carnet profesional vertical (amarillo/blanco/negro) */
   .carnet-wrap { display:flex; justify-content:center; padding:10px 0; }
-  .qc { width:340px; background:#fff; color:#111; border-radius:18px; overflow:hidden; position:relative; box-shadow:0 18px 50px rgba(0,0,0,.4); border:1px solid #e5e7eb; }
-  .qc-head { display:flex; align-items:center; gap:10px; padding:12px 14px; background:#111; color:#fff; }
-  .qc-logo { width:38px; height:38px; border-radius:9px; object-fit:cover; background:#fff; }
-  .qc-co { font-size:14px; font-weight:800; line-height:1.1; letter-spacing:.5px; flex:1; }
-  .qc-co span { display:block; font-size:10px; font-weight:600; color:#F5C518; letter-spacing:.4px; }
-  .qc-qrbtn { width:34px; height:34px; border-radius:9px; border:0; background:#F5C518; color:#111; font-size:18px; cursor:pointer; display:grid; place-items:center; }
-  .qc-body { display:flex; gap:14px; padding:16px 14px; align-items:center; }
-  .qc-photo { width:92px; height:92px; border-radius:12px; overflow:hidden; flex:none; border:3px solid #F5C518; background:#f3f4f6; }
+  .qc { width:300px; background:#fff; color:#111; border-radius:18px; overflow:hidden; position:relative; box-shadow:0 18px 50px rgba(0,0,0,.45); border:1px solid #e5e7eb; }
+  .qc-head { display:flex; align-items:center; gap:10px; padding:14px; background:#111; color:#fff; }
+  .qc-logo { width:40px; height:40px; border-radius:10px; object-fit:cover; background:#fff; }
+  .qc-co { font-size:15px; font-weight:900; line-height:1.1; letter-spacing:.5px; flex:1; }
+  .qc-co span { display:block; font-size:10px; font-weight:600; color:#F5C518; letter-spacing:.4px; margin-top:2px; }
+  .qc-qrbtn { width:36px; height:36px; border-radius:10px; border:0; background:#F5C518; color:#111; font-size:20px; cursor:pointer; display:grid; place-items:center; }
+  .qc-photo { width:130px; height:150px; margin:18px auto 10px; border-radius:14px; overflow:hidden; border:3px solid #F5C518; background:#f3f4f6; }
   .qc-photo img { width:100%; height:100%; object-fit:cover; }
-  .qc-initials { width:100%; height:100%; display:grid; place-items:center; font-size:30px; font-weight:800; color:#111; background:#F5C518; }
-  .qc-info { flex:1; min-width:0; }
-  .qc-name { font-size:17px; font-weight:900; line-height:1.15; color:#111; }
-  .qc-cargo { font-size:11px; font-weight:700; color:#a16207; text-transform:uppercase; letter-spacing:.5px; margin-bottom:8px; }
-  .qc-grid { display:grid; grid-template-columns:1fr 1fr; gap:6px 10px; }
+  .qc-initials { width:100%; height:100%; display:grid; place-items:center; font-size:44px; font-weight:800; color:#111; background:#F5C518; }
+  .qc-name { text-align:center; font-size:20px; font-weight:900; line-height:1.15; color:#111; padding:0 14px; }
+  .qc-cargo { text-align:center; font-size:11px; font-weight:700; color:#a16207; text-transform:uppercase; letter-spacing:.5px; margin:3px 0 14px; }
+  .qc-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px 12px; padding:0 18px 16px; }
+  .qc-grid > div { border-bottom:1px solid #f0f0f0; padding-bottom:6px; }
   .qc-grid span { display:block; font-size:9px; color:#6b7280; text-transform:uppercase; letter-spacing:.4px; }
-  .qc-grid b { font-size:12px; color:#111; }
-  .qc-foot { display:flex; align-items:center; justify-content:space-between; padding:10px 14px; background:#F5C518; }
-  .qc-estado { font-size:12px; font-weight:900; text-transform:uppercase; letter-spacing:.5px; padding:3px 12px; border-radius:999px; background:#111; color:#22c55e; }
+  .qc-grid b { font-size:13px; color:#111; }
+  .qc-foot { display:flex; align-items:center; justify-content:space-between; padding:11px 16px; background:#F5C518; }
+  .qc-estado { display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:900; text-transform:uppercase; letter-spacing:.5px; padding:4px 12px; border-radius:999px; background:#111; color:#22c55e; }
   .qc-estado.off { color:#fca5a5; }
   .qc-emp { font-size:11px; font-weight:800; color:#111; }
-  .qc-qr-overlay { position:absolute; inset:0; background:rgba(17,17,17,.96); display:none; flex-direction:column; align-items:center; justify-content:center; gap:12px; padding:20px; }
+  .qc-qr-overlay { position:absolute; inset:0; background:rgba(17,17,17,.97); display:none; flex-direction:column; align-items:center; justify-content:center; gap:14px; padding:20px; }
   .qc-qr-overlay.show { display:flex; }
-  .qc-qr-overlay img { width:200px; height:200px; background:#fff; border-radius:12px; padding:8px; }
+  .qc-qr-overlay img { width:220px; height:220px; max-width:90%; object-fit:contain; background:#fff; border-radius:12px; padding:10px; }
   .qc-qr-overlay span { color:#fff; font-size:12px; text-align:center; }
   /* Documentación */
   .qdocs-layout { display:grid; grid-template-columns:360px 1fr; gap:18px; }
@@ -2231,6 +2230,7 @@ function toggleMode(forceDark) {
     const tableWrap = document.querySelector(`#page-${activeModule} .data-table-wrap`);
     const keep = { top: content?.scrollTop || 0, left: tableWrap?.scrollLeft || 0 };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    touchSession();
     renderAll();
     requestAnimationFrame(() => {
       const nextContent = document.getElementById('content');
@@ -2753,20 +2753,16 @@ function toggleMode(forceDark) {
         <div class="qc-co">QUICK HELP S.A.S.<span>Carnet de colaborador</span></div>
         <button class="qc-qrbtn" type="button" data-carnet-qr title="Validar"><i class="ti ti-qrcode"></i></button>
       </div>
-      <div class="qc-body">
-        <div class="qc-photo">${photoHTML}</div>
-        <div class="qc-info">
-          <div class="qc-name">${escapeHTML(q.name || '')}</div>
-          <div class="qc-cargo">${escapeHTML(q.cargo || 'Quicker mensajero')}</div>
-          <div class="qc-grid">
-            <div><span>Cédula</span><b>${escapeHTML(q.cedula || '—')}</b></div>
-            <div><span>Placa</span><b>${escapeHTML(q.plate || '—')}</b></div>
-            <div><span>Proyecto</span><b>${escapeHTML(q.client || '—')}</b></div>
-            <div><span>Ciudad</span><b>${escapeHTML(city || '—')}</b></div>
-          </div>
-        </div>
+      <div class="qc-photo">${photoHTML}</div>
+      <div class="qc-name">${escapeHTML(q.name || '')}</div>
+      <div class="qc-cargo">${escapeHTML(q.cargo || 'Quicker mensajero')}</div>
+      <div class="qc-grid">
+        <div><span>Cédula</span><b>${escapeHTML(q.cedula || '—')}</b></div>
+        <div><span>Placa</span><b>${escapeHTML(q.plate || '—')}</b></div>
+        <div><span>Proyecto</span><b>${escapeHTML(q.client || '—')}</b></div>
+        <div><span>Ciudad</span><b>${escapeHTML(city || '—')}</b></div>
       </div>
-      <div class="qc-foot"><span class="qc-estado ${active ? 'on' : 'off'}">${escapeHTML(q.status || 'Activo')}</span><span class="qc-emp">Quick Help S.A.S.</span></div>
+      <div class="qc-foot"><span class="qc-estado ${active ? 'on' : 'off'}"><i class="ti ti-circle-filled" style="font-size:8px"></i> ${escapeHTML(q.status || 'Activo')}</span><span class="qc-emp">Quick Help S.A.S.</span></div>
       <div class="qc-qr-overlay" data-carnet-qr-overlay>
         <img class="qc-qr-img" data-qr-text="${escapeHTML(carnetValidationText(q))}" alt="QR validación">
         <span>Escanea para validar al colaborador</span>
@@ -3750,7 +3746,7 @@ function toggleMode(forceDark) {
       const active = (q.status || 'Activo') === 'Activo';
       return row([
         escapeHTML(q.id), escapeHTML(q.name), escapeHTML(q.client || '—'), escapeHTML(q.coordinator || q.point || '—'),
-        `<button class="mini-action icon-action" type="button" title="Ver documentación" data-action="quickerDocs" data-id="${q.id}"><span class="b ${ds.cls}">${ds.label}</span> <i class="ti ti-folder"></i></button>`,
+        `<span class="b ${ds.cls}">${ds.label}</span>`,
         quickerStatusBadge(q.status),
         `<div class="row-actions">${iconAction('Carnet', 'quickerCarnet', q.id, 'ti-id-badge-2')}${iconAction('Documentación', 'quickerDocs', q.id, 'ti-files')}${iconAction(active ? 'Inactivar' : 'Activar', active ? 'quickerDeactivate' : 'quickerActivate', q.id, active ? 'ti-user-off' : 'ti-user-check')}${iconAction('Editar', 'editMessenger', q.id, 'ti-pencil')}</div>`
       ]);
@@ -7394,6 +7390,23 @@ function toggleMode(forceDark) {
     }
   });
 
+  const SESSION_KEY = 'quick_session_v1';
+  const SESSION_TTL = 15 * 60 * 1000; // 15 minutos
+  function touchSession() {
+    if (state.session) { try { localStorage.setItem(SESSION_KEY, JSON.stringify({ username: state.session.username, at: Date.now() })); } catch (e) {} }
+  }
+  function restoreSession() {
+    try {
+      const s = JSON.parse(localStorage.getItem(SESSION_KEY) || 'null');
+      if (s && (Date.now() - s.at) < SESSION_TTL) {
+        const u = state.users.find(x => x.username === s.username);
+        if (u) { state.session = { id: u.id, name: u.name, username: u.username, profile: u.profile, scope: u.scope }; touchSession(); return true; }
+      }
+    } catch (e) {}
+    localStorage.removeItem(SESSION_KEY);
+    return false;
+  }
+
   function applySession() {
     const session = state.session;
     const login = document.getElementById('login-screen');
@@ -7448,6 +7461,7 @@ function toggleMode(forceDark) {
       return;
     }
     state.session = { id: user.id, name: user.name, username: user.username, profile: user.profile, scope: user.scope };
+    touchSession();
     saveState(`Bienvenido ${user.name}`);
     applySession();
   });
@@ -7467,6 +7481,7 @@ function toggleMode(forceDark) {
     icon.className = show ? 'ti ti-eye-off' : 'ti ti-eye';
   });
 
+  if (!state.session) restoreSession();
   applySession();
   // Restaurar sidebar colapsado
   if (localStorage.getItem('quick_sidebar_collapsed') === '1') {

@@ -41,13 +41,15 @@
     .stamp-note{font-size:11px;color:var(--muted);margin-top:6px}
     .filebox{border:1px dashed var(--line);border-radius:14px;padding:10px;background:rgba(255,255,255,.04);font-size:12px;color:var(--muted)}
     .doc-prev{width:100%;max-height:150px;object-fit:cover;border-radius:12px;margin:8px 0;border:1px solid var(--line)}
-    /* Carnet */
-    .qc{width:100%;max-width:360px;margin:0 auto;background:#fff;color:#111;border-radius:18px;overflow:hidden;position:relative;box-shadow:0 18px 50px rgba(0,0,0,.4)}
-    .qc-head{display:flex;align-items:center;gap:10px;padding:12px 14px;background:#111;color:#fff}.qc-logo{width:38px;height:38px;border-radius:9px;object-fit:cover;background:#fff}.qc-co{font-size:14px;font-weight:800;line-height:1.1;letter-spacing:.5px;flex:1}.qc-co span{display:block;font-size:10px;font-weight:600;color:#F5C518}.qc-qrbtn{width:34px;height:34px;border-radius:9px;border:0;background:#F5C518;color:#111;font-size:18px;display:grid;place-items:center}
-    .qc-body{display:flex;gap:14px;padding:16px 14px;align-items:center}.qc-photo{width:92px;height:92px;border-radius:12px;overflow:hidden;flex:none;border:3px solid #F5C518;background:#f3f4f6}.qc-photo img{width:100%;height:100%;object-fit:cover}.qc-initials{width:100%;height:100%;display:grid;place-items:center;font-size:30px;font-weight:800;color:#111;background:#F5C518}
-    .qc-info{flex:1;min-width:0}.qc-name{font-size:17px;font-weight:900;line-height:1.15;color:#111}.qc-cargo{font-size:11px;font-weight:700;color:#a16207;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px}.qc-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px 10px}.qc-grid span{display:block;font-size:9px;color:#6b7280;text-transform:uppercase}.qc-grid b{font-size:12px;color:#111}
-    .qc-foot{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:#F5C518}.qc-estado{font-size:12px;font-weight:900;text-transform:uppercase;padding:3px 12px;border-radius:999px;background:#111;color:#22c55e}.qc-estado.off{color:#fca5a5}.qc-emp{font-size:11px;font-weight:800;color:#111}
-    .qc-qr-overlay{position:absolute;inset:0;background:rgba(17,17,17,.96);display:none;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:20px}.qc-qr-overlay.show{display:flex}.qc-qr-overlay img{width:200px;height:200px;background:#fff;border-radius:12px;padding:8px}.qc-qr-overlay span{color:#fff;font-size:12px;text-align:center}
+    /* Carnet vertical */
+    .qc{width:300px;max-width:100%;margin:0 auto;background:#fff;color:#111;border-radius:18px;overflow:hidden;position:relative;box-shadow:0 18px 50px rgba(0,0,0,.45)}
+    .qc-head{display:flex;align-items:center;gap:10px;padding:14px;background:#111;color:#fff}.qc-logo{width:40px;height:40px;border-radius:10px;object-fit:cover;background:#fff}.qc-co{font-size:15px;font-weight:900;line-height:1.1;letter-spacing:.5px;flex:1}.qc-co span{display:block;font-size:10px;font-weight:600;color:#F5C518;margin-top:2px}.qc-qrbtn{width:36px;height:36px;border-radius:10px;border:0;background:#F5C518;color:#111;font-size:20px;display:grid;place-items:center}
+    .qc-photo{width:130px;height:150px;margin:18px auto 10px;border-radius:14px;overflow:hidden;border:3px solid #F5C518;background:#f3f4f6}.qc-photo img{width:100%;height:100%;object-fit:cover}.qc-initials{width:100%;height:100%;display:grid;place-items:center;font-size:44px;font-weight:800;color:#111;background:#F5C518}
+    .qc-name{text-align:center;font-size:20px;font-weight:900;line-height:1.15;color:#111;padding:0 14px}.qc-cargo{text-align:center;font-size:11px;font-weight:700;color:#a16207;text-transform:uppercase;letter-spacing:.5px;margin:3px 0 14px}
+    .qc-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px 12px;padding:0 18px 16px}.qc-grid>div{border-bottom:1px solid #f0f0f0;padding-bottom:6px}.qc-grid span{display:block;font-size:9px;color:#6b7280;text-transform:uppercase}.qc-grid b{font-size:13px;color:#111}
+    .qc-foot{display:flex;align-items:center;justify-content:space-between;padding:11px 16px;background:#F5C518}.qc-estado{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:900;text-transform:uppercase;padding:4px 12px;border-radius:999px;background:#111;color:#22c55e}.qc-estado.off{color:#fca5a5}.qc-emp{font-size:11px;font-weight:800;color:#111}
+    .qc-qr-overlay{position:absolute;inset:0;background:rgba(17,17,17,.97);display:none;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:20px}.qc-qr-overlay.show{display:flex}.qc-qr-overlay img{width:220px;height:220px;max-width:90%;object-fit:contain;background:#fff;border-radius:12px;padding:10px}.qc-qr-overlay span{color:#fff;font-size:12px;text-align:center}
+    .lunch-toggle{display:flex;align-items:center;justify-content:space-between}
   </style>
 </head>
 <body>
@@ -78,27 +80,26 @@
             <div><small>Operación</small><strong id="operation">—</strong></div>
             <div><small>Horario de hoy</small><strong id="schedule">—</strong></div>
           </div>
-          <div class="status-line"><div><small>Tiempo turno</small><strong id="turnElapsed">00:00</strong></div><div><small>Tiempo almuerzo</small><strong id="lunchElapsed">00:00</strong></div></div>
-          <p class="muted" id="gpsText">GPS pendiente. La ubicación se toma automáticamente.</p>
+          <div class="status-line"><div><small>Mi estado</small><strong id="myState">—</strong></div><div><small>Tiempo turno</small><strong id="turnElapsed">00:00</strong></div></div>
+          <p class="muted" id="gpsText">La ubicación, fecha y hora se toman automáticamente al marcar.</p>
 
-          <div class="camera">
-            <label>Cámara — la foto incluirá dirección, fecha y hora</label>
-            <video id="camera" autoplay playsinline muted></video>
-            <img id="snapshot" class="snapshot" alt="Foto capturada">
-            <div class="cam-actions"><button class="btn ghost small" id="startCamera" type="button">Abrir cámara</button><button class="btn ghost small" id="capturePhoto" type="button">Probar foto</button></div>
-            <p class="stamp-note">Al iniciar o finalizar turno se toma la foto automáticamente y se sella con la ubicación. Esa foto se refleja en la malla.</p>
-          </div>
+          <img id="snapshot" class="snapshot" alt="Última foto" style="display:none">
           <input type="file" id="turnFileInput" accept="image/*" capture="environment" class="hidden">
+          <p class="stamp-note">Al iniciar o finalizar turno se abre la cámara, se toma la foto y se sella con la ubicación. Esa foto se refleja en la malla.</p>
 
           <button class="btn" data-turn-action="inicio"><i class="ti ti-player-play"></i> Iniciar turno</button>
           <button class="btn bad" data-turn-action="cierre"><i class="ti ti-player-stop"></i> Finalizar turno</button>
+          <button class="btn ghost" id="extraPhotoBtn" type="button"><i class="ti ti-camera-plus"></i> Tomar foto adicional</button>
 
-          <div id="lunchBlock">
-            <div class="lunch-head"><div class="ico"><i class="ti ti-tools-kitchen-2"></i></div><div><strong>Almuerzo</strong><div class="muted" id="lunchInfo">Marca ingreso y salida</div></div></div>
-            <button class="btn ghost" data-turn-action="almuerzo_inicio" id="lunchStart"><i class="ti ti-login"></i> Iniciar almuerzo</button>
-            <button class="btn ghost" data-turn-action="almuerzo_fin" id="lunchEnd"><i class="ti ti-logout"></i> Finalizar almuerzo</button>
+          <div id="lunchBlock" class="hidden">
+            <button class="btn ghost lunch-toggle" id="lunchToggle" type="button"><span><i class="ti ti-tools-kitchen-2"></i> Almuerzo</span><strong id="lunchElapsed">00:00</strong></button>
+            <div id="lunchActions" class="hidden">
+              <button class="btn ghost" data-turn-action="almuerzo_inicio" id="lunchStart"><i class="ti ti-login"></i> Iniciar almuerzo</button>
+              <button class="btn ghost" data-turn-action="almuerzo_fin" id="lunchEnd"><i class="ti ti-logout"></i> Finalizar almuerzo</button>
+            </div>
           </div>
         </div>
+        <div class="card"><h3 style="margin:0 0 8px"><i class="ti ti-history"></i> Mi historial</h3><div id="turnHistory"><p class="muted">Sin registros aún.</p></div></div>
       </section>
 
       <!-- MAPA -->
@@ -179,7 +180,9 @@
     const fallback={users:[{name:'Carlos Mejía',username:'carlos.qk',password:'Mensajero2026!',profile:'Quicker',scope:'Carlos Mejía'}],clients:[{name:'Farmacias Andina',lunch:'Si',lat:4.6872,lng:-74.0488,points:[{name:'Santa Bárbara',address:'Cra 7 #120-20, Bogotá',lat:4.6872,lng:-74.0488}]}],quickers:[{name:'Carlos Mejía',cedula:'1018456789',phone:'3001234567',client:'Farmacias Andina',point:'Santa Bárbara',lat:4.6872,lng:-74.0488,paymentEnabled:'No',paymentTypes:['Parqueaderos']}],availabilities:[{id:'DIS-001',date:'2026-06-17',client:'Farmacias Andina',point:'Santa Bárbara',quicker:'Carlos Mejía',plannedStart:'08:00',plannedEnd:'18:00',realStart:'',realEnd:'',status:'Creado',evidencePhoto:'',custom:{}}],evidences:[],novelties:[],parkingReports:[],locationPings:[],tickets:[],notifications:[],prefs:{}};
     let state=load(), session=null, current=null, lastGps=null, capturedPhoto='', stream=null, map=null, cloudRef=null, storage=null, watchId=null, lastPingSave=0;
     function load(){try{return {...fallback,...(JSON.parse(localStorage.getItem(KEY))||{})}}catch{return fallback}}
-    function save(msg){localStorage.setItem(KEY,JSON.stringify(state));if(cloudRef)cloudRef.set({state:publicState(),updatedAt:firebase.firestore.FieldValue.serverTimestamp(),updatedBy:session?.username||'mensajero'},{merge:true}).catch(()=>{});if(msg)toast(msg)}
+    function save(msg){localStorage.setItem(KEY,JSON.stringify(state));touchSess();if(cloudRef)cloudRef.set({state:publicState(),updatedAt:firebase.firestore.FieldValue.serverTimestamp(),updatedBy:session?.username||'mensajero'},{merge:true}).catch(()=>{});if(msg)toast(msg)}
+    function touchSess(){if(session)try{localStorage.setItem('quick_session_v1',JSON.stringify({username:session.username||session.email,at:Date.now()}))}catch(e){}}
+    function restoreSess(){try{const s=JSON.parse(localStorage.getItem('quick_session_v1')||'null');if(s&&(Date.now()-s.at)<900000){const u=(state.users||[]).find(x=>(x.username===s.username||x.email===s.username)&&x.profile==='Quicker');if(u){session=u;touchSess();return true}}}catch(e){}localStorage.removeItem('quick_session_v1');return false}
     // Quita base64 (dataUrl/photoData) antes de subir a Firestore; conserva las URL de Storage
     function publicState(){const s=JSON.parse(JSON.stringify({...state,session:null}));
       if(Array.isArray(s.evidences))s.evidences=s.evidences.map(e=>({...e,photoData:null,dataUrl:null}));
@@ -211,7 +214,7 @@
     function myCoordinators(){const cl=myQuicker().client||'';return (state.users||[]).filter(u=>u.profile==='Coordinador'&&u.name&&(!u.client||u.client==='Global'||u.client===cl)).map(u=>u.name)}
 
     document.getElementById('eye').onclick=()=>{const p=document.getElementById('pass'),i=document.querySelector('#eye .ti');const show=p.type==='password';p.type=show?'text':'password';i.className=show?'ti ti-eye-off':'ti ti-eye'}
-    document.getElementById('loginForm').onsubmit=e=>{e.preventDefault();const u=document.getElementById('user').value.trim(),p=document.getElementById('pass').value;const found=(state.users||[]).find(x=>(x.username===u||x.email===u)&&x.password===p&&x.profile==='Quicker');if(!found){toast('Usuario o contraseña incorrectos');return}session=found;renderHome();startWatch()}
+    document.getElementById('loginForm').onsubmit=e=>{e.preventDefault();const u=document.getElementById('user').value.trim(),p=document.getElementById('pass').value;const found=(state.users||[]).find(x=>(x.username===u||x.email===u)&&x.password===p&&x.profile==='Quicker');if(!found){toast('Usuario o contraseña incorrectos');return}session=found;touchSess();renderHome();startWatch()}
     function elapsed(start,end){if(!start)return'00:00';const now=end||new Date().toTimeString().slice(0,5);const [sh,sm]=start.split(':').map(Number),[eh,em]=now.split(':').map(Number);let mins=(eh*60+em)-(sh*60+sm);if(mins<0)mins+=1440;return `${String(Math.floor(mins/60)).padStart(2,'0')}:${String(mins%60).padStart(2,'0')}`}
 
     const DOC_DEFS=[{k:'Foto perfil',exp:false},{k:'Foto moto',exp:false},{k:'SOAT',exp:true},{k:'Tecnomecánica',exp:true},{k:'Licencia de conducción',exp:true},{k:'Cédula',exp:false}];
@@ -232,31 +235,37 @@
       if(current){document.getElementById('client').textContent=current.client;document.getElementById('point').textContent=current.point||'Sin punto asignado';document.getElementById('operation').textContent=current.client||q.client||'—';document.getElementById('schedule').textContent=`${current.plannedStart||''} - ${current.plannedEnd||''}`;document.getElementById('turnStatus').textContent=current.status||'Creado'}
       else{document.getElementById('client').textContent=q.client||'Sin operación';document.getElementById('point').textContent=q.point||'';document.getElementById('operation').textContent=q.client||'—';document.getElementById('schedule').textContent='Sin turno hoy'}
       const payments=q.paymentEnabled==='Si';document.querySelector('[data-tab="gastos"]').style.display=payments?'flex':'none';document.getElementById('paymentType').innerHTML=(q.paymentTypes||['Parqueaderos']).map(t=>`<option>${t}</option>`).join('');
-      const lunchOn=client.lunch==='Si';document.getElementById('lunchBlock').style.display=lunchOn?'block':'none';document.getElementById('lunchInfo').textContent=lunchOn?'Marca ingreso y salida de almuerzo':'No aplica';
+      const lunchOn=client.lunch==='Si';document.getElementById('lunchBlock').classList.toggle('hidden',!lunchOn);
       document.getElementById('scheduleList').innerHTML=list.length?list.map(d=>`<div class="row"><span>${d.date}<br><small class="muted">${d.client} · ${d.point||''}</small></span><strong>${d.status||'Creado'}</strong></div>`).join(''):'<p class="muted">Sin turnos asignados.</p>';
       const plateEl=document.getElementById('plateInput');if(plateEl)plateEl.value=q.plate||'';
-      renderTimers();renderDocs(q);renderTickets();renderCarnet(q);setTimeout(initMap,0);if(camera)startCamera()}
+      renderTimers();renderMyState();renderTurnHistory();renderDocs(q);renderTickets();renderCarnet(q);setTimeout(initMap,0)}
+
+    function renderMyState(){const el=document.getElementById('myState');if(!el)return;let st='Fuera de turno';if(current){if(current.realStart&&!current.realEnd){st=current.lunchStart&&!current.lunchEnd?'En almuerzo':'En turno'}else if(current.realEnd){st='Turno finalizado'}else{const tol=Number(state.prefs?.ingressGraceMinutes||30);const ps=current.plannedStart;if(ps){const[h,m]=ps.split(':').map(Number);const now=new Date();const plan=new Date();plan.setHours(h,m+tol,0,0);if(now>plan)st='Retraso'}}}el.textContent=st}
+    function renderTurnHistory(){const box=document.getElementById('turnHistory');if(!box)return;const evs=(state.evidences||[]).filter(e=>e.quicker===session.name).slice(0,15);box.innerHTML=evs.length?evs.map(e=>`<div class="row"><span>${e.stage||'Registro'}<br><small class="muted">${e.time||''}</small></span><strong style="font-size:11px;color:var(--muted);max-width:140px;text-align:right">${(e.address||'').slice(0,40)}</strong></div>`).join(''):'<p class="muted">Sin registros aún.</p>'}
 
     function carnetValidationText(q){return `QUICK HELP S.A.S. - Validacion de colaborador\nNombre: ${q.name||''}\nCedula: ${q.cedula||''}\nProyecto: ${q.client||''}\nPlaca: ${q.plate||''}\nEstado: ${q.status||'Activo'}`}
-    function renderCarnet(q){const box=document.getElementById('carnetBox');if(!box)return;const docs=q.documents||{};const ph=docs['Foto perfil'];const cur=ph&&(ph.url||ph.dataUrl);const photo=cur?`<img src="${cur}" alt="">`:`<div class="qc-initials">${initials(q.name)}</div>`;const active=(q.status||'Activo')==='Activo';const city=q.city||'';
+    function resolveMedia(ref,cb){const direct=ref&&(ref.url||ref.dataUrl);if(direct){cb(direct);return}if(ref&&ref.mediaId&&window.firebase){firebase.firestore().collection('quick_media').doc(ref.mediaId).get().then(s=>cb(s.data()?.data||'')).catch(()=>cb(''));return}cb('')}
+    function renderCarnet(q){const box=document.getElementById('carnetBox');if(!box)return;const docs=q.documents||{};const ph=docs['Foto perfil']||(q.avatarUrl?{url:q.avatarUrl}:null);const active=(q.status||'Activo')==='Activo';const city=q.city||'';
       box.innerHTML=`<div class="qc"><div class="qc-head"><img class="qc-logo" src="https://i.ibb.co/KjmjjvNZ/Captura-de-pantalla-2025-09-15-161315.jpg" alt="Quick"><div class="qc-co">QUICK HELP S.A.S.<span>Carnet de colaborador</span></div><button class="qc-qrbtn" type="button" id="carnetQrBtn"><i class="ti ti-qrcode"></i></button></div>
-        <div class="qc-body"><div class="qc-photo">${photo}</div><div class="qc-info"><div class="qc-name">${q.name||''}</div><div class="qc-cargo">${q.cargo||'Quicker mensajero'}</div><div class="qc-grid"><div><span>Cédula</span><b>${q.cedula||'—'}</b></div><div><span>Placa</span><b>${q.plate||'—'}</b></div><div><span>Proyecto</span><b>${q.client||'—'}</b></div><div><span>Ciudad</span><b>${city||'—'}</b></div></div></div></div>
-        <div class="qc-foot"><span class="qc-estado ${active?'':'off'}">${q.status||'Activo'}</span><span class="qc-emp">Quick Help S.A.S.</span></div>
+        <div class="qc-photo" id="carnetPhoto"><div class="qc-initials">${initials(q.name)}</div></div>
+        <div class="qc-name">${q.name||''}</div><div class="qc-cargo">${q.cargo||'Quicker mensajero'}</div>
+        <div class="qc-grid"><div><span>Cédula</span><b>${q.cedula||'—'}</b></div><div><span>Placa</span><b>${q.plate||'—'}</b></div><div><span>Proyecto</span><b>${q.client||'—'}</b></div><div><span>Ciudad</span><b>${city||'—'}</b></div></div>
+        <div class="qc-foot"><span class="qc-estado ${active?'':'off'}"><i class="ti ti-circle-filled" style="font-size:8px"></i> ${q.status||'Activo'}</span><span class="qc-emp">Quick Help S.A.S.</span></div>
         <div class="qc-qr-overlay" id="carnetQrOverlay"><img class="qc-qr-img" data-qr-text="${carnetValidationText(q).replace(/"/g,'&quot;')}" alt="QR"><span>Escanea para validar al colaborador</span><button class="btn ghost small" id="carnetQrClose">Cerrar</button></div></div>`;
+      resolveMedia(ph,src=>{if(src){const t=document.getElementById('carnetPhoto');if(t)t.innerHTML=`<img src="${src}" alt="">`}});
       const ov=document.getElementById('carnetQrOverlay');
       document.getElementById('carnetQrBtn').onclick=()=>ov.classList.add('show');
       document.getElementById('carnetQrClose').onclick=()=>ov.classList.remove('show');
       genQRImages();}
     function genQRImages(){document.querySelectorAll('img[data-qr-text]:not([data-qrdone])').forEach(img=>{img.dataset.qrdone='1';const text=img.dataset.qrText;if(window.QRCode&&QRCode.toDataURL){QRCode.toDataURL(text,{width:240,margin:1},(e,url)=>{if(!e)img.src=url})}else{img.src=`https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(text)}`}})}
 
-    async function startCamera(){try{if(stream)return;stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'},audio:false});document.getElementById('camera').srcObject=stream}catch{document.getElementById('camera').style.display='none'}}
-    document.getElementById('startCamera').onclick=startCamera;
-    function captureFrame(){const v=document.getElementById('camera');if(v&&v.videoWidth){const c=document.createElement('canvas');c.width=v.videoWidth;c.height=v.videoHeight;c.getContext('2d').drawImage(v,0,0);return c.toDataURL('image/jpeg',.82)}return ''}
-    document.getElementById('capturePhoto').onclick=()=>{const raw=captureFrame();if(!raw){toast('Abre la cámara primero');return}document.getElementById('snapshot').src=raw;document.getElementById('snapshot').style.display='block';toast('Vista previa lista')};
-    // Toma foto (cámara en vivo o input nativo como respaldo) y la entrega
-    function takePhotoThen(cb){const raw=captureFrame();if(raw){cb(raw);return}const inp=document.getElementById('turnFileInput');inp.value='';inp.onchange=()=>{const f=inp.files&&inp.files[0];if(!f){cb('');return}const r=new FileReader();r.onload=()=>cb(String(r.result||''));r.readAsDataURL(f)};inp.click()}
+    // La cámara se abre solo al marcar (input nativo con capture). No queda abierta en la app.
+    function takePhotoThen(cb){const inp=document.getElementById('turnFileInput');inp.value='';inp.onchange=()=>{const f=inp.files&&inp.files[0];if(!f){cb('');return}const r=new FileReader();r.onload=()=>cb(String(r.result||''));r.readAsDataURL(f)};inp.click()}
 
     document.querySelectorAll('[data-turn-action]').forEach(btn=>btn.onclick=()=>registerTurn(btn.dataset.turnAction));
+    document.getElementById('extraPhotoBtn').onclick=()=>registerExtraPhoto();
+    document.getElementById('lunchToggle').onclick=()=>document.getElementById('lunchActions').classList.toggle('hidden');
+    function registerExtraPhoto(){takePhotoThen(raw=>{if(!raw){return}toast('Tomando ubicación...');locate(gps=>{const stamp=new Date().toLocaleString('es-CO');const proceed=address=>stampPhoto(raw,address,stamp,stamped=>{const img=document.getElementById('snapshot');img.src=stamped;img.style.display='block';const eid=uid('EVI');state.evidences=state.evidences||[];const ev={id:eid,availability:current?.id||'',quicker:session.name,stage:'Foto adicional',type:'Foto/GPS',required:'No',status:'Cargada',file:'extra.jpg',photoData:stamped,address,time:stamp};state.evidences.unshift(ev);save('Foto adicional enviada');renderTurnHistory();uploadMedia(eid,stamped,mid=>{if(mid){const e=(state.evidences||[]).find(x=>x.id===eid);if(e){e.mediaId=mid;save()}}})});if(gps)reverseGeocode(gps.lat,gps.lng,addr=>proceed(addr||`${gps.lat.toFixed(6)}, ${gps.lng.toFixed(6)}`));else proceed('Ubicación no disponible')})})}
     function registerTurn(action){if(!current){toast('No tienes turno asignado hoy');return}
       takePhotoThen(raw=>{if(!raw){toast('Necesitas tomar la foto');return}
         toast('Tomando ubicación...');
@@ -332,6 +341,7 @@
     document.getElementById('logout').onclick=()=>{if(watchId)navigator.geolocation.clearWatch(watchId);location.reload()};
     setInterval(renderTimers,30000);
     initCloud();
+    if(restoreSess()){renderHome();startWatch()}
   </script>
 </body>
 </html>
