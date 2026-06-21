@@ -1331,6 +1331,21 @@
   .qc-qr-overlay.show { display:flex; }
   .qc-qr-overlay img { width:220px; height:220px; max-width:90%; object-fit:contain; background:#fff; border-radius:12px; padding:10px; }
   .qc-qr-overlay span { color:#fff; font-size:12px; text-align:center; }
+  /* HSQ */
+  .hsq-card { border:1px solid var(--border); border-radius:14px; background:rgba(255,255,255,.03); margin-bottom:10px; overflow:hidden; }
+  .light-mode .hsq-card { background:#fff; }
+  .hsq-card-head { display:flex; align-items:center; gap:12px; padding:12px 14px; cursor:pointer; }
+  .hsq-card-head:hover { background:rgba(245,197,24,.06); }
+  .hsq-ic { width:40px; height:40px; border-radius:11px; background:rgba(245,197,24,.15); color:var(--q); display:grid; place-items:center; font-size:20px; flex:none; }
+  .hsq-title { font-weight:800; color:var(--text-1); }
+  .hsq-chev { color:var(--text-2); transition:transform .2s; }
+  .hsq-chev.up { transform:rotate(180deg); }
+  .hsq-card-body { padding:0 14px 14px; border-top:1px solid var(--border); }
+  .hsq-cover { margin:12px 0; border-radius:12px; overflow:hidden; }
+  .hsq-cover img { width:100%; max-height:220px; object-fit:cover; display:block; }
+  .hsq-text { margin:10px 0; color:var(--text-1); line-height:1.5; white-space:pre-wrap; }
+  .hsq-track .row { border-color:var(--border); }
+  .hsq-proj { display:flex; flex-direction:column; gap:7px; margin-top:6px; max-height:170px; overflow:auto; }
   /* Documentación */
   .qdocs-layout { display:grid; grid-template-columns:360px 1fr; gap:18px; }
   @media (max-width:820px){ .qdocs-layout { grid-template-columns:1fr; } }
@@ -1732,11 +1747,7 @@
       </div>
 
       <!-- ════════════════════ HSQ / ALERTAS ════════════════════ -->
-      <div class="page" id="page-hsq">
-        <div class="card">
-          <div class="card-head"><div><div class="card-title">HSQ / Seguridad y calidad</div><div class="card-sub">SOAT, capacitaciones, comparendos y llamados de atención</div></div></div>
-        </div>
-      </div>
+      <div class="page" id="page-hsq"></div>
 
       <!-- ════════════════════ APP MENSAJERO ════════════════════ -->
       <div class="page" id="page-mensajero">
@@ -2098,6 +2109,13 @@ function toggleMode(forceDark) {
     }
   }
 
+  const DEFAULT_HSQ_TYPES = [
+    { key: 'capacitacion', label: 'Capacitación', icon: 'ti-school', fields: ['cover', 'body', 'link', 'projects'], evidence: true, comment: true, error: true, enabled: true },
+    { key: 'comparendo', label: 'Alerta de comparendo', icon: 'ti-traffic-cone', fields: ['projects', 'quicker', 'body', 'valor', 'infraction', 'dateImposicion', 'urgency', 'doc'], evidence: true, comment: true, error: false, enabled: true },
+    { key: 'transito', label: 'Alerta de tránsito', icon: 'ti-alert-triangle', fields: ['cover', 'body', 'link', 'projects', 'urgency'], evidence: false, comment: true, error: false, enabled: true },
+    { key: 'comunicado', label: 'Comunicado', icon: 'ti-speakerphone', fields: ['cover', 'body', 'projects'], evidence: false, comment: false, error: false, enabled: true }
+  ];
+
   function normalizeState(value) {
     const next = { ...JSON.parse(JSON.stringify(seed)), ...(value || {}) };
     const adminBootstrap = seed.users.find(u => u.profile === 'Administrador') || { id: 'USR-ADMIN', name: 'Admin Quick', email: 'admin@quick.com.co', phone: '', username: 'admin@quick.com.co', password: 'Quick2026!', profile: 'Administrador', scope: 'Global', client: 'Global', point: '', permissions: [] };
@@ -2169,6 +2187,9 @@ function toggleMode(forceDark) {
     next.prefs.ticketRequirementOptions = Array.isArray(next.prefs.ticketRequirementOptions) ? next.prefs.ticketRequirementOptions : [];
     // Tipos de Solicitud/PQR que ve el mensajero (editable desde Configuración)
     next.prefs.pqrTypes = Array.isArray(next.prefs.pqrTypes) && next.prefs.pqrTypes.length ? next.prefs.pqrTypes : ['Permiso', 'Queja', 'PQR', 'Solicitud', 'Novedad', 'Incapacidad'];
+    // HSQ: tipos de publicación configurables y publicaciones
+    next.prefs.hsqTypes = Array.isArray(next.prefs.hsqTypes) && next.prefs.hsqTypes.length ? next.prefs.hsqTypes : JSON.parse(JSON.stringify(DEFAULT_HSQ_TYPES));
+    next.hsqPublications = Array.isArray(value?.hsqPublications) ? value.hsqPublications : [];
     // Borrado único de tickets para iniciar desde 0 con el nuevo sistema de gestión
     if (!next.prefs.ticketsClearedV2) { next.tickets = []; next.notifications = []; next.prefs.ticketsClearedV2 = true; }
     const requiredMallaCols = seed.prefs.mallaColumns;
@@ -2274,6 +2295,13 @@ function toggleMode(forceDark) {
       stripped.tickets = stripped.tickets.map(t => ({
         ...t,
         evidence: (t.evidence || []).map(e => ({ ...e, dataUrl: null }))
+      }));
+    }
+    if (Array.isArray(stripped.hsqPublications)) {
+      stripped.hsqPublications = stripped.hsqPublications.map(p => ({
+        ...p,
+        cover: p.cover ? { ...p.cover, dataUrl: null } : p.cover,
+        doc: p.doc ? { ...p.doc, dataUrl: null } : p.doc
       }));
     }
     if (Array.isArray(stripped.availabilities)) {
@@ -4332,6 +4360,16 @@ function toggleMode(forceDark) {
     });
   }
 
+  function openMediaViewer(mediaId) {
+    const form = document.getElementById('modal-form');
+    document.getElementById('modal-title').textContent = 'Evidencia';
+    document.getElementById('modal-subtitle').textContent = '';
+    form.innerHTML = `<div class="form-grid"><div class="form-field full" style="text-align:center"><img class="evidence-large" data-media-id="${escapeHTML(mediaId)}" alt="Evidencia"></div></div><div class="modal-foot"><button class="dev-btn" type="button" id="cancel-form">Cerrar</button></div>`;
+    document.getElementById('cancel-form').onclick = closeModal;
+    const modal = document.getElementById('app-modal'); modal.classList.remove('wide'); modal.classList.add('open'); modal.setAttribute('aria-hidden', 'false');
+    loadMediaImages();
+  }
+
   function notifyUser(name, text, ticketId) {
     if (!name || name === state.session?.name) return;
     state.notifications = state.notifications || [];
@@ -4349,14 +4387,160 @@ function toggleMode(forceDark) {
     dot.style.display = unread > 0 ? 'block' : 'none';
   }
 
+  // ════════════════════ HSQ / ALERTAS ════════════════════
+  const HSQ_FIELD_DEFS = {
+    cover: { label: 'Foto de portada', type: 'file' },
+    body: { label: 'Texto informativo', type: 'textarea' },
+    link: { label: 'Link o URL', type: 'url' },
+    projects: { label: 'Proyecto(s) destino', type: 'projects' },
+    quicker: { label: 'Mensajero (buscar por cédula)', type: 'quicker' },
+    valor: { label: 'Valor del comparendo', type: 'number' },
+    infraction: { label: 'Tipo de infracción', type: 'text' },
+    dateImposicion: { label: 'Fecha de imposición', type: 'date' },
+    urgency: { label: 'Urgencia / gravedad', type: 'select', options: ['Baja', 'Media', 'Alta', 'Crítica'] },
+    doc: { label: 'Documento / soporte', type: 'file' }
+  };
+  const hsqFilters = { tab: 'todos' };
+  function hsqTypes() { return (state.prefs.hsqTypes || []).filter(t => t.enabled !== false); }
+  function hsqTypeByKey(k) { return (state.prefs.hsqTypes || []).find(t => t.key === k) || { key: k, label: k, fields: ['body', 'projects'] }; }
+  function hsqCanManage() { const p = currentUser().profile || ''; return !p || p === 'Administrador' || p === 'Gerencia'; }
+  function hsqTargetsProject(pub, clientName) {
+    const pr = pub.projects || [];
+    return pr.includes('Todos') || pr.length === 0 || pr.includes(clientName);
+  }
+  function hsqForMessenger(name) {
+    const q = (state.quickers || []).find(x => x.name === name) || {};
+    return (state.hsqPublications || []).filter(p => hsqTargetsProject(p, q.client));
+  }
+  function hsqVisible() {
+    const u = currentUser(); const p = u.profile || '';
+    if (!p || p === 'Administrador' || p === 'Gerencia') return state.hsqPublications || [];
+    if (p === 'Coordinador' || p === 'Cliente Admin' || p === 'Usuario Punto') return (state.hsqPublications || []).filter(pub => hsqTargetsProject(pub, u.client));
+    return (state.hsqPublications || []).filter(pub => hsqTargetsProject(pub, u.client));
+  }
+  function hsqAckStats(pub) {
+    const targets = (state.quickers || []).filter(q => hsqTargetsProject(pub, q.client));
+    const acks = pub.acks || {};
+    const opened = targets.filter(q => acks[q.name]?.openedAt).length;
+    return { total: targets.length, opened, targets, acks };
+  }
+
   function renderHSQ() {
-    const rows = scopedItems(state.hsqReports || [], h => ({ client: h.client, point: h.point, quicker: h.quicker })).map(h => row([
-      escapeHTML(h.id), escapeHTML(h.type), escapeHTML(h.client), escapeHTML(h.point || 'Todos'), escapeHTML(h.cedula || ''), escapeHTML(h.quicker || ''), pill(h.status), escapeHTML(h.note || '')
-    ]));
-    panel('hsq', 'HSQ / Seguridad y calidad', 'Reporta SOAT vencidos, capacitaciones, comparendos, alertas de tránsito o llamados de atención por operación.',
-      `<button class="dev-btn primary" data-open="hsq"><i class="ti ti-shield-plus"></i> Nueva alerta HSQ</button><button class="dev-btn" data-export="hsqReports">Exportar CSV</button>`,
-      table(['ID', 'Tipo', 'Cliente', 'Punto', 'Cédula', 'Quicker', 'Estado', 'Detalle'], rows)
+    const visible = hsqVisible();
+    const types = hsqTypes();
+    const counts = {}; types.forEach(t => counts[t.key] = visible.filter(p => p.kind === t.key).length);
+    if (hsqFilters.tab !== 'todos' && !types.some(t => t.key === hsqFilters.tab)) hsqFilters.tab = 'todos';
+    const scoped = hsqFilters.tab === 'todos' ? visible : visible.filter(p => p.kind === hsqFilters.tab);
+
+    const tabsHTML = `<div class="ticket-tabs" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">
+      <button class="ticket-tab ${hsqFilters.tab === 'todos' ? 'on' : ''}" data-hsq-tab="todos"><i class="ti ti-layout-grid"></i> Todas (${visible.length})</button>
+      ${types.map(t => `<button class="ticket-tab ${hsqFilters.tab === t.key ? 'on' : ''}" data-hsq-tab="${t.key}"><i class="ti ${t.icon || 'ti-bell'}"></i> ${escapeHTML(t.label)} (${counts[t.key] || 0})</button>`).join('')}
+    </div>`;
+
+    const cards = scoped.slice().sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || '')).map(p => {
+      const t = hsqTypeByKey(p.kind);
+      const st = hsqAckStats(p);
+      const cover = p.cover && hasMedia(p.cover) ? `<div class="hsq-cover"><img ${mediaAttr(p.cover)} alt=""></div>` : '';
+      const urg = p.urgency ? `<span class="b ${{ 'Crítica': 'b-red', 'Alta': 'b-orange', 'Media': 'b-yellow', 'Baja': 'b-blue' }[p.urgency] || 'b-blue'}">${escapeHTML(p.urgency)}</span>` : '';
+      return `<div class="hsq-card" data-hsq-card="${p.id}">
+        <div class="hsq-card-head" data-hsq-expand="${p.id}">
+          <div class="hsq-ic"><i class="ti ${t.icon || 'ti-bell'}"></i></div>
+          <div style="flex:1;min-width:0"><div class="hsq-title">${escapeHTML(p.title || t.label)}</div><div class="fp-sub">${escapeHTML(t.label)} · ${escapeHTML((p.projects || ['Todos']).join(', '))} · ${escapeHTML((p.createdAt || '').slice(0, 10))}</div></div>
+          ${urg}${p.kind === 'capacitacion' ? `<span class="b b-blue">${st.opened}/${st.total} vieron</span>` : ''}
+          <i class="ti ti-chevron-down hsq-chev"></i>
+        </div>
+        <div class="hsq-card-body" id="hsq-body-${p.id}" style="display:none">
+          ${cover}
+          ${p.quicker ? `<p class="fp-sub"><strong>Mensajero:</strong> ${escapeHTML(p.quicker)}${p.cedula ? ' · CC ' + escapeHTML(p.cedula) : ''}</p>` : ''}
+          ${p.valor ? `<p class="fp-sub"><strong>Valor:</strong> $${escapeHTML(p.valor)} · ${escapeHTML(p.infraction || '')} · ${escapeHTML(p.dateImposicion || '')}</p>` : ''}
+          ${p.body ? `<div class="hsq-text">${escapeHTML(p.body)}</div>` : ''}
+          ${p.link ? `<a class="dev-btn" href="${escapeHTML(p.link)}" target="_blank" rel="noopener"><i class="ti ti-external-link"></i> Abrir enlace</a>` : ''}
+          ${p.doc && hasMedia(p.doc) ? `<a class="dev-btn" ${p.doc.dataUrl || p.doc.url ? `href="${p.doc.dataUrl || p.doc.url}"` : `data-media-id="${escapeHTML(p.doc.mediaId)}"`} target="_blank" download><i class="ti ti-download"></i> Documento</a>` : ''}
+          <div class="hsq-track">
+            <div class="settings-block-title" style="margin:14px 0 6px"><i class="ti ti-checklist"></i> Seguimiento (${st.opened}/${st.total})</div>
+            ${st.targets.length ? st.targets.map(q => { const a = st.acks[q.name] || {}; return `<div class="row"><span>${escapeHTML(q.name)}<br><small class="fp-sub">${a.openedAt ? 'Abrió: ' + a.openedAt : 'No ha abierto'}${a.comment ? ' · 💬 ' + escapeHTML(a.comment) : ''}${a.error ? ' · ⚠ ' + escapeHTML(a.error) : ''}</small></span>${a.evidenceMediaId ? `<button class="mini-action" data-hsq-evidence="${a.evidenceMediaId}">Ver evidencia</button>` : (a.openedAt ? '<span class="b b-green">Visto</span>' : '<span class="b b-yellow">Pendiente</span>')}</div>`; }).join('') : '<div class="fp-sub">Sin mensajeros en el/los proyecto(s).</div>'}
+          </div>
+          ${hsqCanManage() ? `<div class="row-actions" style="margin-top:12px">${iconAction('Editar', 'hsqEdit', p.id, 'ti-pencil')}${iconAction('Eliminar', 'hsqDelete', p.id, 'ti-trash')}</div>` : ''}
+        </div>
+      </div>`;
+    }).join('');
+
+    panel('hsq', 'HSQ / Alertas', 'Publica capacitaciones, alertas de comparendos y tránsito, y comunicados. Llega a los mensajeros y coordinadores del proyecto.',
+      `${hsqCanManage() ? `<button class="dev-btn primary" data-hsq-new><i class="ti ti-plus"></i> Nueva publicación</button>` : ''}<button class="dev-btn" data-export="hsqPublications"><i class="ti ti-download"></i> Exportar</button>`,
+      `${tabsHTML}${cards || '<div class="dropzone" style="text-align:center"><strong>Sin publicaciones</strong><span class="fp-sub">Crea una capacitación, alerta o comunicado.</span></div>'}`
     );
+  }
+
+  function openHsqTypePicker() {
+    const types = hsqTypes();
+    const form = document.getElementById('modal-form');
+    document.getElementById('modal-title').textContent = 'Nueva publicación HSQ';
+    document.getElementById('modal-subtitle').textContent = '¿Qué deseas publicar?';
+    form.innerHTML = `<div class="form-grid">${types.map(t => `<button type="button" class="dev-btn" style="justify-content:flex-start;height:48px" data-hsq-pick="${t.key}"><i class="ti ${t.icon || 'ti-bell'}"></i> ${escapeHTML(t.label)}</button>`).join('')}</div><div class="modal-foot"><button class="dev-btn" type="button" id="cancel-form">Cancelar</button></div>`;
+    document.getElementById('cancel-form').onclick = closeModal;
+    const modal = document.getElementById('app-modal'); modal.classList.remove('wide'); modal.classList.add('open'); modal.setAttribute('aria-hidden', 'false');
+  }
+
+  function openHsqForm(kind, editId) {
+    const t = hsqTypeByKey(kind);
+    const pub = editId ? (state.hsqPublications || []).find(p => p.id === editId) : {};
+    const form = document.getElementById('modal-form');
+    const inS = 'width:100%;min-height:40px;border:1px solid var(--border);border-radius:10px;background:var(--card-bg);color:var(--text-1);padding:0 10px;font:inherit;margin-top:4px';
+    const taS = inS.replace('min-height:40px', 'min-height:90px;padding:8px 10px');
+    const clients = (state.clients || []).map(c => c.name);
+    const projSel = pub.projects || [];
+    const fieldHTMLs = (t.fields || []).map(fk => {
+      const def = HSQ_FIELD_DEFS[fk]; if (!def) return '';
+      if (def.type === 'projects') return `<div class="form-field full"><label>${def.label}</label><div class="hsq-proj"><label class="ticket-req-toggle"><input type="checkbox" data-hsq-proj value="Todos" ${projSel.includes('Todos') ? 'checked' : ''}> Todos los proyectos</label>${clients.map(c => `<label class="ticket-req-toggle"><input type="checkbox" data-hsq-proj value="${escapeHTML(c)}" ${projSel.includes(c) ? 'checked' : ''}> ${escapeHTML(c)}</label>`).join('')}</div></div>`;
+      if (def.type === 'quicker') return `<div class="form-field"><label>Cédula del mensajero</label><div style="display:flex;gap:6px"><input id="hsq-cedula" value="${escapeHTML(pub.cedula || '')}" style="${inS}"><button class="dev-btn" type="button" id="hsq-lookup">Buscar</button></div></div><div class="form-field"><label>Mensajero</label><input id="hsq-quicker" name="quicker" value="${escapeHTML(pub.quicker || '')}" style="${inS}" readonly></div>`;
+      if (def.type === 'textarea') return `<div class="form-field full"><label>${def.label}</label><textarea name="${fk}" style="${taS}">${escapeHTML(pub[fk] || '')}</textarea></div>`;
+      if (def.type === 'select') return `<div class="form-field"><label>${def.label}</label><select name="${fk}" style="${inS}">${def.options.map(o => `<option ${pub[fk] === o ? 'selected' : ''}>${o}</option>`).join('')}</select></div>`;
+      if (def.type === 'file') return `<div class="form-field full"><label>${def.label}</label><input type="file" name="${fk}" data-hsq-file="${fk}" accept="${fk === 'cover' ? 'image/*' : 'image/*,.pdf,.doc,.docx'}" style="${inS}">${pub[fk] && hasMedia(pub[fk]) ? '<div class="fp-sub">Archivo actual cargado</div>' : ''}</div>`;
+      return `<div class="form-field"><label>${def.label}</label><input name="${fk}" type="${def.type}" value="${escapeHTML(pub[fk] || '')}" style="${inS}"></div>`;
+    }).join('');
+    const allowHTML = `<div class="form-field full"><label>Permitir al mensajero</label><div style="display:flex;gap:14px;flex-wrap:wrap">
+      <label class="ticket-req-toggle"><input type="checkbox" name="allowEvidence" ${(pub.allow ? pub.allow.evidence : t.evidence) ? 'checked' : ''}> Adjuntar evidencia</label>
+      <label class="ticket-req-toggle"><input type="checkbox" name="allowComment" ${(pub.allow ? pub.allow.comment : t.comment) ? 'checked' : ''}> Comentar</label>
+      <label class="ticket-req-toggle"><input type="checkbox" name="allowError" ${(pub.allow ? pub.allow.error : t.error) ? 'checked' : ''}> Reportar errores</label>
+    </div></div>`;
+    document.getElementById('modal-title').textContent = (editId ? 'Editar · ' : 'Nueva · ') + t.label;
+    document.getElementById('modal-subtitle').textContent = 'Define el contenido y a qué proyectos llega.';
+    form.innerHTML = `<div class="form-grid">
+      <div class="form-field full"><label>Título</label><input name="title" required value="${escapeHTML(pub.title || '')}" style="${inS}"></div>
+      ${fieldHTMLs}${allowHTML}
+    </div><div class="modal-foot"><button class="dev-btn" type="button" id="cancel-form">Cancelar</button><button class="dev-btn primary" type="submit"><i class="ti ti-send"></i> ${editId ? 'Guardar' : 'Publicar'}</button></div>`;
+    const lookup = document.getElementById('hsq-lookup');
+    if (lookup) lookup.onclick = () => {
+      const ced = document.getElementById('hsq-cedula').value.trim();
+      const q = (state.quickers || []).find(x => x.cedula === ced) || findAssetByCedula?.(ced);
+      if (q) document.getElementById('hsq-quicker').value = q.name; else toast('No encontré esa cédula');
+    };
+    form.onsubmit = event => {
+      event.preventDefault();
+      const data = Object.fromEntries(new FormData(form).entries());
+      const projects = [...form.querySelectorAll('[data-hsq-proj]:checked')].map(c => c.value);
+      const item = editId ? pub : { id: uid('HSQ'), kind, acks: {}, createdAt: new Date().toISOString(), createdBy: state.session?.id || '', createdByName: state.session?.name || 'HSQ' };
+      item.label = t.label; item.title = data.title || t.label;
+      (t.fields || []).forEach(fk => { if (HSQ_FIELD_DEFS[fk] && HSQ_FIELD_DEFS[fk].type !== 'file' && HSQ_FIELD_DEFS[fk].type !== 'projects' && HSQ_FIELD_DEFS[fk].type !== 'quicker') item[fk] = data[fk] || ''; });
+      if ((t.fields || []).includes('quicker')) { item.quicker = data.quicker || ''; item.cedula = document.getElementById('hsq-cedula')?.value || ''; }
+      if ((t.fields || []).includes('projects')) item.projects = projects.length ? projects : ['Todos'];
+      item.allow = { evidence: !!data.allowEvidence, comment: !!data.allowComment, error: !!data.allowError };
+      // Archivos
+      const fileInputs = [...form.querySelectorAll('[data-hsq-file]')];
+      const pendingFiles = fileInputs.filter(i => i.files && i.files[0]);
+      if (!editId) { state.hsqPublications = state.hsqPublications || []; state.hsqPublications.unshift(item); }
+      const finalize = () => { log('HSQ', editId ? 'Editó publicación' : 'Publicó', `${t.label}: ${item.title}`); closeModal(); saveState('Publicación guardada'); };
+      if (!pendingFiles.length) { finalize(); return; }
+      let pending = pendingFiles.length;
+      pendingFiles.forEach(inp => {
+        const fk = inp.dataset.hsqFile; const file = inp.files[0]; const r = new FileReader();
+        r.onload = () => { const dataUrl = String(r.result || ''); const mid = uid('HM'); item[fk] = { dataUrl, fileType: file.type, name: file.name }; uploadMedia(mid, dataUrl, id => { if (id) item[fk].mediaId = id; if (--pending <= 0) finalize(); }); };
+        r.readAsDataURL(file);
+      });
+    };
+    document.getElementById('cancel-form').onclick = closeModal;
+    const modal = document.getElementById('app-modal'); modal.classList.add('wide', 'open'); modal.setAttribute('aria-hidden', 'false');
+    loadMediaImages();
   }
 
   function renderMensajero() {
@@ -4429,7 +4613,7 @@ function toggleMode(forceDark) {
     const profile = user.profile || state.session?.profile || '';
     const isAdmin = profile === 'Administrador' || !profile;
     const isCoordinator = profile === 'Coordinador';
-    const allowedTabs = ['miUsuario', ...(isAdmin ? ['clientes', 'usuarios', 'quickers', 'modulos', 'tickets'] : []), ...(isCoordinator ? ['quickers'] : []), 'apariencia'];
+    const allowedTabs = ['miUsuario', ...(isAdmin ? ['clientes', 'usuarios', 'quickers', 'modulos', 'tickets', 'hsq'] : []), ...(isCoordinator ? ['quickers'] : []), 'apariencia'];
     const tab = allowedTabs.includes(state.prefs.configTab) ? state.prefs.configTab : 'miUsuario';
     const navBtn = (id, icon, label) => `<button class="settings-tab ${tab === id ? 'on' : ''}" data-config-tab="${id}"><i class="ti ${icon}"></i><span>${label}</span></button>`;
     const userPhoto = user.avatarUrl ? `<img src="${user.avatarUrl}" alt="${escapeHTML(user.name)}">` : initials(user.name);
@@ -4483,6 +4667,13 @@ function toggleMode(forceDark) {
       ...(state.prefs.ticketRequirementOptions || []).map((r, index) => `<div class="form-field-card"><div><strong>${escapeHTML(r.label)}</strong><br><span class="fp-sub">Personalizado · marcable por el coordinador</span></div><span>Manual</span><div class="row-actions">${iconAction('Eliminar requisito', 'deleteTicketReq', String(index), 'ti-trash')}</div></div>`)
     ].join('');
     const pqrCards = (state.prefs.pqrTypes || []).map((t, index) => `<div class="form-field-card"><div><strong>${escapeHTML(t)}</strong></div><span>Mensajero</span><div class="row-actions">${iconAction('Eliminar tipo', 'deletePqrType', String(index), 'ti-trash')}</div></div>`).join('');
+    const hsqCfgCards = (state.prefs.hsqTypes || []).map(t => `<div class="form-field-card" style="display:block">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px"><strong><i class="ti ${t.icon || 'ti-bell'}"></i> ${escapeHTML(t.label)}</strong><div class="row-actions"><label class="ticket-req-toggle"><input type="checkbox" data-hsq-cfg-enabled="${t.key}" ${t.enabled !== false ? 'checked' : ''}> Activo</label>${iconAction('Eliminar tipo', 'deleteHsqType', t.key, 'ti-trash')}</div></div>
+      <div class="fp-sub" style="margin-bottom:4px">Campos / preguntas</div>
+      <div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:8px">${Object.keys(HSQ_FIELD_DEFS).map(fk => `<label class="ticket-req-toggle"><input type="checkbox" data-hsq-cfg-field="${t.key}:${fk}" ${(t.fields || []).includes(fk) ? 'checked' : ''}> ${escapeHTML(HSQ_FIELD_DEFS[fk].label)}</label>`).join('')}</div>
+      <div class="fp-sub" style="margin-bottom:4px">El mensajero puede</div>
+      <div style="display:flex;flex-wrap:wrap;gap:10px">${['evidence', 'comment', 'error'].map(a => `<label class="ticket-req-toggle"><input type="checkbox" data-hsq-cfg-allow="${t.key}:${a}" ${t[a] ? 'checked' : ''}> ${a === 'evidence' ? 'Evidencia' : a === 'comment' ? 'Comentar' : 'Reportar error'}</label>`).join('')}</div>
+    </div>`).join('');
     const isDarkNow = !document.body.classList.contains('light-mode');
     const aparienciaSection = `<section class="settings-block">
       <div class="settings-block-title">Apariencia</div>
@@ -4529,7 +4720,11 @@ function toggleMode(forceDark) {
         <div class="settings-block-title" style="margin-top:22px">Solicitud / PQR del mensajero</div>
         <div class="settings-block-desc" style="margin-bottom:14px;color:var(--text-2)">Tipos de solicitud que el mensajero puede elegir en la app (Permiso, Queja, PQR…).</div>
         <div class="settings-actions"><button class="dev-btn primary" data-add-pqr-type><i class="ti ti-plus"></i> Agregar tipo</button></div>
-        <div class="form-builder-list">${pqrCards || '<div class="fp-sub">Sin tipos configurados.</div>'}</div></section>`
+        <div class="form-builder-list">${pqrCards || '<div class="fp-sub">Sin tipos configurados.</div>'}</div></section>`,
+      hsq: `<section class="settings-block">
+        <div class="settings-block-desc" style="margin-bottom:14px;color:var(--text-2)">Define qué se puede publicar en HSQ (capacitaciones, comparendos, tránsito, comunicados…), qué campos pide cada uno y qué puede hacer el mensajero.</div>
+        <div class="settings-actions"><button class="dev-btn primary" data-add-hsq-type><i class="ti ti-plus"></i> Agregar tipo de publicación</button></div>
+        <div class="form-builder-list">${hsqCfgCards || '<div class="fp-sub">Sin tipos.</div>'}</div></section>`
     };
     panel('config', 'Configuración', '', '',
       `<div class="settings-shell">
@@ -4539,12 +4734,12 @@ function toggleMode(forceDark) {
           ${(isAdmin || isCoordinator) ? '<div class="settings-section-label">Espacio de trabajo</div>' : ''}
           ${isAdmin ? navBtn('clientes', 'ti-building-store', 'Clientes') + navBtn('usuarios', 'ti-users', 'Usuarios') : ''}
           ${(isAdmin || isCoordinator) ? navBtn('quickers', 'ti-motorbike', 'Quickers') : ''}
-          ${isAdmin ? '<div class="settings-section-label">Módulos</div>' + navBtn('modulos', 'ti-layout-grid-add', 'Módulos') + navBtn('tickets', 'ti-ticket', 'Tickets') : ''}
+          ${isAdmin ? '<div class="settings-section-label">Módulos</div>' + navBtn('modulos', 'ti-layout-grid-add', 'Módulos') + navBtn('tickets', 'ti-ticket', 'Tickets') + navBtn('hsq', 'ti-shield-half', 'HSQ / Alertas') : ''}
           <div class="settings-section-label">Apariencia</div>
           ${navBtn('apariencia', 'ti-palette', 'Apariencia')}
         </aside>
         <main class="settings-main">
-          <div class="settings-title">${tab === 'miUsuario' ? 'Mi usuario' : tab === 'clientes' ? 'Clientes' : tab === 'usuarios' ? 'Usuarios' : tab === 'quickers' ? 'Quickers' : tab === 'tickets' ? 'Tickets' : tab === 'apariencia' ? 'Apariencia' : 'Módulos'}</div>
+          <div class="settings-title">${tab === 'miUsuario' ? 'Mi usuario' : tab === 'clientes' ? 'Clientes' : tab === 'usuarios' ? 'Usuarios' : tab === 'quickers' ? 'Quickers' : tab === 'tickets' ? 'Tickets' : tab === 'hsq' ? 'HSQ / Alertas' : tab === 'apariencia' ? 'Apariencia' : 'Módulos'}</div>
           <div class="settings-desc">${tab === 'miUsuario' ? 'Administra la información de la cuenta con la que ingresaste.' : tab === 'clientes' ? 'Crea clientes, reglas de operación y puntos de venta.' : tab === 'usuarios' ? 'Crea usuarios, perfiles, alcance operativo y permisos.' : tab === 'quickers' ? 'Crea usuarios mensajeros desde matriz de activos y habilita pagos adicionales.' : tab === 'tickets' ? 'Configura las preguntas y listas del formulario de creación de tickets.' : tab === 'apariencia' ? 'Elige el tema visual de la plataforma.' : 'Configura títulos, plantillas y listas que alimentan la malla.'}</div>
           ${sections[tab] || sections.miUsuario}
         </main>
@@ -5423,6 +5618,8 @@ function toggleMode(forceDark) {
     if (actionName === 'viewEvidence') { openEvidenceModal(id); return; }
     if (actionName === 'quickerCarnet') { openQuickerCarnet(id); return; }
     if (actionName === 'quickerDocs') { openQuickerDocs(id); return; }
+    if (actionName === 'hsqEdit') { const p = (state.hsqPublications || []).find(x => x.id === id); if (p) openHsqForm(p.kind, id); return; }
+    if (actionName === 'hsqDelete') { if (!confirm('¿Eliminar esta publicación?')) return; state.hsqPublications = (state.hsqPublications || []).filter(x => x.id !== id); log('HSQ', 'Eliminó publicación', id); saveState('Publicación eliminada'); return; }
     if (actionName === 'quickerActivate') { const item = find('quickers'); if (item) { item.status = 'Activo'; log('Quicker', 'Activó mensajero', id); saveState('Mensajero activado'); } return; }
     if (actionName === 'quickerDeactivate') { const item = find('quickers'); if (item) { item.status = 'Inactivo'; log('Quicker', 'Inactivó mensajero', id); saveState('Mensajero inactivado'); } return; }
     if (actionName === 'viewNoveltyCase') { openNoveltyCaseDetail(id); return; }
@@ -5440,6 +5637,7 @@ function toggleMode(forceDark) {
     if (actionName === 'deleteTicketField') { deleteTicketField(id); return; }
     if (actionName === 'deleteTicketReq') { deleteTicketReq(id); return; }
     if (actionName === 'deletePqrType') { deletePqrType(id); return; }
+    if (actionName === 'deleteHsqType') { deleteHsqType(id); return; }
     if (actionName === 'justifyDelay' || actionName === 'rejectDelay') {
       const item = ensureDelayNovelty(id);
       if (item) {
@@ -5589,6 +5787,14 @@ function toggleMode(forceDark) {
         estadoSolicitud: d.quickGoStatus || (d.quicker ? 'Asignado' : 'Pendiente de asignación')
       }));
       downloadCSV({ quickgo: rows }, 'quickgo');
+      return;
+    }
+    if (collection === 'hsqPublications') {
+      const rows = (state.hsqPublications || []).map(p => {
+        const st = hsqAckStats(p);
+        return { id: p.id, tipo: p.label || p.kind, titulo: p.title, proyectos: (p.projects || []).join('; '), mensajero: p.quicker || '', valor: p.valor || '', infraccion: p.infraction || '', urgencia: p.urgency || '', creadoPor: p.createdByName || '', creado: (p.createdAt || '').slice(0, 16).replace('T', ' '), vistos: `${st.opened}/${st.total}` };
+      });
+      downloadCSV({ hsq: rows }, 'hsq');
       return;
     }
     if (collection === 'tickets') {
@@ -6714,6 +6920,27 @@ function toggleMode(forceDark) {
         closeModal(); log('Configuración', 'Agregó tipo PQR', label); saveState('Tipo agregado');
       });
   }
+  function openHsqTypeForm() {
+    openModal('Nuevo tipo de publicación HSQ', 'Crea un tipo (ej: Llamado de atención). Luego elige sus campos.',
+      `<div class="form-grid"><div class="form-field full"><label>Nombre del tipo</label><input name="label" placeholder="Ej: Llamado de atención" required></div></div>
+       <div class="modal-foot"><button class="dev-btn" type="button" id="cancel-form">Cancelar</button><button class="dev-btn primary" type="submit">Crear</button></div>`,
+      event => {
+        event.preventDefault();
+        const label = (Object.fromEntries(new FormData(event.currentTarget).entries()).label || '').trim();
+        if (!label) { toast('Escribe un nombre'); return; }
+        const key = 'hsq_' + Math.random().toString(36).slice(2, 8);
+        state.prefs.hsqTypes = [...(state.prefs.hsqTypes || []), { key, label, icon: 'ti-bell', fields: ['cover', 'body', 'projects'], evidence: false, comment: true, error: false, enabled: true }];
+        closeModal(); log('Configuración', 'Agregó tipo HSQ', label); saveState('Tipo creado');
+      });
+  }
+  function deleteHsqType(key) {
+    const t = (state.prefs.hsqTypes || []).find(x => x.key === key);
+    if (!t) return;
+    if (!confirm(`¿Eliminar el tipo "${t.label}"?`)) return;
+    state.prefs.hsqTypes = (state.prefs.hsqTypes || []).filter(x => x.key !== key);
+    log('Configuración', 'Eliminó tipo HSQ', key); saveState('Tipo eliminado');
+  }
+
   function deletePqrType(index) {
     const i = Number(index); const list = [...(state.prefs.pqrTypes || [])];
     if (!list[i]) return;
@@ -6798,6 +7025,8 @@ function toggleMode(forceDark) {
     if (addTicketReq) openTicketReqForm();
     const addPqr = event.target.closest('[data-add-pqr-type]');
     if (addPqr) openPqrTypeForm();
+    const addHsqType = event.target.closest('[data-add-hsq-type]');
+    if (addHsqType) openHsqTypeForm();
     const editSelected = event.target.closest('[data-edit-selected-user]');
     if (editSelected) {
       const id = document.querySelector('[data-edit-user-select]')?.value;
@@ -6839,6 +7068,18 @@ function toggleMode(forceDark) {
     if (exp) exportCSV(exp.dataset.export);
     const act = event.target.closest('[data-action]');
     if (act) handleAction(act.dataset.action, act.dataset.id);
+
+    // ── HSQ ──
+    const hsqNew = event.target.closest('[data-hsq-new]');
+    if (hsqNew) { openHsqTypePicker(); return; }
+    const hsqPick = event.target.closest('[data-hsq-pick]');
+    if (hsqPick) { openHsqForm(hsqPick.dataset.hsqPick); return; }
+    const hsqTab = event.target.closest('[data-hsq-tab]');
+    if (hsqTab) { hsqFilters.tab = hsqTab.dataset.hsqTab; renderHSQ(); return; }
+    const hsqExpand = event.target.closest('[data-hsq-expand]');
+    if (hsqExpand) { const b = document.getElementById('hsq-body-' + hsqExpand.dataset.hsqExpand); if (b) { const open = b.style.display === 'none'; b.style.display = open ? 'block' : 'none'; hsqExpand.querySelector('.hsq-chev')?.classList.toggle('up', open); if (open) loadMediaImages(); } return; }
+    const hsqEv = event.target.closest('[data-hsq-evidence]');
+    if (hsqEv) { openMediaViewer(hsqEv.dataset.hsqEvidence); return; }
 
     // ── Quickers ──
     const qShareQR = event.target.closest('[data-open-messenger-qr]');
@@ -7102,6 +7343,14 @@ function toggleMode(forceDark) {
   });
 
   document.addEventListener('change', event => {
+    // ── HSQ: configuración de tipos ──
+    const hcEn = event.target.closest('[data-hsq-cfg-enabled]');
+    if (hcEn) { const t = (state.prefs.hsqTypes || []).find(x => x.key === hcEn.dataset.hsqCfgEnabled); if (t) { t.enabled = hcEn.checked; saveState('Tipo actualizado'); } return; }
+    const hcF = event.target.closest('[data-hsq-cfg-field]');
+    if (hcF) { const [k, fk] = hcF.dataset.hsqCfgField.split(':'); const t = (state.prefs.hsqTypes || []).find(x => x.key === k); if (t) { t.fields = t.fields || []; if (hcF.checked) { if (!t.fields.includes(fk)) t.fields.push(fk); } else t.fields = t.fields.filter(f => f !== fk); saveState('Campos actualizados'); } return; }
+    const hcA = event.target.closest('[data-hsq-cfg-allow]');
+    if (hcA) { const [k, a] = hcA.dataset.hsqCfgAllow.split(':'); const t = (state.prefs.hsqTypes || []).find(x => x.key === k); if (t) { t[a] = hcA.checked; saveState('Permisos actualizados'); } return; }
+
     // ── Quickers: filtros ──
     const qFilter = event.target.closest('[data-quicker-filter]');
     if (qFilter) { quickerFilters[qFilter.dataset.quickerFilter] = qFilter.value; renderQuickers(); return; }

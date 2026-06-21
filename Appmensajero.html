@@ -50,6 +50,7 @@
     .qc-foot{display:flex;align-items:center;justify-content:space-between;padding:11px 16px;background:#F5C518}.qc-estado{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:900;text-transform:uppercase;padding:4px 12px;border-radius:999px;background:#111;color:#22c55e}.qc-estado.off{color:#fca5a5}.qc-emp{font-size:11px;font-weight:800;color:#111}
     .qc-qr-overlay{position:absolute;inset:0;background:rgba(17,17,17,.97);display:none;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:20px}.qc-qr-overlay.show{display:flex}.qc-qr-overlay img{width:220px;height:220px;max-width:90%;object-fit:contain;background:#fff;border-radius:12px;padding:10px}.qc-qr-overlay span{color:#fff;font-size:12px;text-align:center}
     .lunch-toggle{display:flex;align-items:center;justify-content:space-between}
+    .info-head{display:flex;align-items:center;justify-content:space-between;gap:8px;cursor:pointer}.info-cover{width:100%;max-height:200px;object-fit:cover;border-radius:12px;margin:8px 0}.info-body .btn,.info-body textarea{margin-top:8px}
   </style>
 </head>
 <body>
@@ -126,6 +127,15 @@
         </div>
       </section>
 
+      <!-- COMUNICADOS / CAPACITACIONES -->
+      <section class="screen" id="screen-info">
+        <div class="card"><h3 style="margin:0 0 8px"><i class="ti ti-news"></i> Comunicados y capacitaciones</h3><div id="infoList"><p class="muted">Sin publicaciones por ahora.</p></div></div>
+        <div class="card"><h3 style="margin:0 0 8px"><i class="ti ti-message"></i> Dejar un mensaje</h3><p class="muted">Cortes de nómina, sugerencias de la gestión, etc. Llega a tu coordinador.</p>
+          <textarea id="msgText" placeholder="Escribe tu mensaje"></textarea>
+          <button class="btn" id="msgBtn" type="button"><i class="ti ti-send"></i> Enviar mensaje</button>
+        </div>
+      </section>
+
       <!-- SOLICITUDES / PQR -->
       <section class="screen" id="screen-solicitudes">
         <div class="card">
@@ -169,6 +179,7 @@
     <button class="tab on" data-tab="turno"><i class="ti ti-clock"></i><span>Turno</span></button>
     <button class="tab" data-tab="mapa"><i class="ti ti-map-2"></i><span>Mapa</span></button>
     <button class="tab" data-tab="gastos"><i class="ti ti-receipt"></i><span>Gastos</span></button>
+    <button class="tab" data-tab="info"><i class="ti ti-news"></i><span>Comunicados / Capacitaciones</span></button>
     <button class="tab" data-tab="solicitudes"><i class="ti ti-ticket"></i><span>Solicitud / PQR</span></button>
     <button class="tab" data-tab="malla"><i class="ti ti-calendar"></i><span>Mi malla</span></button>
     <button class="tab" data-tab="docs"><i class="ti ti-id-badge-2"></i><span>Perfil y carnet</span></button>
@@ -189,6 +200,7 @@
       if(Array.isArray(s.parkingReports))s.parkingReports=s.parkingReports.map(p=>({...p,photoData:null,dataUrl:null}));
       if(Array.isArray(s.tickets))s.tickets=s.tickets.map(t=>({...t,evidence:(t.evidence||[]).map(e=>({...e,dataUrl:null}))}));
       if(Array.isArray(s.quickers))s.quickers=s.quickers.map(q=>({...q,documents:Object.fromEntries(Object.entries(q.documents||{}).map(([k,v])=>[k,{...v,dataUrl:null}]))}));
+      if(Array.isArray(s.hsqPublications))s.hsqPublications=s.hsqPublications.map(p=>({...p,cover:p.cover?{...p.cover,dataUrl:null}:p.cover,doc:p.doc?{...p.doc,dataUrl:null}:p.doc}));
       return s;}
     function initCloud(){try{const cfg=window.QUICK_FIREBASE_CONFIG;if(!cfg?.enabled||!window.firebase)return;if(!firebase.apps.length)firebase.initializeApp(cfg.firebaseConfig);try{if(firebase.storage)storage=firebase.storage()}catch{}cloudRef=firebase.firestore().collection(cfg.collection||'quick_lastmile').doc(cfg.documentId||'platform_state');cloudRef.onSnapshot(s=>{const remote=s.data()?.state;if(!remote)return;const keep=session;state={...fallback,...remote};localStorage.setItem(KEY,JSON.stringify(state));session=keep;if(session)renderHome(false)})}catch{}}
     function uid(p){return `${p}-${Date.now().toString(36).toUpperCase()}${Math.floor(Math.random()*90+10)}`}
@@ -226,6 +238,23 @@
 
     function renderTimers(){if(!current)return;document.getElementById('turnElapsed').textContent=elapsed(current.realStart,current.realEnd);document.getElementById('lunchElapsed').textContent=elapsed(current.lunchStart,current.lunchEnd)}
     function renderTickets(){const mine=(state.tickets||[]).filter(t=>t.createdByName===session.name);document.getElementById('tkList').innerHTML=mine.length?mine.slice(0,20).map(t=>`<div class="tk"><b>${t.title||''}</b><div class="meta-row"><span>${t.type||''}</span><span class="pill ${/finaliz/i.test(overall(t))?'ok':''}">${overall(t)}</span></div></div>`).join(''):'<p class="muted">Sin solicitudes aún.</p>'}
+    function infoForMe(){const cl=myQuicker().client||'';return (state.hsqPublications||[]).filter(p=>{const pr=p.projects||[];return pr.includes('Todos')||pr.length===0||pr.includes(cl)}).sort((a,b)=>(b.createdAt||'').localeCompare(a.createdAt||''))}
+    function renderInfo(){const box=document.getElementById('infoList');if(!box)return;const items=infoForMe();box.innerHTML=items.length?items.map(p=>{const a=(p.acks&&p.acks[session.name])||{};const seen=!!a.openedAt;const cover=(p.cover&&(p.cover.dataUrl||p.cover.url))?`<img class="info-cover" src="${p.cover.dataUrl||p.cover.url}" alt="">`:(p.cover&&p.cover.mediaId?`<img class="info-cover" data-info-media="${p.cover.mediaId}" alt="">`:'');const al=p.allow||{};return `<div class="tk" data-info-card="${p.id}">
+      <div class="info-head" data-info-open="${p.id}"><b>${p.title||p.label||''}</b><span class="pill ${seen?'ok':''}">${seen?'Visto':'Nuevo'}</span></div>
+      <div class="meta-row"><span>${p.label||p.kind}</span><span>${(p.createdAt||'').slice(0,10)}</span></div>
+      <div class="info-body" id="info-body-${p.id}" style="display:none">
+        ${cover}
+        ${p.urgency?`<span class="pill bad">Urgencia: ${p.urgency}</span>`:''}
+        ${p.valor?`<p class="muted">Valor: $${p.valor} · ${p.infraction||''} · ${p.dateImposicion||''}</p>`:''}
+        ${p.body?`<p style="white-space:pre-wrap;margin:8px 0">${p.body}</p>`:''}
+        ${p.link?`<a class="btn ghost small" href="${p.link}" target="_blank" rel="noopener"><i class="ti ti-external-link"></i> Abrir enlace</a>`:''}
+        ${p.doc&&(p.doc.dataUrl||p.doc.url)?`<a class="btn ghost small" href="${p.doc.dataUrl||p.doc.url}" target="_blank" download><i class="ti ti-download"></i> Documento</a>`:''}
+        ${!seen?`<button class="btn ok" data-info-ack="${p.id}"><i class="ti ti-check"></i> Marcar como recibido</button>`:`<p class="muted">Recibido: ${a.openedAt}</p>`}
+        ${al.evidence?`<label class="btn ghost small"><i class="ti ti-camera"></i> ${a.evidenceMediaId?'Cambiar evidencia':'Adjuntar evidencia'}<input type="file" accept="image/*,.pdf" data-info-evidence="${p.id}" style="display:none"></label>`:''}
+        ${al.comment?`<textarea data-info-comment-input="${p.id}" placeholder="Comentario / seguimiento">${a.comment||''}</textarea><button class="btn ghost small" data-info-comment="${p.id}">Guardar comentario</button>`:''}
+        ${al.error?`<textarea data-info-error-input="${p.id}" placeholder="Reportar error">${a.error||''}</textarea><button class="btn ghost small" data-info-error="${p.id}">Reportar error</button>`:''}
+      </div></div>`}).join(''):'<p class="muted">Sin publicaciones por ahora.</p>'}
+    function hsqAck(id){const p=(state.hsqPublications||[]).find(x=>x.id===id);if(!p)return;p.acks=p.acks||{};if(!p.acks[session.name]||!p.acks[session.name].openedAt){p.acks[session.name]={...(p.acks[session.name]||{}),openedAt:new Date().toLocaleString('es-CO')};const cl=myQuicker().client||'';const coords=(state.users||[]).filter(u=>u.profile==='Coordinador'&&(!u.client||u.client==='Global'||u.client===cl)).map(u=>u.name);state.notifications=state.notifications||[];[p.createdByName,...coords].filter(Boolean).forEach(n=>state.notifications.unshift({id:uid('NT'),to:n,ticketId:null,read:false,at:new Date().toLocaleString('es-CO'),text:`${session.name} abrió "${p.title||p.label}" (${new Date().toLocaleString('es-CO')})`}));save('Marcado como recibido')}renderInfo()}
     function overall(t){const ns=(t.assignees||[]);if(!ns.length)return 'Pendiente';const f=ns.filter(n=>(t.gestion?.[n]?.status)==='Finalizado').length;return f===ns.length?'Finalizado':f>0?'En proceso':'Pendiente'}
 
     function renderHome(camera=true){document.getElementById('login').classList.add('hidden');document.getElementById('home').classList.remove('hidden');document.getElementById('drawer').classList.remove('hidden');document.getElementById('hello').textContent=`Hola, ${session.name.split(' ')[0]}`;document.getElementById('todayLabel').textContent=new Date().toLocaleDateString('es-CO',{weekday:'long',day:'numeric',month:'long'});
@@ -238,7 +267,7 @@
       const lunchOn=client.lunch==='Si';document.getElementById('lunchBlock').classList.toggle('hidden',!lunchOn);
       document.getElementById('scheduleList').innerHTML=list.length?list.map(d=>`<div class="row"><span>${d.date}<br><small class="muted">${d.client} · ${d.point||''}</small></span><strong>${d.status||'Creado'}</strong></div>`).join(''):'<p class="muted">Sin turnos asignados.</p>';
       const plateEl=document.getElementById('plateInput');if(plateEl)plateEl.value=q.plate||'';
-      renderTimers();renderMyState();renderTurnHistory();renderDocs(q);renderTickets();renderCarnet(q);setTimeout(initMap,0)}
+      renderTimers();renderMyState();renderTurnHistory();renderDocs(q);renderTickets();renderInfo();renderCarnet(q);setTimeout(initMap,0)}
 
     function renderMyState(){const el=document.getElementById('myState');if(!el)return;let st='Fuera de turno';if(current){if(current.realStart&&!current.realEnd){st=current.lunchStart&&!current.lunchEnd?'En almuerzo':'En turno'}else if(current.realEnd){st='Turno finalizado'}else{const tol=Number(state.prefs?.ingressGraceMinutes||30);const ps=current.plannedStart;if(ps){const[h,m]=ps.split(':').map(Number);const now=new Date();const plan=new Date();plan.setHours(h,m+tol,0,0);if(now>plan)st='Retraso'}}}el.textContent=st}
     function renderTurnHistory(){const box=document.getElementById('turnHistory');if(!box)return;const evs=(state.evidences||[]).filter(e=>e.quicker===session.name).slice(0,15);box.innerHTML=evs.length?evs.map(e=>`<div class="row"><span>${e.stage||'Registro'}<br><small class="muted">${e.time||''}</small></span><strong style="font-size:11px;color:var(--muted);max-width:140px;text-align:right">${(e.address||'').slice(0,40)}</strong></div>`).join(''):'<p class="muted">Sin registros aún.</p>'}
@@ -329,7 +358,7 @@
     document.getElementById('hambBtn').onclick=()=>setDrawer(true);
     document.getElementById('drawerBackdrop').onclick=()=>setDrawer(false);
     // TABS
-    document.querySelectorAll('[data-tab]').forEach(btn=>btn.onclick=()=>{document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('on',b===btn));document.querySelectorAll('.screen').forEach(s=>s.classList.remove('on'));document.getElementById(`screen-${btn.dataset.tab}`).classList.add('on');setDrawer(false);if(btn.dataset.tab==='mapa')setTimeout(initMap,0);if(btn.dataset.tab==='docs')setTimeout(genQRImages,50)});
+    document.querySelectorAll('[data-tab]').forEach(btn=>btn.onclick=()=>{document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('on',b===btn));document.querySelectorAll('.screen').forEach(s=>s.classList.remove('on'));document.getElementById(`screen-${btn.dataset.tab}`).classList.add('on');setDrawer(false);if(btn.dataset.tab==='mapa')setTimeout(initMap,0);if(btn.dataset.tab==='docs')setTimeout(genQRImages,50);if(btn.dataset.tab==='info')renderInfo()});
     document.getElementById('refreshGps').onclick=()=>locate(gps=>{toast(gps?'GPS actualizado':'GPS no disponible');initMap()});
     document.getElementById('mapStyle').onchange=initMap;
     function kmlLatLngs(){const text=state.prefs?.kmlText||'';const m=text.match(/<coordinates[^>]*>([\s\S]*?)<\/coordinates>/i);if(!m)return[];return m[1].trim().split(/\s+/).map(pair=>{const [lng,lat]=pair.split(',').map(Number);return Number.isFinite(lat)&&Number.isFinite(lng)?[lat,lng]:null}).filter(Boolean).slice(0,400)}
@@ -339,6 +368,16 @@
       if(lastGps)L.circleMarker(here,{radius:9,color:'#22C55E',fillColor:'#22C55E',fillOpacity:.9}).addTo(map).bindPopup(`<strong>Tú</strong><br>${session.name}`);
       const zone=kmlLatLngs();if(zone.length>2){L.polygon(zone,{color:'#F5C518',weight:2,dashArray:'7 5',fillColor:'#F5C518',fillOpacity:.18}).addTo(map);map.fitBounds([[ptLat,ptLng],...zone,...(lastGps?[here]:[])],{padding:[24,24],maxZoom:15});document.getElementById('zoneText').textContent=`Zona: ${state.prefs.kmlName||'cargada'} · Punto: ${pt.name||current?.point||''}`}else{document.getElementById('zoneText').textContent=`Punto: ${pt.name||current?.point||''} · ${pt.address||''}`}}
     document.getElementById('logout').onclick=()=>{if(watchId)navigator.geolocation.clearWatch(watchId);location.reload()};
+    document.getElementById('msgBtn').onclick=()=>{const t=document.getElementById('msgText').value.trim();if(!t){toast('Escribe un mensaje');return}state.messengerMessages=state.messengerMessages||[];state.messengerMessages.unshift({id:uid('MSG'),from:session.name,client:myQuicker().client||'',text:t,at:new Date().toLocaleString('es-CO')});const cl=myQuicker().client||'';const coords=(state.users||[]).filter(u=>u.profile==='Coordinador'&&(!u.client||u.client==='Global'||u.client===cl)).map(u=>u.name);state.notifications=state.notifications||[];coords.forEach(n=>state.notifications.unshift({id:uid('NT'),to:n,ticketId:null,read:false,at:new Date().toLocaleString('es-CO'),text:`Mensaje de ${session.name}: ${t.slice(0,60)}`}));document.getElementById('msgText').value='';save('Mensaje enviado')};
+    document.addEventListener('click',e=>{
+      const open=e.target.closest('[data-info-open]');if(open){const id=open.dataset.infoOpen;const b=document.getElementById('info-body-'+id);if(b){const show=b.style.display==='none';b.style.display=show?'block':'none';if(show){hsqAck(id);document.querySelectorAll('[data-info-media]:not([data-done])').forEach(img=>{img.dataset.done='1';try{firebase.firestore().collection('quick_media').doc(img.dataset.infoMedia).get().then(s=>{if(s.data()&&s.data().data)img.src=s.data().data}).catch(()=>{})}catch(x){}})}}return}
+      const ack=e.target.closest('[data-info-ack]');if(ack){hsqAck(ack.dataset.infoAck);return}
+      const cm=e.target.closest('[data-info-comment]');if(cm){const id=cm.dataset.infoComment;const p=(state.hsqPublications||[]).find(x=>x.id===id);const v=document.querySelector(`[data-info-comment-input="${id}"]`)?.value||'';if(p){p.acks=p.acks||{};p.acks[session.name]={...(p.acks[session.name]||{}),comment:v};save('Comentario guardado')}return}
+      const er=e.target.closest('[data-info-error]');if(er){const id=er.dataset.infoError;const p=(state.hsqPublications||[]).find(x=>x.id===id);const v=document.querySelector(`[data-info-error-input="${id}"]`)?.value||'';if(p){p.acks=p.acks||{};p.acks[session.name]={...(p.acks[session.name]||{}),error:v};save('Error reportado')}return}
+    });
+    document.addEventListener('change',e=>{
+      const ev=e.target.closest('[data-info-evidence]');if(ev&&ev.files&&ev.files[0]){const id=ev.dataset.infoEvidence;const p=(state.hsqPublications||[]).find(x=>x.id===id);if(!p)return;const f=ev.files[0];const r=new FileReader();r.onload=()=>{const data=String(r.result||'');const mid=uid('IM');p.acks=p.acks||{};p.acks[session.name]={...(p.acks[session.name]||{})};uploadMedia(mid,data,id2=>{if(id2)p.acks[session.name].evidenceMediaId=id2;save('Evidencia enviada');renderInfo()})};r.readAsDataURL(f)}
+    });
     setInterval(renderTimers,30000);
     initCloud();
     if(restoreSess()){renderHome();startWatch()}
