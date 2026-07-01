@@ -1358,6 +1358,12 @@
   .qdoc-head { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:4px; }
   .qdoc-view { margin-top:8px; }
   .qdoc-img { width:100%; max-height:150px; object-fit:cover; border-radius:10px; }
+  /* Detalle matriz */
+  .asset-detail { display:grid; grid-template-columns:1fr 1fr; gap:8px 16px; }
+  @media (max-width:640px){ .asset-detail { grid-template-columns:1fr; } }
+  .asset-row { display:flex; justify-content:space-between; gap:10px; border-bottom:1px solid var(--border); padding:8px 2px; font-size:13px; }
+  .asset-row span { color:var(--text-2); }
+  .asset-row strong { color:var(--text-1); text-align:right; word-break:break-word; }
 </style>
 </head>
 <body>
@@ -3460,7 +3466,9 @@ function toggleMode(forceDark) {
       dateIngress: formatDate(row.DateIngress || row['Fecha ingreso']),
       phone: row.Phone || row.Telefono || '',
       cellPhone: row.CelPhone || row.Celular || '',
-      email: row.Email || row.Correo || ''
+      email: row.Email || row.Correo || '',
+      // Toda la información original de la matriz (todas las columnas)
+      raw: { ...row }
     };
   }
 
@@ -3787,16 +3795,65 @@ function toggleMode(forceDark) {
     );
   }
 
+  const matrizFilters = { operacion: 'todos', q: '' };
   function renderMatriz() {
-    const rows = state.assetMatrix.slice(0, 80).map(a => row([
-      escapeHTML(a.cedula), escapeHTML(a.name), escapeHTML(a.city), escapeHTML(a.projectId), escapeHTML(a.projectName),
-      escapeHTML(a.salary), escapeHTML(a.rodamiento), escapeHTML(a.dateIngress), escapeHTML(a.phone || a.cellPhone), escapeHTML(a.email)
-    ]));
-    panel('matriz', 'Matriz de activos', 'Carga la base de personal para autocompletar usuarios mensajeros por cédula.',
-      `<label class="dev-btn"><i class="ti ti-file-spreadsheet"></i> Adjuntar matriz XLSX<input type="file" accept=".xlsx,.xls,.csv" data-asset-matrix-input style="display:none"></label><button class="dev-btn" data-export="assetMatrix">Exportar matriz</button>`,
-      `<div class="dropzone"><strong>Columnas detectadas de la matriz Cafam</strong><span class="fp-sub">ClientId = cédula, ClientName = nombre, Salary = salario, Rodamientos = rodamiento, ProjectId/ProjectName = proyecto, DateIngress = fecha ingreso, Ciudad, Phone/CelPhone y Email.</span><span class="fp-sub">Registros cargados: ${state.assetMatrix.length}</span></div>
-      <div style="margin-top:12px">${table(['Cédula', 'Nombre', 'Ciudad', 'Proyecto', 'Nombre proyecto', 'Salario', 'Rodamiento', 'Fecha ingreso', 'Teléfono', 'Correo'], rows)}</div>`
+    const isAdmin = (currentUser().profile || 'Administrador') === 'Administrador' || !currentUser().profile;
+    const all = state.assetMatrix || [];
+    const ops = [...new Set(all.map(a => a.projectName || a.raw?.ClientName || '').filter(Boolean))].sort();
+    const filtered = all.filter(a => {
+      const opOk = matrizFilters.operacion === 'todos' || (a.projectName || '') === matrizFilters.operacion;
+      const q = matrizFilters.q.trim().toLowerCase();
+      const qOk = !q || [a.cedula, a.name, a.city, a.projectName].join(' ').toLowerCase().includes(q);
+      return opOk && qOk;
+    });
+    const rows = filtered.slice(0, 200).map(a => `<tr class="ticket-row" data-asset-open="${escapeHTML(String(a.cedula))}" style="cursor:pointer">
+      <td><strong>${escapeHTML(String(a.cedula))}</strong></td><td>${escapeHTML(a.name)}</td><td>${escapeHTML(a.city)}</td><td>${escapeHTML(a.projectName)}</td>
+      <td>${escapeHTML(a.dateIngress)}</td><td>${escapeHTML(a.phone || a.cellPhone)}</td><td>${escapeHTML(a.email)}</td>
+    </tr>`).join('');
+    const inS = 'min-height:38px;border:1px solid var(--border);border-radius:10px;background:var(--card-bg);color:var(--text-1);padding:0 10px;font:inherit';
+    const sel = (v, c) => v === c ? 'selected' : '';
+
+    const searchHTML = `<div style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;margin-bottom:14px;padding:14px;border:1px solid var(--border);border-radius:14px;background:var(--card-bg)">
+      <div style="flex:1;min-width:220px"><label class="fp-sub" style="display:block;margin-bottom:4px">Buscar por cédula</label><div style="display:flex;gap:8px"><input id="matriz-cedula" placeholder="Pega la cédula..." style="flex:1;${inS}"><button class="dev-btn primary" data-asset-search><i class="ti ti-search"></i> Ver información</button></div></div>
+    </div>`;
+    const filtersHTML = `<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:14px">
+      <input type="search" data-matriz-filter="q" value="${escapeHTML(matrizFilters.q)}" placeholder="Buscar nombre, cédula, ciudad..." style="flex:1;min-width:200px;${inS}">
+      <select data-matriz-filter="operacion" style="${inS}"><option value="todos">Toda operación</option>${ops.map(o => `<option ${sel(o, matrizFilters.operacion)}>${escapeHTML(o)}</option>`).join('')}</select>
+      ${(matrizFilters.operacion !== 'todos' || matrizFilters.q) ? `<button class="dev-btn" data-matriz-clear style="padding:6px 12px;font-size:12px"><i class="ti ti-x"></i> Limpiar</button>` : ''}
+    </div>`;
+
+    const actions = `${isAdmin ? '<label class="dev-btn primary"><i class="ti ti-file-spreadsheet"></i> Actualizar matriz XLSX<input type="file" accept=".xlsx,.xls,.csv" data-asset-matrix-input style="display:none"></label>' : ''}<button class="dev-btn" data-export="assetMatrix"><i class="ti ti-download"></i> Exportar</button>`;
+    panel('matriz', 'Matriz de activos', `Base de personal (${all.length} colaboradores). ${isAdmin ? 'Solo el administrador puede actualizarla.' : 'Consulta por cédula u operación.'}`,
+      actions,
+      `${searchHTML}${filtersHTML}${all.length ? `<div class="data-table-wrap"><table class="data-table"><thead><tr><th>Cédula</th><th>Nombre</th><th>Ciudad</th><th>Operación</th><th>Fecha ingreso</th><th>Teléfono</th><th>Correo</th></tr></thead><tbody>${rows}</tbody></table></div><div class="fp-sub" style="margin-top:8px">Mostrando ${Math.min(filtered.length, 200)} de ${filtered.length}. Toca una fila o busca por cédula para ver toda la información.</div>` : '<div class="dropzone" style="text-align:center"><strong>Matriz vacía</strong><span class="fp-sub">El administrador debe cargar el archivo XLSX de la matriz de activos.</span></div>'}`
     );
+  }
+
+  const MATRIZ_LABELS = {
+    State: 'Estado', TipoNomina: 'Tipo nómina', NombreTNomina: 'Nombre tipo nómina', PlaceId: 'Place ID', PlaceName: 'Cargo / lugar',
+    ContractNumber: 'N° contrato', ClientId: 'Cédula', ClientName: 'Nombre', Salary: 'Salario', Rodamientos: 'Rodamiento',
+    AuxilioNs: 'Auxilio NS', AuxilioTecno: 'Auxilio tecno', AuxilioComun: 'Auxilio comun', LocationLaborId: 'Location ID', LocationName: 'Ubicación labor',
+    ProjectId: 'Project ID', ProjectName: 'Operación / proyecto', DateIngress: 'Fecha ingreso', DateRetirement: 'Fecha retiro',
+    DaneCiudad: 'DANE ciudad', Ciudad: 'Ciudad', TipoCont: 'Tipo contrato', NombreTcontrat: 'Nombre tipo contrato', TariffRisk: 'Tarifa riesgo',
+    Phone: 'Teléfono', CelPhone: 'Celular', Email: 'Correo', Salud: 'EPS / Salud', Pension: 'Pensión', Riesgos: 'ARL / Riesgos',
+    Cesantias: 'Cesantías', Caja: 'Caja compensación', Empleado_Cobrable: 'Empleado cobrable'
+  };
+  function openAssetDetail(cedula) {
+    const a = findAssetByCedula(cedula);
+    if (!a) { toast('No encontré esa cédula en la matriz'); return; }
+    const raw = a.raw || a;
+    const fmt = v => { if (v === null || v === undefined || v === '') return '—'; if (v instanceof Date) return v.toISOString().slice(0, 10); return String(v); };
+    const entries = Object.entries(raw).filter(([k]) => k !== 'Columna1');
+    const rowsHTML = entries.map(([k, v]) => `<div class="asset-row"><span>${escapeHTML(MATRIZ_LABELS[k] || k)}</span><strong>${escapeHTML(fmt(v))}</strong></div>`).join('');
+    const form = document.getElementById('modal-form');
+    document.getElementById('modal-title').textContent = a.name || 'Colaborador';
+    document.getElementById('modal-subtitle').textContent = `Cédula ${a.cedula} · ${a.projectName || ''}`;
+    form.innerHTML = `<div class="asset-detail">${rowsHTML}</div>
+      <div class="modal-foot"><button class="dev-btn" type="button" id="cancel-form">Cerrar</button></div>`;
+    document.getElementById('cancel-form').onclick = closeModal;
+    const modal = document.getElementById('app-modal');
+    modal.classList.add('wide', 'open');
+    modal.setAttribute('aria-hidden', 'false');
   }
 
   // ════════════════════ SISTEMA DE TICKETS ════════════════════
@@ -7139,6 +7196,14 @@ function toggleMode(forceDark) {
     const hsqEv = event.target.closest('[data-hsq-evidence]');
     if (hsqEv) { openMediaViewer(hsqEv.dataset.hsqEvidence); return; }
 
+    // ── Matriz ──
+    const assetSearch = event.target.closest('[data-asset-search]');
+    if (assetSearch) { const ced = document.getElementById('matriz-cedula')?.value.trim(); if (ced) openAssetDetail(ced); else toast('Pega una cédula'); return; }
+    const assetOpen = event.target.closest('[data-asset-open]');
+    if (assetOpen) { openAssetDetail(assetOpen.dataset.assetOpen); return; }
+    const matrizClear = event.target.closest('[data-matriz-clear]');
+    if (matrizClear) { matrizFilters.operacion = 'todos'; matrizFilters.q = ''; renderMatriz(); return; }
+
     // ── Quickers ──
     const qShareQR = event.target.closest('[data-open-messenger-qr]');
     if (qShareQR) { openMessengerQR(); return; }
@@ -7409,6 +7474,9 @@ function toggleMode(forceDark) {
     const hcA = event.target.closest('[data-hsq-cfg-allow]');
     if (hcA) { const [k, a] = hcA.dataset.hsqCfgAllow.split(':'); const t = (state.prefs.hsqTypes || []).find(x => x.key === k); if (t) { t[a] = hcA.checked; saveState('Permisos actualizados'); } return; }
 
+    // ── Matriz: filtros ──
+    const mFilter = event.target.closest('[data-matriz-filter]');
+    if (mFilter) { matrizFilters[mFilter.dataset.matrizFilter] = mFilter.value; renderMatriz(); return; }
     // ── Quickers: filtros ──
     const qFilter = event.target.closest('[data-quicker-filter]');
     if (qFilter) { quickerFilters[qFilter.dataset.quickerFilter] = qFilter.value; renderQuickers(); return; }
@@ -7566,6 +7634,7 @@ function toggleMode(forceDark) {
       reader.readAsDataURL(file);
     }
     if (event.target.matches('[data-asset-matrix-input]')) {
+      if ((currentUser().profile || 'Administrador') !== 'Administrador') { toast('Solo el administrador puede actualizar la matriz'); event.target.value = ''; return; }
       const file = event.target.files?.[0];
       if (file) parseAssetMatrix(file);
     }
