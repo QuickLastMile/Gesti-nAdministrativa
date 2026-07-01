@@ -10,5 +10,9 @@ service cloud.firestore {
     match /quick_media/{mediaId} {
       allow read, write: if true;
     }
+    // Matriz de activos (documento propio para no cargar el estado principal)
+    match /quick_matrix/{docId} {
+      allow read, write: if true;
+    }
   }
 }

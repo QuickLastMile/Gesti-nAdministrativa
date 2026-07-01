@@ -281,6 +281,10 @@
     cursor: pointer;
     box-shadow: 0 0 0 2px rgba(245,197,24,.3);
   }
+  .user-menu { position:absolute; top:44px; right:0; min-width:180px; background:var(--card-bg); border:1px solid var(--border); border-radius:12px; box-shadow:0 12px 40px rgba(0,0,0,.4); padding:6px; display:none; z-index:60; }
+  .user-menu.open { display:block; }
+  .user-menu-item { width:100%; display:flex; align-items:center; gap:10px; background:none; border:0; color:var(--text-1); font:inherit; font-weight:600; padding:10px 12px; border-radius:9px; cursor:pointer; text-align:left; }
+  .user-menu-item:hover { background:rgba(239,68,68,.12); color:#F87171; }
 
   /* ───── CONTENT AREA ───── */
   #content { flex: 1; overflow-y: auto; padding: 22px 24px; }
@@ -1459,7 +1463,10 @@
         <i class="ti ti-bell"></i>
         <div class="notif-dot"></div>
       </button>
-      <div class="top-avatar" title="Admin Quick">AD</div>
+      <div class="top-avatar-wrap" style="position:relative">
+        <div class="top-avatar" id="top-avatar" title="Cuenta" style="cursor:pointer">AD</div>
+        <div class="user-menu" id="user-menu"><button class="user-menu-item" id="logout-btn" type="button"><i class="ti ti-logout"></i> Cerrar sesión</button></div>
+      </div>
     </div>
 
     <div id="content">
@@ -2026,6 +2033,7 @@ function toggleMode(forceDark) {
   let activeModule = 'mallas';
   let cloudDb = null;
   let cloudStorage = null;
+  let matrixCache = null;
   let cloudUnsubscribe = null;
   let applyingRemoteState = false;
   let cloudSaveTimer = null;
@@ -2320,6 +2328,8 @@ function toggleMode(forceDark) {
         documents: Object.fromEntries(Object.entries(q.documents || {}).map(([k, v]) => [k, { ...v, dataUrl: null }]))
       }));
     }
+    // La matriz de activos va en su propio documento (quick_matrix), no en el estado principal
+    stripped.assetMatrix = [];
     return cleanForFirestore(stripped);
   }
 
@@ -2393,7 +2403,10 @@ function toggleMode(forceDark) {
             }
           });
         });
+        // La matriz vive en su propio documento: no dejar que el estado principal la borre
+        const keepMatrix = matrixCache || (state.assetMatrix && state.assetMatrix.length ? state.assetMatrix : null);
         state = remoteNormalized;
+        if (keepMatrix) state.assetMatrix = keepMatrix;
         state.session = currentSession;
         localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
         cloudStatus = 'Firebase en vivo';
@@ -2404,6 +2417,7 @@ function toggleMode(forceDark) {
         cloudStatus = `Firebase error: ${error.message}`;
         renderCloudStatus();
       });
+      loadMatrixCloud();
     } catch (error) {
       cloudStatus = `Firebase error: ${error.message}`;
       renderCloudStatus();
@@ -3484,8 +3498,10 @@ function toggleMode(forceDark) {
       const ws = wb.Sheets[wb.SheetNames[0]];
       const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
       state.assetMatrix = rows.map(normalizeAssetRow).filter(r => r.cedula && r.name);
+      matrixCache = state.assetMatrix;
       log('Matriz activos', 'Cargó matriz', `${state.assetMatrix.length} registros`);
       saveState('Matriz cargada');
+      saveMatrixCloud();
     };
     reader.readAsArrayBuffer(file);
   }
@@ -4395,6 +4411,30 @@ function toggleMode(forceDark) {
         if (document.getElementById('app-modal')?.classList.contains('open')) openTicketDetail(ticket.id);
       }
     });
+  }
+
+  // La matriz de activos se guarda en su propio documento (evita el límite de 1MB del estado principal)
+  function saveMatrixCloud() {
+    if (!cloudDb) return;
+    try {
+      const rows = state.assetMatrix || [];
+      const size = JSON.stringify(rows).length;
+      if (size > 950000) { toast('Matriz muy grande para sincronizar en la nube; queda en este equipo'); return; }
+      cloudDb.collection('quick_matrix').doc('data').set({ rows, at: Date.now(), by: state.session?.name || '' })
+        .catch(err => console.warn('Error guardando matriz:', err.message));
+    } catch (e) { console.warn('Matriz no sincronizada:', e.message); }
+  }
+  function loadMatrixCloud() {
+    if (!cloudDb) return;
+    cloudDb.collection('quick_matrix').doc('data').onSnapshot(snap => {
+      const rows = snap.data()?.rows;
+      if (Array.isArray(rows)) {
+        matrixCache = rows;
+        state.assetMatrix = rows;
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        if (activeModule === 'matriz') renderMatriz();
+      }
+    }, () => {});
   }
 
   // Capa de medios sobre Firestore (alternativa gratuita a Storage)
@@ -7857,6 +7897,20 @@ function toggleMode(forceDark) {
     touchSession();
     saveState(`Bienvenido ${user.name}`);
     applySession();
+  });
+
+  // Menú de usuario / cerrar sesión
+  document.getElementById('top-avatar')?.addEventListener('click', event => {
+    event.stopPropagation();
+    document.getElementById('user-menu')?.classList.toggle('open');
+  });
+  document.addEventListener('click', () => document.getElementById('user-menu')?.classList.remove('open'));
+  document.getElementById('logout-btn')?.addEventListener('click', () => {
+    state.session = null;
+    localStorage.removeItem(SESSION_KEY);
+    document.getElementById('user-menu')?.classList.remove('open');
+    applySession();
+    toast('Sesión cerrada');
   });
 
   document.querySelectorAll('[data-demo-login]').forEach(btn => {
