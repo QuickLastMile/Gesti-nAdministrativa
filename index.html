@@ -3681,13 +3681,13 @@ function toggleMode(forceDark) {
     } else if (active === 'horas') {
       const rows = hours.map(n => row([
         pill(n.status || 'Pendiente'), escapeHTML(n.date || ''), escapeHTML(n.quicker || n.name || ''), escapeHTML(n.cedula || ''), escapeHTML(n.client || ''), escapeHTML(n.hours || n.amount || ''), escapeHTML(n.justification || n.note || ''),
-        `<div class="row-actions">${iconAction('Ver detalle', 'viewOvertime', n.id, 'ti-eye')}${iconAction('Aprobar', 'approveOvertime', n.id, 'ti-circle-check')}${iconAction('Rechazar', 'rejectOvertime', n.id, 'ti-circle-x')}</div>`
+        `<div class="row-actions">${iconAction('Ver detalle', 'viewOvertime', n.id, 'ti-eye')}${iconAction('Aprobar', 'approveOvertime', n.id, 'ti-circle-check')}${iconAction('Rechazar', 'rejectOvertime', n.id, 'ti-circle-x')}${canDeleteSolicitudes() ? iconAction('Eliminar', 'deleteOvertime', n.id, 'ti-trash') : ''}</div>`
       ]));
       body = table(['Estado', 'Fecha', 'Nombre', 'Cédula', 'Cliente', 'Horas', 'Justificación', 'Acciones'], rows);
     } else if (active === 'adicionales') {
       const rows = adds.map(n => row([
         pill(n.type || 'Adicional'), pill(n.status || 'Pendiente'), escapeHTML(n.date || ''), escapeHTML(n.quicker || ''), escapeHTML(n.cedula || ''), escapeHTML(n.client || ''), escapeHTML(n.point || ''), escapeHTML(n.amount || ''),
-        `<div class="row-actions">${iconAction('Ver soporte', 'viewAdditional', n.id, 'ti-eye')}${iconAction('Aprobar', 'approveAdditional', n.id, 'ti-circle-check')}${iconAction('Rechazar', 'rejectAdditional', n.id, 'ti-circle-x')}</div>`
+        `<div class="row-actions">${iconAction('Ver soporte', 'viewAdditional', n.id, 'ti-eye')}${iconAction('Aprobar', 'approveAdditional', n.id, 'ti-circle-check')}${iconAction('Rechazar', 'rejectAdditional', n.id, 'ti-circle-x')}${canDeleteSolicitudes() ? iconAction('Eliminar', 'deleteAdditional', n.id, 'ti-trash') : ''}</div>`
       ]));
       body = table(['Tipo', 'Estado', 'Fecha', 'Nombre', 'Cédula', 'Cliente', 'Punto', 'Valor', 'Acciones'], rows);
     } else {
@@ -5230,11 +5230,13 @@ function toggleMode(forceDark) {
   function openSupportDetail(collection, id, title) {
     const item = (state[collection] || []).find(x => x.id === id) || state.novelties.find(n => n.id === id);
     if (!item) { toast('No se encontró el registro'); return; }
+    const mediaHTML = hasMedia(item) ? `<div class="form-field full"><label>Soporte / factura adjunta</label><img class="evidence-large" ${mediaAttr(item)} alt="Soporte" style="max-height:340px;object-fit:contain"></div>` : '<div class="form-field full"><label>Soporte</label><div class="fp-sub">Sin archivo adjunto.</div></div>';
     openModal(title, `${item.date || item.createdAt || ''} · ${item.quicker || item.name || ''}`,
       `<div class="form-grid">
+        ${mediaHTML}
         <div class="form-field"><label>Estado</label><select name="status">${['Pendiente','Aprobado','Rechazado','En proceso','Finalizado'].map(v => `<option ${item.status === v ? 'selected' : ''}>${v}</option>`).join('')}</select></div>
         <div class="form-field"><label>Responsable</label><input name="owner" value="${escapeHTML(item.owner || item.gestionOwner || state.session?.name || '')}"></div>
-        <div class="form-field full"><label>Observación</label><textarea name="note">${escapeHTML(item.reviewNote || item.note || '')}</textarea></div>
+        <div class="form-field full"><label>Observación / justificación</label><textarea name="note">${escapeHTML(item.reviewNote || item.note || '')}</textarea></div>
         <div class="form-field full"><label>Información completa</label>${objectDetailsHTML({ ...item, formData: '' })}</div>
       </div><div class="modal-foot"><button class="dev-btn" type="button" id="cancel-form">Cancelar</button><button class="dev-btn primary" type="submit">Guardar</button></div>`,
       event => {
@@ -5247,6 +5249,40 @@ function toggleMode(forceDark) {
         log(title, 'Actualizó registro', item.id);
         saveState('Registro actualizado');
       }, true);
+    loadMediaImages();
+  }
+
+  // Rechazo con justificación obligatoria
+  function openRejectForm(collection, id, label, logEntity) {
+    const item = (state[collection] || []).find(x => x.id === id);
+    if (!item) { toast('No se encontró el registro'); return; }
+    openModal(`Rechazar · ${label}`, 'Indica el motivo del rechazo (obligatorio).',
+      `<div class="form-grid"><div class="form-field full"><label>Justificación del rechazo <span style="color:#ef4444">*</span></label><textarea name="reason" required placeholder="Explica por qué se rechaza"></textarea></div></div>
+       <div class="modal-foot"><button class="dev-btn" type="button" id="cancel-form">Cancelar</button><button class="dev-btn primary" type="submit"><i class="ti ti-circle-x"></i> Rechazar</button></div>`,
+      event => {
+        event.preventDefault();
+        const reason = (Object.fromEntries(new FormData(event.currentTarget).entries()).reason || '').trim();
+        if (!reason) { toast('La justificación es obligatoria'); return; }
+        item.status = 'Rechazado';
+        item.reviewNote = reason;
+        item.rejectReason = reason;
+        item.rejectedBy = state.session?.name || '';
+        item.rejectedAt = todayTime();
+        closeModal();
+        log(logEntity || label, 'Rechazó con justificación', `${id}: ${reason.slice(0, 60)}`);
+        saveState('Registro rechazado');
+      });
+  }
+  function canDeleteSolicitudes() {
+    const p = currentUser().profile || state.session?.profile || '';
+    return !p || p === 'Administrador';
+  }
+  function deleteSupport(collection, id, label) {
+    if (!canDeleteSolicitudes()) { toast('Solo el administrador puede eliminar solicitudes'); return; }
+    if (!confirm('¿Eliminar esta solicitud definitivamente?')) return;
+    state[collection] = (state[collection] || []).filter(x => x.id !== id);
+    log(label || 'Solicitud', 'Eliminó solicitud', id);
+    saveState('Solicitud eliminada');
   }
 
   function isPendingNovelty(item) {
@@ -5658,20 +5694,18 @@ function toggleMode(forceDark) {
         log('Retraso', item.delayStatus, item.id);
       }
     }
-    if (actionName === 'approveOvertime' || actionName === 'rejectOvertime') {
+    if (actionName === 'rejectOvertime') { openRejectForm(state.overtimeReports?.some(x => x.id === id) ? 'overtimeReports' : 'novelties', id, 'Horas extras', 'HorasExtra'); return; }
+    if (actionName === 'approveOvertime') {
       const item = find('overtimeReports') || find('novelties');
-      if (item) {
-        item.status = actionName === 'approveOvertime' ? 'Aprobado' : 'Rechazado';
-        log('HorasExtra', item.status, id);
-      }
+      if (item) { item.status = 'Aprobado'; log('HorasExtra', 'Aprobado', id); }
     }
-    if (actionName === 'approveAdditional' || actionName === 'rejectAdditional') {
+    if (actionName === 'rejectAdditional') { openRejectForm(state.parkingReports?.some(x => x.id === id) ? 'parkingReports' : 'novelties', id, 'Adicional', 'Adicional'); return; }
+    if (actionName === 'approveAdditional') {
       const item = find('parkingReports') || find('novelties');
-      if (item) {
-        item.status = actionName === 'approveAdditional' ? 'Aprobado' : 'Rechazado';
-        log('Adicional', item.status, id);
-      }
+      if (item) { item.status = 'Aprobado'; log('Adicional', 'Aprobado', id); }
     }
+    if (actionName === 'deleteOvertime') { deleteSupport('overtimeReports', id, 'Horas extras'); return; }
+    if (actionName === 'deleteAdditional') { deleteSupport('parkingReports', id, 'Adicional'); return; }
     if (actionName === 'deleteMessenger') {
       const q = find('quickers');
       if (q && confirm(`¿Eliminar mensajero ${q.name}?`)) {
@@ -5756,8 +5790,9 @@ function toggleMode(forceDark) {
     if (actionName === 'blockQuicker') { const item = find('quickers'); item.status = 'Bloqueado'; log('Quicker', 'Bloqueó Quicker', id); }
     if (actionName === 'approveEvidence') { const item = find('evidences'); item.status = 'Aprobada'; log('Evidencia', 'Aprobó evidencia', id); }
     if (actionName === 'rejectEvidence') { const item = find('evidences'); item.status = 'Rechazada'; log('Evidencia', 'Rechazó evidencia', id); }
-    if (actionName === 'approveParking') { const item = find('parkingReports'); item.status = 'Aprobado'; log('Parqueadero', 'Aprobó parqueadero', id); }
-    if (actionName === 'rejectParking') { const item = find('parkingReports'); item.status = 'Rechazado'; log('Parqueadero', 'Rechazó parqueadero', id); }
+    if (actionName === 'approveParking') { const item = find('parkingReports'); if (item) { item.status = 'Aprobado'; log('Parqueadero', 'Aprobó parqueadero', id); } }
+    if (actionName === 'rejectParking') { openRejectForm('parkingReports', id, 'Parqueadero', 'Parqueadero'); return; }
+    if (actionName === 'deleteParking') { deleteSupport('parkingReports', id, 'Parqueadero'); return; }
     if (actionName === 'processCase') { const item = find('cases'); item.status = 'En proceso'; log('CasoAdmin', 'Caso en proceso', id); }
     if (actionName === 'closeCase') { const item = find('cases'); item.status = 'Cerrado'; log('CasoAdmin', 'Cerró caso', id); }
     if (actionName === 'createProcessFromMalla') {
