@@ -2155,7 +2155,11 @@ function toggleMode(forceDark) {
     next.gestionRows = value?.gestionRows || [];
     next.overtimeReports = value?.overtimeReports || [];
     next.locationPings = value?.locationPings || [];
-    next.mapZones = Array.isArray(value?.mapZones) ? value.mapZones : [];
+    next.mapZones = (Array.isArray(value?.mapZones) ? value.mapZones : []).map(z => {
+      let polygons = Array.isArray(z.polygons) ? z.polygons : [];
+      if (!polygons.length && z.polygonsJson) { try { polygons = JSON.parse(z.polygonsJson); } catch (e) { polygons = []; } }
+      return { ...z, polygons };
+    });
     next.calendarEvents = value?.calendarEvents || [];
     next.workNotes = value?.workNotes || [];
     next.tickets = (value?.tickets || []).map(t => {
@@ -2332,6 +2336,10 @@ function toggleMode(forceDark) {
     }
     // La matriz de activos va en su propio documento (quick_matrix), no en el estado principal
     stripped.assetMatrix = [];
+    // Firestore no admite arrays anidados: codificar los polígonos de las zonas como texto JSON
+    if (Array.isArray(stripped.mapZones)) {
+      stripped.mapZones = stripped.mapZones.map(z => ({ ...z, polygonsJson: JSON.stringify(z.polygons || []), polygons: [] }));
+    }
     return cleanForFirestore(stripped);
   }
 
