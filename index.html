@@ -1998,6 +1998,7 @@ function toggleMode(forceDark) {
   let cloudStatus = FIREBASE_SETTINGS.enabled ? 'Conectando Firebase...' : 'Modo local';
   let adminLeafletMap = null;
   let adminMapView = null;
+  let adminOverlayLayer = null;
   const attachmentPreviewStore = {};
 
   const seed = {
@@ -2249,6 +2250,22 @@ function toggleMode(forceDark) {
     toast(message);
   }
 
+  // Re-renderiza el módulo activo conservando la posición de scroll (vertical y horizontal).
+  // Se usa cuando llega una actualización remota de Firebase para que la vista del usuario
+  // no salte al inicio mientras revisa una tabla.
+  function rerenderPreservingScroll() {
+    const content = document.getElementById('content');
+    const tableWrap = document.querySelector(`#page-${activeModule} .data-table-wrap`);
+    const keep = { top: content?.scrollTop || 0, left: tableWrap?.scrollLeft || 0 };
+    renderCurrentModule();
+    requestAnimationFrame(() => {
+      const nextContent = document.getElementById('content');
+      const nextWrap = document.querySelector(`#page-${activeModule} .data-table-wrap`);
+      if (nextContent) nextContent.scrollTop = keep.top;
+      if (nextWrap) nextWrap.scrollLeft = keep.left;
+    });
+  }
+
   function cloudDocRef() {
     if (!cloudDb) return null;
     return cloudDb.collection(FIREBASE_SETTINGS.collection || 'quick_lastmile').doc(FIREBASE_SETTINGS.documentId || 'platform_state');
@@ -2462,7 +2479,15 @@ function toggleMode(forceDark) {
           cloudHydrated = true;
           cloudStatus = 'Firebase en vivo';
           if (!wasHydrated || activeHashBefore !== moduleStateHash(activeModule, state)) {
-            renderCurrentModule();
+            if (wasHydrated && activeModule === 'mapa' && adminLeafletMap) {
+              // Actualiza marcadores del mapa en vivo SIN destruirlo ni recentrarlo,
+              // para no interrumpir al usuario mientras arrastra o hace zoom.
+              updateMapLive();
+              updateNavBadges();
+              updateNotifDot();
+            } else {
+              rerenderPreservingScroll();
+            }
           } else {
             updateNavBadges();
             updateNotifDot();
@@ -3441,7 +3466,9 @@ function toggleMode(forceDark) {
     return polys;
   }
 
-  function renderMapa() {
+  // Calcula todos los datos derivados del mapa (zonas, pings, alertas, puntos de venta).
+  // Compartido por renderMapa (render completo) y updateMapLive (actualización en vivo).
+  function computeMapData() {
     const zonesAll = zonesVisibleTo();
     const ops = [...new Set((state.mapZones || []).map(z => z.operation).filter(Boolean))].sort();
     const zones = mapFilters.operacion === 'todos' ? zonesAll : zonesAll.filter(z => z.operation === mapFilters.operacion);
@@ -3460,6 +3487,33 @@ function toggleMode(forceDark) {
       return { pg, cl, status: pingInZones(pg, zonesForOp) ? 'dentro' : 'fuera' };
     });
     const outCount = alerts.filter(a => a.status === 'fuera').length;
+    // Mensajeros activos de la(s) operación(es) visible(s)
+    const opsVisibleSet = mapIsAdmin()
+      ? (mapFilters.operacion === 'todos' ? null : new Set([mapFilters.operacion]))
+      : new Set(zonesAll.map(z => z.operation).filter(Boolean));
+    const activeMsgrs = (state.quickers || []).filter(q => (q.status || 'Activo') === 'Activo' && (!opsVisibleSet || opsVisibleSet.has(q.client)));
+    // Puntos de venta desde la configuración de la operación (nombre + dirección)
+    const cps = clientPointMarkers().filter(p => {
+      if (opsVisibleSet && !opsVisibleSet.has(p.operation)) return false;
+      return true;
+    });
+    const located = cps.filter(p => Number.isFinite(p.lat) && Number.isFinite(p.lng));
+    const pending = cps.length - located.length;
+    return { zonesAll, ops, zones, pings, alerts, outCount, opsVisibleSet, activeMsgrs, cps, located, pending };
+  }
+
+  // Actualiza el mapa en vivo (marcadores/zonas/pings) sin reconstruir el panel ni destruir
+  // la instancia Leaflet, conservando la vista actual (pan/zoom) del usuario.
+  function updateMapLive() {
+    const el = document.getElementById('admin-leaflet-map');
+    if (!adminLeafletMap || !el || !document.body.contains(el)) { renderMapa(); return; }
+    const d = computeMapData();
+    drawAdminMapOverlays(adminLeafletMap, d.zones, d.pings, d.alerts, d.located);
+  }
+
+  function renderMapa() {
+    const mapData = computeMapData();
+    const { zonesAll, ops, zones, pings, alerts, outCount } = mapData;
 
     const kpisHTML = `<div class="kpi-row module-kpi-row" style="margin-bottom:16px">
       <div class="kpi-card q-accent"><i class="ti ti-map-2 kpi-icon"></i><div class="kpi-label">Zonas registradas</div><div class="kpi-value yellow">${zonesAll.length}</div><div class="kpi-delta">${ops.length} operación(es)</div></div>
@@ -3469,10 +3523,7 @@ function toggleMode(forceDark) {
     </div>`;
 
     // Mensajeros activos de la(s) operación(es) visible(s), con su estado de ubicación
-    const opsVisibleSet = mapIsAdmin()
-      ? (mapFilters.operacion === 'todos' ? null : new Set([mapFilters.operacion]))
-      : new Set(zonesAll.map(z => z.operation).filter(Boolean));
-    const activeMsgrs = (state.quickers || []).filter(q => (q.status || 'Activo') === 'Activo' && (!opsVisibleSet || opsVisibleSet.has(q.client)));
+    const { opsVisibleSet, activeMsgrs } = mapData;
     const statusFor = name => { const a = alerts.find(x => x.pg.quicker === name); return a ? a.status : 'offline'; };
     const sidePeople = activeMsgrs.length ? activeMsgrs.map(q => {
       const st = statusFor(q.name);
@@ -3498,12 +3549,7 @@ function toggleMode(forceDark) {
     const zoneList = zonesAll.length ? zonesAll.map(z => `<div class="row"><span><strong>${escapeHTML(z.name)}</strong><br><small class="fp-sub">${escapeHTML(z.operation || 'Sin operación')} · Coord: ${escapeHTML(z.coordinator || '—')} · ${(z.polygons || []).length} polígono(s)</small></span>${(mapIsAdmin() || z.coordinator === currentUser().name) ? `<button class="mini-action" data-zone-delete="${z.id}"><i class="ti ti-trash"></i></button>` : ''}</div>`).join('') : '<p class="fp-sub">No hay zonas registradas. Sube un KML/KMZ.</p>';
 
     // Puntos de venta desde la configuración de la operación (nombre + dirección)
-    const cps = clientPointMarkers().filter(p => {
-      if (opsVisibleSet && !opsVisibleSet.has(p.operation)) return false;
-      return true;
-    });
-    const located = cps.filter(p => Number.isFinite(p.lat) && Number.isFinite(p.lng));
-    const pending = cps.length - located.length;
+    const { cps, located, pending } = mapData;
 
     panel('mapa', 'Mapa en Vivo', 'Zonas por operación (KML/KMZ), puntos de venta de la operación, ubicación de mensajeros y alertas de salida de zona.',
       `<label class="dev-btn primary"><i class="ti ti-map-plus"></i> Zona (KML/KMZ)<input type="file" accept=".kml,.kmz" data-zone-file style="display:none"></label>`,
@@ -3543,7 +3589,7 @@ function toggleMode(forceDark) {
     const next = () => {
       if (idx >= batch.length) {
         geocodeBusy = false;
-        if (changed) { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); scheduleCloudSave(); if (activeModule === 'mapa') renderMapa(); }
+        if (changed) { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); scheduleCloudSave(); if (activeModule === 'mapa') updateMapLive(); }
         return;
       }
       const p = batch[idx++];
@@ -3559,6 +3605,37 @@ function toggleMode(forceDark) {
     next();
   }
 
+  // Dibuja/redibuja zonas, puntos de venta y pings en una capa reutilizable (adminOverlayLayer)
+  // sobre el mapa existente. Devuelve los límites para un fitBounds inicial. No toca la vista.
+  function drawAdminMapOverlays(map, zones, pings, alerts, salePoints) {
+    if (!adminOverlayLayer || !map.hasLayer(adminOverlayLayer)) {
+      adminOverlayLayer = L.layerGroup().addTo(map);
+    }
+    adminOverlayLayer.clearLayers();
+    const bounds = [];
+    (zones || []).forEach(z => (z.polygons || []).forEach(poly => {
+      if (poly.length < 3) return;
+      L.polygon(poly, { color: '#F5C518', weight: 2, fillColor: '#F5C518', fillOpacity: .14 }).addTo(adminOverlayLayer).bindPopup(`<strong>${escapeHTML(z.name)}</strong><br>${escapeHTML(z.operation || '')}`);
+      poly.forEach(p => bounds.push(p));
+    }));
+    // Puntos de venta de la operación (marcadores tipo tienda)
+    (salePoints || []).forEach(pt => {
+      if (!Number.isFinite(pt.lat) || !Number.isFinite(pt.lng)) return;
+      const icon = L.divIcon({ className: '', html: `<span style="display:grid;place-items:center;width:24px;height:24px;border-radius:7px;background:#1E5CA8;color:#fff;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.5);font-size:13px">🏪</span>`, iconSize: [24, 24] });
+      L.marker([pt.lat, pt.lng], { icon }).addTo(adminOverlayLayer).bindPopup(`<strong>${escapeHTML(pt.name || 'Punto')}</strong><br>${escapeHTML(pt.operation || '')}${pt.address ? '<br>' + escapeHTML(pt.address) : ''}`);
+      bounds.push([pt.lat, pt.lng]);
+    });
+    (pings || []).forEach(pg => {
+      if (!Number.isFinite(pg.lat) || !Number.isFinite(pg.lng)) return;
+      const a = (alerts || []).find(x => x.pg === pg);
+      const color = a?.status === 'fuera' ? '#EF4444' : a?.status === 'sin-zona' ? '#F59E0B' : '#22C55E';
+      const icon = L.divIcon({ className: '', html: `<span style="width:16px;height:16px;display:block;border-radius:50%;background:${color};border:3px solid #111;box-shadow:0 0 0 8px ${color}33"></span>`, iconSize: [16, 16] });
+      L.marker([pg.lat, pg.lng], { icon }).addTo(adminOverlayLayer).bindPopup(`<strong>${escapeHTML(pg.quicker)}</strong><br>${escapeHTML(pg.client || '')}<br>${escapeHTML(pg.time || '')}<br>${a?.status === 'fuera' ? '<b style="color:#EF4444">FUERA DE ZONA</b>' : a?.status === 'sin-zona' ? 'Sin zona asignada' : 'En zona'}`);
+      bounds.push([pg.lat, pg.lng]);
+    });
+    return bounds;
+  }
+
   function initAdminMap(zones, pings, alerts, salePoints) {
     const el = document.getElementById('admin-leaflet-map');
     if (!el) return;
@@ -3570,6 +3647,7 @@ function toggleMode(forceDark) {
         adminLeafletMap.remove();
       } catch (error) {}
       adminLeafletMap = null;
+      adminOverlayLayer = null;
     }
     if (el._leaflet_id) el._leaflet_id = null;
     el.innerHTML = '';
@@ -3584,27 +3662,7 @@ function toggleMode(forceDark) {
     const st = state.prefs.mapStyle || 'hybrid';
     (st === 'road' ? road : st === 'satellite' ? satellite : hybrid).addTo(map);
     L.control.layers({ 'Satelital + direcciones': hybrid, 'Satelital': satellite, 'Mapa normal': road }, {}, { position: 'topleft' }).addTo(map);
-    const bounds = [];
-    zones.forEach(z => (z.polygons || []).forEach(poly => {
-      if (poly.length < 3) return;
-      L.polygon(poly, { color: '#F5C518', weight: 2, fillColor: '#F5C518', fillOpacity: .14 }).addTo(map).bindPopup(`<strong>${escapeHTML(z.name)}</strong><br>${escapeHTML(z.operation || '')}`);
-      poly.forEach(p => bounds.push(p));
-    }));
-    // Puntos de venta de la operación (marcadores tipo tienda)
-    (salePoints || []).forEach(pt => {
-      if (!Number.isFinite(pt.lat) || !Number.isFinite(pt.lng)) return;
-      const icon = L.divIcon({ className: '', html: `<span style="display:grid;place-items:center;width:24px;height:24px;border-radius:7px;background:#1E5CA8;color:#fff;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.5);font-size:13px">🏪</span>`, iconSize: [24, 24] });
-      L.marker([pt.lat, pt.lng], { icon }).addTo(map).bindPopup(`<strong>${escapeHTML(pt.name || 'Punto')}</strong><br>${escapeHTML(pt.operation || '')}${pt.address ? '<br>' + escapeHTML(pt.address) : ''}`);
-      bounds.push([pt.lat, pt.lng]);
-    });
-    (pings || []).forEach(pg => {
-      if (!Number.isFinite(pg.lat) || !Number.isFinite(pg.lng)) return;
-      const a = (alerts || []).find(x => x.pg === pg);
-      const color = a?.status === 'fuera' ? '#EF4444' : a?.status === 'sin-zona' ? '#F59E0B' : '#22C55E';
-      const icon = L.divIcon({ className: '', html: `<span style="width:16px;height:16px;display:block;border-radius:50%;background:${color};border:3px solid #111;box-shadow:0 0 0 8px ${color}33"></span>`, iconSize: [16, 16] });
-      L.marker([pg.lat, pg.lng], { icon }).addTo(map).bindPopup(`<strong>${escapeHTML(pg.quicker)}</strong><br>${escapeHTML(pg.client || '')}<br>${escapeHTML(pg.time || '')}<br>${a?.status === 'fuera' ? '<b style="color:#EF4444">FUERA DE ZONA</b>' : a?.status === 'sin-zona' ? 'Sin zona asignada' : 'En zona'}`);
-      bounds.push([pg.lat, pg.lng]);
-    });
+    const bounds = drawAdminMapOverlays(map, zones, pings, alerts, salePoints);
     if (bounds.length && !savedView) map.fitBounds(bounds, { padding: [30, 30], maxZoom: 14 });
     setTimeout(() => {
       const remember = () => {
