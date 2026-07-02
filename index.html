@@ -1993,8 +1993,11 @@ function toggleMode(forceDark) {
   let cloudUnsubscribe = null;
   let applyingRemoteState = false;
   let cloudHydrated = false;
+  let lastRemoteStateHash = '';
   let cloudSaveTimer = null;
   let cloudStatus = FIREBASE_SETTINGS.enabled ? 'Conectando Firebase...' : 'Modo local';
+  let adminLeafletMap = null;
+  let adminMapView = null;
   const attachmentPreviewStore = {};
 
   const seed = {
@@ -2077,7 +2080,7 @@ function toggleMode(forceDark) {
   window.nav = function(id, el) {
     activeModule = id;
     nativeNav(id, el);
-    renderAll();
+    renderCurrentModule();
   };
 
   function loadState() {
@@ -2230,13 +2233,18 @@ function toggleMode(forceDark) {
     const keep = { top: content?.scrollTop || 0, left: tableWrap?.scrollLeft || 0 };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     touchSession();
-    renderAll();
-    requestAnimationFrame(() => {
-      const nextContent = document.getElementById('content');
-      const nextWrap = document.querySelector(`#page-${activeModule} .data-table-wrap`);
-      if (nextContent) nextContent.scrollTop = keep.top;
-      if (nextWrap) nextWrap.scrollLeft = keep.left;
-    });
+    if (options.render !== false) {
+      renderCurrentModule();
+      requestAnimationFrame(() => {
+        const nextContent = document.getElementById('content');
+        const nextWrap = document.querySelector(`#page-${activeModule} .data-table-wrap`);
+        if (nextContent) nextContent.scrollTop = keep.top;
+        if (nextWrap) nextWrap.scrollLeft = keep.left;
+      });
+    } else {
+      updateNavBadges();
+      updateNotifDot();
+    }
     if (!applyingRemoteState && options.syncCloud !== false) scheduleCloudSave();
     toast(message);
   }
@@ -2300,6 +2308,58 @@ function toggleMode(forceDark) {
     return cleanForFirestore(stripped);
   }
 
+  function stableStateHash(value) {
+    try {
+      return JSON.stringify(cleanForFirestore(value || {}));
+    } catch (error) {
+      return `${Date.now()}`;
+    }
+  }
+
+  function moduleStateSlice(moduleId, source = state) {
+    const prefs = source.prefs || {};
+    const prefsPick = keys => Object.fromEntries(keys.map(k => [k, prefs[k]]));
+    const slices = {
+      dashboard: source,
+      mallas: {
+        availabilities: source.availabilities,
+        clients: source.clients,
+        quickers: source.quickers,
+        prefs: prefsPick(['mallaColumns', 'mallaLists', 'mallaViewDate', 'ingressGraceMinutes'])
+      },
+      mapa: {
+        mapZones: source.mapZones,
+        mapPoints: source.mapPoints,
+        locationPings: source.locationPings,
+        quickers: source.quickers,
+        clients: source.clients,
+        prefs: prefsPick(['mapStyle', 'mapQuicker', 'mapZone', 'mapFilter'])
+      },
+      novedades: {
+        novelties: source.novelties,
+        parkingReports: source.parkingReports,
+        overtimeReports: source.overtimeReports,
+        availabilities: source.availabilities,
+        prefs: prefsPick(['novedadesTab', 'novedadesFilterMode', 'novedadesFilterDate', 'novedadesFilterTipo', 'novedadesFilterGestion'])
+      },
+      tickets: { tickets: source.tickets, users: source.users },
+      quickers: { quickers: source.quickers, users: source.users, clients: source.clients },
+      matriz: { assetMatrix: source.assetMatrix },
+      hsq: { hsqReports: source.hsqReports, hsqPublications: source.hsqPublications, prefs: prefsPick(['hsqTypes']) },
+      gestion: { gestionRows: source.gestionRows, prefs: prefsPick(['gestionChartConfig', 'gestionUploadedFile']) },
+      casos: { cases: source.cases },
+      reportes: source,
+      calendario: { calendarEvents: source.calendarEvents },
+      archivos: { files: source.files, folders: source.folders },
+      config: { clients: source.clients, users: source.users, quickers: source.quickers, prefs: source.prefs }
+    };
+    return slices[moduleId] || source;
+  }
+
+  function moduleStateHash(moduleId, source = state) {
+    return stableStateHash(moduleStateSlice(moduleId, source));
+  }
+
   function firebaseConfigReady() {
     const cfg = FIREBASE_SETTINGS.firebaseConfig || {};
     return FIREBASE_SETTINGS.enabled && cfg.apiKey && !String(cfg.apiKey).includes('PEGAR_') && cfg.projectId && !String(cfg.projectId).includes('PEGAR_');
@@ -2348,9 +2408,17 @@ function toggleMode(forceDark) {
         }
         const remote = snapshot.data()?.state;
         if (!remote) return;
+        const remoteHash = stableStateHash(remote);
+        if (cloudHydrated && remoteHash === lastRemoteStateHash) {
+          cloudStatus = 'Firebase en vivo';
+          renderCloudStatus();
+          return;
+        }
         applyingRemoteState = true;
         try {
           const currentSession = state.session;
+          const wasHydrated = cloudHydrated;
+          const activeHashBefore = moduleStateHash(activeModule, state);
           const remoteNormalized = normalizeState(remote);
           // Preservar entradas locales que aún no llegaron a Firebase.
           // Solo se hace después de hidratar para no subir una copia vieja de localStorage.
@@ -2390,9 +2458,15 @@ function toggleMode(forceDark) {
           if (keepMatrix) state.assetMatrix = keepMatrix;
           state.session = currentSession;
           localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+          lastRemoteStateHash = remoteHash;
           cloudHydrated = true;
           cloudStatus = 'Firebase en vivo';
-          renderAll();
+          if (!wasHydrated || activeHashBefore !== moduleStateHash(activeModule, state)) {
+            renderCurrentModule();
+          } else {
+            updateNavBadges();
+            updateNotifDot();
+          }
           renderCloudStatus();
         } finally {
           applyingRemoteState = false;
@@ -3489,9 +3563,19 @@ function toggleMode(forceDark) {
     const el = document.getElementById('admin-leaflet-map');
     if (!el) return;
     if (!window.L) { el.innerHTML = '<div class="map-caption" style="padding:20px">Mapa no cargó. Revisa la conexión a internet.</div>'; return; }
+    if (adminLeafletMap) {
+      try {
+        const center = adminLeafletMap.getCenter();
+        adminMapView = { lat: center.lat, lng: center.lng, zoom: adminLeafletMap.getZoom() };
+        adminLeafletMap.remove();
+      } catch (error) {}
+      adminLeafletMap = null;
+    }
     if (el._leaflet_id) el._leaflet_id = null;
     el.innerHTML = '';
-    const map = L.map(el, { zoomControl: true }).setView([4.711, -74.072], 10);
+    const savedView = adminMapView;
+    const map = L.map(el, { zoomControl: true }).setView(savedView ? [savedView.lat, savedView.lng] : [4.711, -74.072], savedView?.zoom || 10);
+    adminLeafletMap = map;
     const road = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '&copy; OpenStreetMap' });
     const satellite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19, attribution: 'Tiles &copy; Esri' });
     // Satelital con etiquetas de direcciones/localidades (capa base + referencia)
@@ -3521,7 +3605,17 @@ function toggleMode(forceDark) {
       L.marker([pg.lat, pg.lng], { icon }).addTo(map).bindPopup(`<strong>${escapeHTML(pg.quicker)}</strong><br>${escapeHTML(pg.client || '')}<br>${escapeHTML(pg.time || '')}<br>${a?.status === 'fuera' ? '<b style="color:#EF4444">FUERA DE ZONA</b>' : a?.status === 'sin-zona' ? 'Sin zona asignada' : 'En zona'}`);
       bounds.push([pg.lat, pg.lng]);
     });
-    if (bounds.length) map.fitBounds(bounds, { padding: [30, 30], maxZoom: 14 });
+    if (bounds.length && !savedView) map.fitBounds(bounds, { padding: [30, 30], maxZoom: 14 });
+    setTimeout(() => {
+      const remember = () => {
+        try {
+          const center = map.getCenter();
+          adminMapView = { lat: center.lat, lng: center.lng, zoom: map.getZoom() };
+        } catch (error) {}
+      };
+      remember();
+      map.on('moveend zoomend', remember);
+    }, 0);
     setTimeout(() => map.invalidateSize(), 80);
   }
 
@@ -5588,6 +5682,29 @@ function toggleMode(forceDark) {
     renderCalendario();
     renderArchivos();
     renderConfig();
+    updateNavBadges();
+    updateNotifDot();
+    requestAnimationFrame(loadMediaImages);
+  }
+
+  function renderCurrentModule() {
+    const renderers = {
+      dashboard: renderDashboard,
+      mallas: renderMallas,
+      mapa: renderMapa,
+      novedades: renderNovedades,
+      tickets: renderTickets,
+      quickers: renderQuickers,
+      matriz: renderMatriz,
+      hsq: renderHSQ,
+      gestion: renderGestion,
+      casos: renderCasos,
+      reportes: renderReportes,
+      calendario: renderCalendario,
+      archivos: renderArchivos,
+      config: renderConfig
+    };
+    (renderers[activeModule] || renderDashboard)();
     updateNavBadges();
     updateNotifDot();
     requestAnimationFrame(loadMediaImages);
@@ -7895,7 +8012,7 @@ function toggleMode(forceDark) {
       if (item) {
         item.custom = { ...(item.custom || {}), [key]: event.target.value };
         log('Malla', 'Actualizó campo personalizado', key);
-        saveState('Campo actualizado');
+        saveState('Campo actualizado', { render: false });
       }
     }
     if (event.target.matches('[data-malla-input]')) {
@@ -7903,7 +8020,7 @@ function toggleMode(forceDark) {
       if (!item) return;
       item[event.target.dataset.mallaField] = event.target.value;
       log('Malla', `Actualizó ${event.target.dataset.mallaField}`, item.id);
-      saveState('Malla actualizada');
+      saveState('Malla actualizada', { render: false });
     }
     if (event.target.matches('[data-malla-select]')) {
       const item = state.availabilities.find(d => d.id === event.target.dataset.mallaSelect);
@@ -7936,7 +8053,7 @@ function toggleMode(forceDark) {
         item.status = item.quicker ? item.status : 'Pendiente asignación';
       }
       log('Malla', `Actualizó ${event.target.dataset.mallaField}`, item.id);
-      saveState('Malla actualizada');
+      saveState('Malla actualizada', { render: ['client', 'contractType', 'managementType'].includes(field) });
     }
     if (event.target.matches('[data-novelty-type]')) {
       const id = event.target.dataset.noveltyType;
