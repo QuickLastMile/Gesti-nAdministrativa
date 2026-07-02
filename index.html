@@ -3317,7 +3317,9 @@ function toggleMode(forceDark) {
   }
   function latestPings() {
     const m = {};
-    (state.locationPings || []).forEach(p => { if (p.quicker && !m[p.quicker]) m[p.quicker] = p; });
+    const activos = new Set((state.quickers || []).filter(q => (q.status || 'Activo') === 'Activo').map(q => q.name));
+    // Solo mensajeros que existen y están activos (evita pings viejos de nombres renombrados/eliminados)
+    (state.locationPings || []).forEach(p => { if (p.quicker && activos.has(p.quicker) && !m[p.quicker]) m[p.quicker] = p; });
     return Object.values(m);
   }
   function pointInPolygon(pt, poly) {
@@ -3397,47 +3399,70 @@ function toggleMode(forceDark) {
     }).join('') : '<p class="fp-sub">Sin alertas de salida de zona.</p>';
 
     const zoneList = zonesAll.length ? zonesAll.map(z => `<div class="row"><span><strong>${escapeHTML(z.name)}</strong><br><small class="fp-sub">${escapeHTML(z.operation || 'Sin operación')} · Coord: ${escapeHTML(z.coordinator || '—')} · ${(z.polygons || []).length} polígono(s)</small></span>${(mapIsAdmin() || z.coordinator === currentUser().name) ? `<button class="mini-action" data-zone-delete="${z.id}"><i class="ti ti-trash"></i></button>` : ''}</div>`).join('') : '<p class="fp-sub">No hay zonas registradas. Sube un KML/KMZ.</p>';
-    const pointsAll = mapPointsVisibleTo();
-    const pointsList = pointsAll.length ? pointsAll.map(g => `<div class="row"><span><strong>${escapeHTML(g.name)}</strong><br><small class="fp-sub">${escapeHTML(g.operation || '')} · ${(g.points || []).length} punto(s)</small></span>${(mapIsAdmin() || g.createdBy === currentUser().name) ? `<button class="mini-action" data-points-delete="${g.id}"><i class="ti ti-trash"></i></button>` : ''}</div>`).join('') : '';
 
-    panel('mapa', 'Mapa en Vivo', 'Zonas por operación (KML/KMZ), puntos de venta, ubicación de mensajeros y alertas de salida de zona.',
-      `<label class="dev-btn primary"><i class="ti ti-map-plus"></i> Zona (KML/KMZ)<input type="file" accept=".kml,.kmz" data-zone-file style="display:none"></label><label class="dev-btn"><i class="ti ti-building-store"></i> Puntos de venta (KML)<input type="file" accept=".kml,.kmz" data-points-file style="display:none"></label>`,
+    // Puntos de venta desde la configuración de la operación (nombre + dirección)
+    const cps = clientPointMarkers().filter(p => {
+      if (opsVisibleSet && !opsVisibleSet.has(p.operation)) return false;
+      return true;
+    });
+    const located = cps.filter(p => Number.isFinite(p.lat) && Number.isFinite(p.lng));
+    const pending = cps.length - located.length;
+
+    panel('mapa', 'Mapa en Vivo', 'Zonas por operación (KML/KMZ), puntos de venta de la operación, ubicación de mensajeros y alertas de salida de zona.',
+      `<label class="dev-btn primary"><i class="ti ti-map-plus"></i> Zona (KML/KMZ)<input type="file" accept=".kml,.kmz" data-zone-file style="display:none"></label>`,
       `${kpisHTML}${filtersHTML}
       <div class="map-layout">
         <div id="admin-leaflet-map" class="leaflet-map" aria-label="Mapa en vivo"></div>
         <aside class="map-side"><h3><i class="ti ti-users"></i> Mensajeros activos</h3>${sidePeople}</aside>
       </div>
+      ${pending ? `<div class="fp-sub" style="margin-top:8px"><i class="ti ti-map-search"></i> Ubicando ${pending} punto(s) de venta por dirección...</div>` : ''}
       <div style="margin-top:14px"><div class="settings-block-title"><i class="ti ti-map-pin-off"></i> Alertas de salida de zona</div>${alertsHTML}</div>
-      <div style="margin-top:14px"><div class="settings-block-title"><i class="ti ti-vector"></i> Zonas registradas</div>${zoneList}</div>
-      ${pointsAll.length ? `<div style="margin-top:14px"><div class="settings-block-title"><i class="ti ti-building-store"></i> Puntos de venta</div>${pointsList}</div>` : ''}`
+      <div style="margin-top:14px"><div class="settings-block-title"><i class="ti ti-vector"></i> Zonas registradas</div>${zoneList}</div>`
     );
     const style = document.querySelector('[data-map-style]');
     if (style) style.value = state.prefs.mapStyle || 'hybrid';
-    setTimeout(() => initAdminMap(zones, pings, alerts, mapFilters.operacion === 'todos' ? pointsAll : pointsAll.filter(g => g.operation === mapFilters.operacion)), 0);
+    setTimeout(() => initAdminMap(zones, pings, alerts, located), 0);
+    geocodeMissingPoints(cps);
   }
 
-  function mapPointsVisibleTo() {
-    const u = currentUser(); const all = state.mapPoints || [];
-    if (mapIsAdmin()) return all;
-    if (u.profile === 'Coordinador') return all.filter(g => g.createdBy === u.name || (u.client && u.client !== 'Global' && g.operation === u.client));
-    return all.filter(g => !u.client || u.client === 'Global' || g.operation === u.client);
-  }
-  function parseKmlPoints(text) {
+  // Puntos de venta definidos al crear la operación (Configuración → Clientes → puntos)
+  function clientPointMarkers() {
     const out = [];
-    const re = /<Placemark[\s\S]*?<\/Placemark>/gi; let pm;
-    while ((pm = re.exec(text))) {
-      const block = pm[0];
-      if (!/<Point/i.test(block)) continue;
-      const nameM = block.match(/<name[^>]*>([\s\S]*?)<\/name>/i);
-      const coordM = block.match(/<coordinates[^>]*>([\s\S]*?)<\/coordinates>/i);
-      if (!coordM) continue;
-      const [lng, lat] = coordM[1].trim().split(/\s+/)[0].split(',').map(Number);
-      if (Number.isFinite(lat) && Number.isFinite(lng)) out.push({ name: (nameM ? nameM[1].replace(/<[^>]+>/g, '').trim() : 'Punto'), lat, lng });
-    }
+    (state.clients || []).forEach(c => (c.points || []).forEach(p => {
+      if (typeof p === 'string' || !p) return;
+      out.push({ operation: c.name, name: p.name || 'Punto', address: p.address || '', city: p.city || '', lat: Number(p.lat), lng: Number(p.lng), ref: p });
+    }));
     return out;
   }
+  // Geocodifica por dirección (Nominatim) los puntos sin coordenadas, de a pocos, y guarda el resultado
+  let geocodeBusy = false;
+  function geocodeMissingPoints(cps) {
+    if (geocodeBusy) return;
+    const missing = (cps || []).filter(p => (!Number.isFinite(p.lat) || !Number.isFinite(p.lng)) && (p.address || p.name));
+    if (!missing.length) return;
+    geocodeBusy = true;
+    const batch = missing.slice(0, 4);
+    let idx = 0, changed = false;
+    const next = () => {
+      if (idx >= batch.length) {
+        geocodeBusy = false;
+        if (changed) { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); scheduleCloudSave(); if (activeModule === 'mapa') renderMapa(); }
+        return;
+      }
+      const p = batch[idx++];
+      const q = encodeURIComponent(`${p.address || p.name}, ${p.city || 'Bogotá'}, Colombia`);
+      fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${q}`, { headers: { 'Accept': 'application/json' } })
+        .then(r => r.json())
+        .then(d => {
+          if (d && d[0] && p.ref) { p.ref.lat = Number(d[0].lat); p.ref.lng = Number(d[0].lon); changed = true; }
+        })
+        .catch(() => {})
+        .finally(() => setTimeout(next, 1200)); // respetar límite de Nominatim (1 req/seg)
+    };
+    next();
+  }
 
-  function initAdminMap(zones, pings, alerts, pointGroups) {
+  function initAdminMap(zones, pings, alerts, salePoints) {
     const el = document.getElementById('admin-leaflet-map');
     if (!el) return;
     if (!window.L) { el.innerHTML = '<div class="map-caption" style="padding:20px">Mapa no cargó. Revisa la conexión a internet.</div>'; return; }
@@ -3458,13 +3483,13 @@ function toggleMode(forceDark) {
       L.polygon(poly, { color: '#F5C518', weight: 2, fillColor: '#F5C518', fillOpacity: .14 }).addTo(map).bindPopup(`<strong>${escapeHTML(z.name)}</strong><br>${escapeHTML(z.operation || '')}`);
       poly.forEach(p => bounds.push(p));
     }));
-    // Puntos de venta (marcadores tipo tienda)
-    (pointGroups || []).forEach(g => (g.points || []).forEach(pt => {
+    // Puntos de venta de la operación (marcadores tipo tienda)
+    (salePoints || []).forEach(pt => {
       if (!Number.isFinite(pt.lat) || !Number.isFinite(pt.lng)) return;
       const icon = L.divIcon({ className: '', html: `<span style="display:grid;place-items:center;width:24px;height:24px;border-radius:7px;background:#1E5CA8;color:#fff;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.5);font-size:13px">🏪</span>`, iconSize: [24, 24] });
-      L.marker([pt.lat, pt.lng], { icon }).addTo(map).bindPopup(`<strong>${escapeHTML(pt.name || 'Punto')}</strong><br>${escapeHTML(g.operation || '')}`);
+      L.marker([pt.lat, pt.lng], { icon }).addTo(map).bindPopup(`<strong>${escapeHTML(pt.name || 'Punto')}</strong><br>${escapeHTML(pt.operation || '')}${pt.address ? '<br>' + escapeHTML(pt.address) : ''}`);
       bounds.push([pt.lat, pt.lng]);
-    }));
+    });
     (pings || []).forEach(pg => {
       if (!Number.isFinite(pg.lat) || !Number.isFinite(pg.lng)) return;
       const a = (alerts || []).find(x => x.pg === pg);
@@ -3498,27 +3523,6 @@ function toggleMode(forceDark) {
         closeModal();
         log('Mapa', 'Registró zona', data.name);
         saveState('Zona registrada');
-      });
-  }
-
-  function openPointsForm(points) {
-    const clients = (state.clients || []).map(c => c.name);
-    const me = currentUser();
-    const inS = 'width:100%;min-height:40px;border:1px solid var(--border);border-radius:10px;background:var(--card-bg);color:var(--text-1);padding:0 10px;font:inherit;margin-top:4px';
-    const isCoord = me.profile === 'Coordinador';
-    openModal('Puntos de venta', `${points.length} punto(s) detectado(s) en el archivo.`,
-      `<div class="form-grid">
-        <div class="form-field full"><label>Nombre del grupo</label><input name="name" required style="${inS}" placeholder="Ej: Puntos Cafam Bogotá"></div>
-        <div class="form-field"><label>Operación / cliente</label><select name="operation" style="${inS}">${(isCoord && me.client && me.client !== 'Global' ? [me.client] : clients).map(c => `<option>${escapeHTML(c)}</option>`).join('')}</select></div>
-      </div><div class="modal-foot"><button class="dev-btn" type="button" id="cancel-form">Cancelar</button><button class="dev-btn primary" type="submit"><i class="ti ti-building-store"></i> Guardar puntos</button></div>`,
-      event => {
-        event.preventDefault();
-        const data = Object.fromEntries(new FormData(event.currentTarget).entries());
-        state.mapPoints = state.mapPoints || [];
-        state.mapPoints.unshift({ id: uid('PTS'), name: data.name || 'Puntos', operation: data.operation || '', points, createdAt: new Date().toISOString(), createdBy: me.name || '' });
-        closeModal();
-        log('Mapa', 'Registró puntos de venta', data.name);
-        saveState('Puntos registrados');
       });
   }
 
@@ -7770,26 +7774,6 @@ function toggleMode(forceDark) {
       } else {
         const r = new FileReader();
         r.onload = () => done(parseKmlText(String(r.result || '')));
-        r.readAsText(file);
-      }
-      event.target.value = '';
-      return;
-    }
-    if (event.target.matches('[data-points-file]')) {
-      const file = event.target.files && event.target.files[0];
-      if (!file) return;
-      const name = file.name.toLowerCase();
-      const done = pts => { if (!pts.length) { toast('No encontré puntos en el archivo'); return; } openPointsForm(pts); };
-      if (name.endsWith('.kmz')) {
-        if (!window.JSZip) { toast('No cargó la librería para KMZ'); return; }
-        JSZip.loadAsync(file).then(zip => {
-          const kmlName = Object.keys(zip.files).find(n => /\.kml$/i.test(n));
-          if (!kmlName) { toast('El KMZ no contiene KML'); return; }
-          return zip.files[kmlName].async('string').then(txt => done(parseKmlPoints(txt)));
-        }).catch(() => toast('No se pudo leer el KMZ'));
-      } else {
-        const r = new FileReader();
-        r.onload = () => done(parseKmlPoints(String(r.result || '')));
         r.readAsText(file);
       }
       event.target.value = '';
