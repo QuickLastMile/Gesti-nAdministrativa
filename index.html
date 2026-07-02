@@ -1992,6 +1992,7 @@ function toggleMode(forceDark) {
   let matrixCache = null;
   let cloudUnsubscribe = null;
   let applyingRemoteState = false;
+  let cloudHydrated = false;
   let cloudSaveTimer = null;
   let cloudStatus = FIREBASE_SETTINGS.enabled ? 'Conectando Firebase...' : 'Modo local';
   const attachmentPreviewStore = {};
@@ -2223,7 +2224,7 @@ function toggleMode(forceDark) {
     return next;
   }
 
-  function saveState(message = 'Cambio guardado') {
+  function saveState(message = 'Cambio guardado', options = {}) {
     const content = document.getElementById('content');
     const tableWrap = document.querySelector(`#page-${activeModule} .data-table-wrap`);
     const keep = { top: content?.scrollTop || 0, left: tableWrap?.scrollLeft || 0 };
@@ -2236,7 +2237,7 @@ function toggleMode(forceDark) {
       if (nextContent) nextContent.scrollTop = keep.top;
       if (nextWrap) nextWrap.scrollLeft = keep.left;
     });
-    if (!applyingRemoteState) scheduleCloudSave();
+    if (!applyingRemoteState && options.syncCloud !== false) scheduleCloudSave();
     toast(message);
   }
 
@@ -2328,57 +2329,67 @@ function toggleMode(forceDark) {
       const ref = cloudDocRef();
       cloudUnsubscribe?.();
       cloudUnsubscribe = ref.onSnapshot(snapshot => {
+        if (snapshot.metadata?.fromCache && !cloudHydrated) {
+          cloudStatus = 'Firebase verificando datos...';
+          renderCloudStatus();
+          return;
+        }
         if (!snapshot.exists) {
+          cloudHydrated = true;
           scheduleCloudSave(100);
           return;
         }
         const remote = snapshot.data()?.state;
         if (!remote) return;
         applyingRemoteState = true;
-        const currentSession = state.session;
-        const remoteNormalized = normalizeState(remote);
-        // Preservar entradas locales que aún no llegaron a Firebase
-        // (evita que onSnapshot borre novedades/casos recién creados)
-        const remoteNovIds = new Set(remoteNormalized.novelties.map(n => n.id));
-        const localPendingNov = state.novelties.filter(n => !remoteNovIds.has(n.id));
-        if (localPendingNov.length) {
-          remoteNormalized.novelties = [...localPendingNov, ...remoteNormalized.novelties];
-          // Forzar sincronización para que Firebase también los tenga
-          setTimeout(() => scheduleCloudSave(200), 50);
-        }
-        const remoteCaseIds = new Set(remoteNormalized.cases.map(c => c.id));
-        const localPendingCases = state.cases.filter(c => !remoteCaseIds.has(c.id));
-        if (localPendingCases.length) {
-          remoteNormalized.cases = [...localPendingCases, ...remoteNormalized.cases];
-          setTimeout(() => scheduleCloudSave(200), 50);
-        }
-        // Preservar tickets locales aún no sincronizados y dataUrls de evidencias en subida
-        const remoteTicketIds = new Set((remoteNormalized.tickets || []).map(t => t.id));
-        const localPendingTickets = (state.tickets || []).filter(t => !remoteTicketIds.has(t.id));
-        if (localPendingTickets.length) {
-          remoteNormalized.tickets = [...localPendingTickets, ...(remoteNormalized.tickets || [])];
-          setTimeout(() => scheduleCloudSave(200), 50);
-        }
-        (remoteNormalized.tickets || []).forEach(rt => {
-          const lt = (state.tickets || []).find(x => x.id === rt.id);
-          if (!lt) return;
-          (rt.evidence || []).forEach(re => {
-            if (!re.url && !re.dataUrl) {
-              const le = (lt.evidence || []).find(e => e.id === re.id);
-              if (le && le.dataUrl) re.dataUrl = le.dataUrl;
+        try {
+          const currentSession = state.session;
+          const remoteNormalized = normalizeState(remote);
+          // Preservar entradas locales que aún no llegaron a Firebase.
+          // Solo se hace después de hidratar para no subir una copia vieja de localStorage.
+          if (cloudHydrated) {
+            const remoteNovIds = new Set(remoteNormalized.novelties.map(n => n.id));
+            const localPendingNov = state.novelties.filter(n => !remoteNovIds.has(n.id));
+            if (localPendingNov.length) {
+              remoteNormalized.novelties = [...localPendingNov, ...remoteNormalized.novelties];
+              setTimeout(() => scheduleCloudSave(200), 50);
             }
+            const remoteCaseIds = new Set(remoteNormalized.cases.map(c => c.id));
+            const localPendingCases = state.cases.filter(c => !remoteCaseIds.has(c.id));
+            if (localPendingCases.length) {
+              remoteNormalized.cases = [...localPendingCases, ...remoteNormalized.cases];
+              setTimeout(() => scheduleCloudSave(200), 50);
+            }
+            const remoteTicketIds = new Set((remoteNormalized.tickets || []).map(t => t.id));
+            const localPendingTickets = (state.tickets || []).filter(t => !remoteTicketIds.has(t.id));
+            if (localPendingTickets.length) {
+              remoteNormalized.tickets = [...localPendingTickets, ...(remoteNormalized.tickets || [])];
+              setTimeout(() => scheduleCloudSave(200), 50);
+            }
+          }
+          (remoteNormalized.tickets || []).forEach(rt => {
+            const lt = (state.tickets || []).find(x => x.id === rt.id);
+            if (!lt) return;
+            (rt.evidence || []).forEach(re => {
+              if (!re.url && !re.dataUrl) {
+                const le = (lt.evidence || []).find(e => e.id === re.id);
+                if (le && le.dataUrl) re.dataUrl = le.dataUrl;
+              }
+            });
           });
-        });
-        // La matriz vive en su propio documento: no dejar que el estado principal la borre
-        const keepMatrix = matrixCache || (state.assetMatrix && state.assetMatrix.length ? state.assetMatrix : null);
-        state = remoteNormalized;
-        if (keepMatrix) state.assetMatrix = keepMatrix;
-        state.session = currentSession;
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-        cloudStatus = 'Firebase en vivo';
-        renderAll();
-        renderCloudStatus();
-        applyingRemoteState = false;
+          // La matriz vive en su propio documento: no dejar que el estado principal la borre
+          const keepMatrix = matrixCache || (state.assetMatrix && state.assetMatrix.length ? state.assetMatrix : null);
+          state = remoteNormalized;
+          if (keepMatrix) state.assetMatrix = keepMatrix;
+          state.session = currentSession;
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+          cloudHydrated = true;
+          cloudStatus = snapshot.metadata?.hasPendingWrites ? 'Firebase sincronizando...' : 'Firebase en vivo';
+          renderAll();
+          renderCloudStatus();
+        } finally {
+          applyingRemoteState = false;
+        }
       }, error => {
         cloudStatus = `Firebase error: ${error.message}`;
         renderCloudStatus();
@@ -2392,6 +2403,11 @@ function toggleMode(forceDark) {
 
   function scheduleCloudSave(delay = 650) {
     if (!cloudDb || applyingRemoteState) return;
+    if (!cloudHydrated) {
+      cloudStatus = 'Firebase esperando datos remotos...';
+      renderCloudStatus();
+      return;
+    }
     clearTimeout(cloudSaveTimer);
     cloudSaveTimer = setTimeout(async () => {
       try {
@@ -8049,7 +8065,7 @@ function toggleMode(forceDark) {
     }
     state.session = { id: user.id, name: user.name, username: user.username, profile: user.profile, scope: user.scope };
     touchSession();
-    saveState(`Bienvenido ${user.name}`);
+    saveState(`Bienvenido ${user.name}`, { syncCloud: false });
     applySession();
   });
 
