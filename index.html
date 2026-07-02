@@ -2339,6 +2339,13 @@ function toggleMode(forceDark) {
           scheduleCloudSave(100);
           return;
         }
+        if (snapshot.metadata?.hasPendingWrites) {
+          if (cloudHydrated) {
+            cloudStatus = 'Firebase en vivo';
+            renderCloudStatus();
+          }
+          return;
+        }
         const remote = snapshot.data()?.state;
         if (!remote) return;
         applyingRemoteState = true;
@@ -2384,7 +2391,7 @@ function toggleMode(forceDark) {
           state.session = currentSession;
           localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
           cloudHydrated = true;
-          cloudStatus = snapshot.metadata?.hasPendingWrites ? 'Firebase sincronizando...' : 'Firebase en vivo';
+          cloudStatus = 'Firebase en vivo';
           renderAll();
           renderCloudStatus();
         } finally {
@@ -2416,7 +2423,7 @@ function toggleMode(forceDark) {
           updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
           updatedBy: state.session?.username || 'local'
         }, { merge: true });
-        cloudStatus = 'Firebase sincronizado';
+        cloudStatus = 'Firebase en vivo';
         renderCloudStatus();
       } catch (error) {
         cloudStatus = `Firebase error: ${error.message}`;
