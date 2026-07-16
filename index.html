@@ -7607,7 +7607,10 @@ function toggleMode(forceDark) {
   }
 
   function findAssetByCedula(cedula) {
-    return state.assetMatrix.find(a => String(a.cedula || '').trim() === String(cedula || '').trim()) || null;  function messengerPointsHTML(clientName, selectedPoints) {
+    return state.assetMatrix.find(a => String(a.cedula || '').trim() === String(cedula || '').trim()) || null;
+  }
+
+  function messengerPointsHTML(clientName, selectedPoints) {
     const c = state.clients.find(x => x.name === clientName) || {};
     const pts = (c.points || []).map(pointName);
     if (!pts.length) return '<span class="fp-sub">Este cliente no tiene puntos creados.</span>';
