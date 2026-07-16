@@ -2700,6 +2700,14 @@ function toggleMode(forceDark) {
     return (client.points || []).find(p => pointName(p) === pointNameValue) || {};
   }
 
+  function inferClientFromPoint(pt) {
+    if (!pt) return '';
+    for (const c of (state.clients || [])) {
+      if ((c.points || []).some(p => pointName(p) === pt)) return c.name || '';
+    }
+    return '';
+  }
+
   const noveltyTypes = ['', 'INASISTENCIA', 'DESVINCULACIÓN', 'OTRO SÍ', 'PROCESOS', 'DESCUENTO', 'ACCIDENTE'];
 
   const noveltyFormFields = {
@@ -2796,7 +2804,7 @@ function toggleMode(forceDark) {
     const all = scopedItems(state.availabilities, item => ({ client: item.client, point: item.point, quicker: item.quicker }));
     const projectFilter = state.prefs.mallaProjectFilter || '';
     let items = viewDate === 'todos' ? all : all.filter(d => (d.date || '') === viewDate);
-    if (projectFilter) items = items.filter(d => d.client === projectFilter);
+    if (projectFilter) items = items.filter(d => (d.client || inferClientFromPoint(d.point)) === projectFilter);
     const key = state.prefs.mallaSortKey || 'date';
     const dir = state.prefs.mallaSortDir === 'asc' ? 1 : -1;
     items.sort((a, b) => compareMallaValue(a, b, key) * dir);
@@ -6874,7 +6882,7 @@ function toggleMode(forceDark) {
     const item = {
       id: uid('DIS'),
       date: normalizeImportedDate(get('Fecha', 'FECHA', 'date')),
-      client: get('Cliente', 'CLIENTE', 'client'),
+      client: get('Cliente', 'CLIENTE', 'client') || inferClientFromPoint(get('Punto', 'PUNTO', 'point')),
       city: get('Ciudad', 'CIUDAD', 'city') || 'Bogotá',
       point: get('Punto', 'PUNTO', 'point'),
       quicker: get('Nombre y apellidos', 'NOMBRE Y APELLIDOS', 'Nombre y apellido', 'quicker'),
