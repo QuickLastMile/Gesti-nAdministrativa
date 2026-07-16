@@ -6902,18 +6902,70 @@ function toggleMode(forceDark) {
     if (!window.XLSX) { toast('No cargó XLSX. Revisa conexión a internet.'); return; }
     const reader = new FileReader();
     reader.onload = () => {
-      const wb = XLSX.read(reader.result, { type: 'array', cellDates: true });
-      const ws = wb.Sheets[wb.SheetNames[0]];
-      const rows = rowsFromMallaSheet(ws);
-      const batchId = uid('IMP');
-      const imported = rows.map(normalizeMallaImportRow).filter(r => r.date || r.point || r.cedula || r.quicker);
-      imported.forEach(item => item.importBatchId = batchId);
-      state.availabilities.unshift(...imported);
-      log('Malla', 'Importó malla masiva', `${imported.length} registros`);
-      const datesSummary = [...new Set(imported.map(r => r.date).filter(Boolean))].sort().join(', ') || 'sin fecha';
-      const clientsSummary = [...new Set(imported.map(r => r.client).filter(Boolean))].join(', ') || 'sin cliente';
-      toast(`✓ ${imported.length} registros importados — Fechas: ${datesSummary} | Cliente: ${clientsSummary}`);
-      saveState('Malla importada');
+      try {
+        const wb = XLSX.read(reader.result, { type: 'array', cellDates: true });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const rows = rowsFromMallaSheet(ws);
+        if (!rows || rows.length === 0) {
+          toast('⚠ El archivo no tiene registros válidos. Verifica que tenga las columnas Fecha, Cédula y Horario.'); return;
+        }
+        const batchId = uid('IMP');
+        const imported = rows.map(normalizeMallaImportRow).filter(r => r.date || r.point || r.cedula || r.quicker);
+        if (!imported.length) {
+          toast('⚠ No se encontraron registros con datos suficientes para importar.'); return;
+        }
+        const sinFecha = imported.filter(r => !r.date);
+        const sinCliente = imported.filter(r => !r.client);
+        const warnings = [];
+        if (sinFecha.length) warnings.push(`${sinFecha.length} registro(s) sin fecha`);
+        if (sinCliente.length) warnings.push(`${sinCliente.length} registro(s) sin cliente`);
+        const importDates = [...new Set(imported.map(r => r.date).filter(Boolean))].sort();
+        const importClients = [...new Set(imported.map(r => r.client).filter(Boolean))];
+        const conflictDates = importDates.filter(d =>
+          state.availabilities.some(a => a.date === d &&
+            (importClients.length === 0 || importClients.includes(a.client)))
+        );
+        const doImport = (replace) => {
+          imported.forEach(item => item.importBatchId = batchId);
+          if (replace && conflictDates.length) {
+            const conflictSet = new Set(conflictDates);
+            const clientSet = new Set(importClients);
+            state.availabilities = state.availabilities.filter(a =>
+              !(conflictSet.has(a.date) && (clientSet.size === 0 || clientSet.has(a.client)))
+            );
+          }
+          state.availabilities.unshift(...imported);
+          log('Malla', replace ? 'Importó y reemplazó malla' : 'Importó malla masiva', `${imported.length} registros`);
+          const datesSummary = importDates.join(', ') || 'sin fecha';
+          const clientsSummary = importClients.join(', ') || 'sin cliente';
+          let msg = `✓ ${imported.length} registro(s) importados — Fechas: ${datesSummary} | Cliente: ${clientsSummary}`;
+          if (warnings.length) msg += ` | ⚠ ${warnings.join(', ')}`;
+          toast(msg);
+          saveState('Malla importada');
+        };
+        if (conflictDates.length) {
+          const conflictList = conflictDates.join(', ');
+          const clientInfo = importClients.length ? ` de "${importClients.join(', ')}"` : '';
+          const form = document.getElementById('modal-form');
+          document.getElementById('modal-title').textContent = 'Registros duplicados detectados';
+          document.getElementById('modal-subtitle').textContent = `Ya existen registros${clientInfo} para: ${conflictList}`;
+          form.innerHTML = `<p style="margin-bottom:14px;color:var(--text-2);font-size:13px">Tienes ${imported.length} registro(s) en el archivo. ¿Qué deseas hacer con las fechas que ya tienen datos?</p>
+            <div class="modal-foot" style="justify-content:flex-start;flex-wrap:wrap;gap:8px">
+              <button class="dev-btn primary" id="confirm-replace">Reemplazar registros existentes</button>
+              <button class="dev-btn" id="confirm-add">Agregar sin reemplazar</button>
+              <button class="dev-btn" id="confirm-cancel">Cancelar</button>
+            </div>`;
+          document.getElementById('app-modal').classList.add('open');
+          document.getElementById('app-modal').setAttribute('aria-hidden', 'false');
+          document.getElementById('confirm-replace').onclick = () => { closeModal(); doImport(true); };
+          document.getElementById('confirm-add').onclick = () => { closeModal(); doImport(false); };
+          document.getElementById('confirm-cancel').onclick = () => { closeModal(); toast('Importación cancelada'); };
+        } else {
+          doImport(false);
+        }
+      } catch (e) {
+        toast('⚠ Error al leer el archivo: ' + e.message);
+      }
     };
     reader.readAsArrayBuffer(file);
   }
@@ -7931,7 +7983,18 @@ function toggleMode(forceDark) {
     const lists = event.target.closest('[data-open-malla-lists]');
     if (lists) openMallaListsForm();
     const downloadTpl = event.target.closest('[data-download-malla-template]');
-    if (downloadTpl) downloadMallaTemplate();
+    if (downloadTpl) {
+      const projectFilter = state.prefs.mallaProjectFilter || '';
+      const allRows = state.availabilities || [];
+      const rows = projectFilter ? allRows.filter(a => a.client === projectFilter) : allRows;
+      const slug = projectFilter ? projectFilter.replace(/\s+/g, '_').toLowerCase() : 'base';
+      if (rows.length) {
+        downloadMallaWorkbook(rows, `malla_${slug}`, false);
+      } else {
+        downloadMallaWorkbook([], projectFilter ? `malla_${slug}` : 'plantilla_malla', true);
+        if (projectFilter) toast(`No hay registros para "${projectFilter}" — se descargó plantilla vacía`);
+      }
+    }
     const openMallaRecordsBtn = event.target.closest('[data-open-malla-records]');
     if (openMallaRecordsBtn) openMallaRecords();
     const recordDate = event.target.closest('[data-record-date]');
