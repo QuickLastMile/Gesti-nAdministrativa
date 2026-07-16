@@ -2794,8 +2794,9 @@ function toggleMode(forceDark) {
     const today = new Date().toISOString().slice(0, 10);
     const viewDate = state.prefs.mallaViewDate || today;
     const all = scopedItems(state.availabilities, item => ({ client: item.client, point: item.point, quicker: item.quicker }));
-    // Guardar fechas pasadas en historial sin borrarlas, filtrar por fecha seleccionada
-    const items = viewDate === 'todos' ? all : all.filter(d => (d.date || '') === viewDate);
+    const projectFilter = state.prefs.mallaProjectFilter || '';
+    let items = viewDate === 'todos' ? all : all.filter(d => (d.date || '') === viewDate);
+    if (projectFilter) items = items.filter(d => d.client === projectFilter);
     const key = state.prefs.mallaSortKey || 'date';
     const dir = state.prefs.mallaSortDir === 'asc' ? 1 : -1;
     items.sort((a, b) => compareMallaValue(a, b, key) * dir);
@@ -2827,6 +2828,14 @@ function toggleMode(forceDark) {
     return user.profile === 'Administrador' || permissionsFor(user.profile, user).includes(permission);
   }
 
+  function jefeProjecs(user) {
+    // Retorna array de nombres de cliente asignados al Jefe
+    if (!user || user.profile !== 'Jefe') return [];
+    if (Array.isArray(user.projects) && user.projects.length) return user.projects;
+    if (user.client && user.client !== 'Global') return [user.client];
+    return [];
+  }
+
   function inUserScope(scope) {
     const user = currentUser();
     if (!user.profile || user.profile === 'Administrador' || user.profile === 'Gerencia') return true;
@@ -2834,6 +2843,10 @@ function toggleMode(forceDark) {
     if (user.profile === 'Usuario Punto') return (!user.client || scope.client === user.client) && (!user.point || scope.point === user.point);
     if (user.profile === 'Cliente Admin') return !user.client || user.client === 'Global' || scope.client === user.client;
     if (user.profile === 'Coordinador') return !user.client || user.client === 'Global' || scope.client === user.client;
+    if (user.profile === 'Jefe') {
+      const projs = jefeProjecs(user);
+      return !projs.length || projs.includes(scope.client);
+    }
     return true;
   }
 
@@ -3396,8 +3409,9 @@ function toggleMode(forceDark) {
     const clientColors = {};
     state.clients.forEach((c,i) => { clientColors[c.name] = palette[i % palette.length]; });
     const shiftMap = {};
+    const projectFilter = state.prefs.mallaProjectFilter || '';
     const scopedAvail = scopedItems(state.availabilities, a => ({ client: a.client, point: a.point, quicker: a.quicker }));
-    scopedAvail.filter(a => a.quicker && dates.includes(a.date)).forEach(a => {
+    scopedAvail.filter(a => a.quicker && dates.includes(a.date) && (!projectFilter || a.client === projectFilter)).forEach(a => {
       if (!shiftMap[a.quicker]) shiftMap[a.quicker] = {};
       if (!shiftMap[a.quicker][a.date]) shiftMap[a.quicker][a.date] = [];
       shiftMap[a.quicker][a.date].push(a);
@@ -3492,22 +3506,45 @@ function toggleMode(forceDark) {
         return row(visibleMallaColumns().map(key => values[key] ?? ''));
       });
       const headers = visibleMallaColumns().map(key => headerCell(key));
+      const sessionProfile = state.session?.profile || 'Administrador';
+      const canFilterProject = !sessionProfile || sessionProfile === 'Administrador' || sessionProfile === 'Jefe';
+      const projectOptions = canFilterProject ? (() => {
+        const user = currentUser();
+        const allClients = state.clients.map(c => c.name);
+        const jefeProjs = sessionProfile === 'Jefe' ? jefeProjecs(user) : allClients;
+        const opts = jefeProjs.length ? jefeProjs : allClients;
+        return `<select data-malla-project-filter style="min-height:32px;border:1px solid var(--border);border-radius:9px;background:var(--card-bg);color:var(--text-1);padding:0 10px;font:inherit">
+          <option value="">Todos los proyectos</option>
+          ${opts.map(c => `<option value="${escapeHTML(c)}" ${state.prefs.mallaProjectFilter === c ? 'selected' : ''}>${escapeHTML(c)}</option>`).join('')}
+        </select>`;
+      })() : '';
       const toolbar = `<div class="toolbar-line" style="flex-wrap:wrap;gap:10px">
         <span class="fp-sub">Clic en encabezado para ordenar. Tolerancia ingreso:</span>
         <input type="number" data-ingress-grace value="${escapeHTML(state.prefs.ingressGraceMinutes || 30)}" style="width:74px">
         <span class="fp-sub">min &nbsp;|&nbsp; Fecha:</span>
         <input type="date" data-malla-view-date value="${escapeHTML(state.prefs.mallaViewDate || today)}" style="min-height:32px;border:1px solid var(--border);border-radius:9px;background:var(--card-bg);color:var(--text-1);padding:0 10px;font:inherit">
         <button class="dev-btn" style="padding:4px 10px;font-size:12px" data-malla-view-all>Ver todas</button>
+        ${projectOptions}
         <span class="fp-sub" style="color:var(--q);font-weight:700">${(state.prefs.mallaViewDate && state.prefs.mallaViewDate !== 'todos') ? 'Malla: ' + escapeHTML(state.prefs.mallaViewDate) : (state.prefs.mallaViewDate === 'todos' ? 'Historial completo' : 'Hoy ' + today)}</span>
       </div>`;
       mainContent = toolbar + (!rows.length ? `<div class="dropzone" style="margin-bottom:12px"><strong>Malla sin información</strong><span class="fp-sub">Crea una nueva malla, importa un archivo masivo o descarga la base para empezar a cargar datos.</span></div>` : '') + table(headers, rows);
     } else {
       // Semana / Mes planner
+      const sessionProfileNav = state.session?.profile || 'Administrador';
+      const canFilterNav = !sessionProfileNav || sessionProfileNav === 'Administrador' || sessionProfileNav === 'Jefe';
+      const navProjectSel = canFilterNav ? (() => {
+        const jefeProjs = sessionProfileNav === 'Jefe' ? jefeProjecs(currentUser()) : state.clients.map(c => c.name);
+        return `<select data-malla-project-filter style="min-height:32px;border:1px solid var(--border);border-radius:9px;background:var(--card-bg);color:var(--text-1);padding:0 10px;font:inherit">
+          <option value="">Todos los proyectos</option>
+          ${jefeProjs.map(c => `<option value="${escapeHTML(c)}" ${state.prefs.mallaProjectFilter === c ? 'selected' : ''}>${escapeHTML(c)}</option>`).join('')}
+        </select>`;
+      })() : '';
       const navBar = `<div class="toolbar-line" style="flex-wrap:wrap;gap:8px;margin-bottom:8px">
         <button class="dev-btn icon-btn" data-malla-view-date="${navPrev}" title="Período anterior"><i class="ti ti-chevron-left"></i></button>
         <input type="date" data-malla-view-date value="${escapeHTML(baseDate)}" style="min-height:32px;border:1px solid var(--border);border-radius:9px;background:var(--card-bg);color:var(--text-1);padding:0 10px;font:inherit">
         <button class="dev-btn icon-btn" data-malla-view-date="${navNext}" title="Período siguiente"><i class="ti ti-chevron-right"></i></button>
         <button class="dev-btn" style="padding:4px 10px;font-size:12px" data-malla-view-date="${today}">Hoy</button>
+        ${navProjectSel}
         <span class="fp-sub" style="font-size:11px">Clic en <b>+</b> para agregar turno · Clic en un turno para editar</span>
       </div>`;
       mainContent = navBar + renderMallaGrid(viewMode);
@@ -6096,7 +6133,7 @@ function toggleMode(forceDark) {
       subtitle: 'Crea usuario base con correo, teléfono, usuario y perfil.',
       fields: [
         ['name', 'Nombre', 'text'], ['email', 'Correo', 'email'], ['phone', 'Teléfono', 'tel'],
-        ['username', 'Usuario', 'text'], ['password', 'Contraseña inicial', 'password'], ['profile', 'Perfil', 'select', ['Administrador', 'Coordinador', 'Quicker', 'Cliente Admin', 'Usuario Punto', 'Gerencia', 'HSQ']],
+        ['username', 'Usuario', 'text'], ['password', 'Contraseña inicial', 'password'], ['profile', 'Perfil', 'select', ['Administrador', 'Jefe', 'Coordinador', 'Quicker', 'Cliente Admin', 'Usuario Punto', 'Gerencia', 'HSQ']],
         ['scope', 'Alcance', 'text']
       ],
       submit: data => {
@@ -7371,12 +7408,27 @@ function toggleMode(forceDark) {
       <div class="form-field"><label>Correo / usuario de ingreso</label><input name="email" type="email" value="${escapeHTML(item.email || item.username)}" required></div>
       <div class="form-field"><label>Teléfono</label><input name="phone" value="${escapeHTML(item.phone)}" required></div>
       <div class="form-field"><label>Contraseña</label><input name="password" type="text" value="${escapeHTML(item.password)}" placeholder="Define la contraseña" required></div>
-      <div class="form-field"><label>Perfil</label><select name="profile"><option>Administrador</option><option>Coordinador</option><option>Cliente</option><option>Usuario Punto</option><option>HSQ</option></select></div>
-      <div class="form-field"><label>Cliente a cargo</label><select name="client" id="user-client">${clients.map(c => `<option value="${escapeHTML(c)}" ${c === (item.client || item.scope) ? 'selected' : ''}>${escapeHTML(c)}</option>`).join('')}</select></div>
-      <div class="form-field"><label>Punto de venta</label><select name="point" id="user-point">${pointOptionsFor(item.client || item.scope, item.point)}</select></div>
+      <div class="form-field"><label>Perfil</label><select name="profile" id="user-profile-sel"><option>Administrador</option><option>Jefe</option><option>Coordinador</option><option>Cliente</option><option>Usuario Punto</option><option>HSQ</option></select></div>
+      <div class="form-field" id="user-client-wrap"><label>Cliente a cargo</label><select name="client" id="user-client">${clients.map(c => `<option value="${escapeHTML(c)}" ${c === (item.client || item.scope) ? 'selected' : ''}>${escapeHTML(c)}</option>`).join('')}</select></div>
+      <div class="form-field" id="user-point-wrap"><label>Punto de venta</label><select name="point" id="user-point">${pointOptionsFor(item.client || item.scope, item.point)}</select></div>
+      <div class="form-field full" id="user-projects-wrap" style="display:none">
+        <label>Proyectos a cargo <span class="fp-sub">(selecciona uno o varios)</span></label>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px" id="user-projects-list">
+          ${state.clients.map(c => `<label style="display:flex;align-items:center;gap:4px;padding:4px 10px;border:1px solid var(--border);border-radius:8px;cursor:pointer;font-size:13px"><input type="checkbox" name="proj" value="${escapeHTML(c.name)}" ${(item.projects||[]).includes(c.name)?'checked':''}> ${escapeHTML(c.name)}</label>`).join('')}
+        </div>
+        ${!state.clients.length ? '<span class="fp-sub">No hay proyectos creados aún. Crea clientes primero.</span>' : ''}
+      </div>
       <div class="form-field full"><label>Permisos</label><div class="permission-grid">${modules.map(m => `<label class="permission-tile"><input type="checkbox" name="perm" value="${m}" ${active.has(m) ? 'checked' : ''}> ${moduleLabel(m)}</label>`).join('')}</div></div>
     </div><div class="modal-foot"><button class="dev-btn" type="button" id="cancel-form">Cancelar</button><button class="dev-btn primary" type="submit">Guardar usuario</button></div>`;
     form.elements.profile.value = item.profile === 'Cliente Admin' ? 'Cliente' : (item.profile || 'Coordinador');
+    const toggleJefeFields = profile => {
+      const isJefe = profile === 'Jefe';
+      document.getElementById('user-projects-wrap').style.display = isJefe ? '' : 'none';
+      document.getElementById('user-client-wrap').style.display = isJefe ? 'none' : '';
+      document.getElementById('user-point-wrap').style.display = isJefe ? 'none' : '';
+    };
+    toggleJefeFields(form.elements.profile.value);
+    document.getElementById('user-profile-sel').onchange = e => toggleJefeFields(e.target.value);
     document.getElementById('user-client').onchange = event => {
       document.getElementById('user-point').innerHTML = pointOptionsFor(event.target.value);
     };
@@ -7385,7 +7437,8 @@ function toggleMode(forceDark) {
       const data = Object.fromEntries(new FormData(form).entries());
       const profile = data.profile === 'Cliente' ? 'Cliente Admin' : data.profile;
       const permissions = [...form.querySelectorAll('input[name="perm"]:checked')].map(i => i.value);
-      const payload = { ...item, id: item.id || uid('USR'), ...data, username: data.email, profile, scope: data.point || data.client, permissions };
+      const projects = profile === 'Jefe' ? [...form.querySelectorAll('input[name="proj"]:checked')].map(i => i.value) : [];
+      const payload = { ...item, id: item.id || uid('USR'), ...data, username: data.email, profile, scope: data.point || data.client, permissions, projects };
       if (id) state.users = state.users.map(u => u.id === id ? payload : u);
       else state.users.unshift(payload);
       closeModal();
@@ -8181,6 +8234,10 @@ function toggleMode(forceDark) {
       state.prefs.mallaViewDate = 'todos';
       saveState('Mostrando historial completo');
     }
+    if (event.target.matches('[data-malla-project-filter]')) {
+      state.prefs.mallaProjectFilter = event.target.value;
+      saveState('Filtro de proyecto actualizado');
+    }
     if (event.target.closest('[data-malla-view-mode]')) {
       state.prefs.mallaViewMode = event.target.closest('[data-malla-view-mode]').dataset.mallaViewMode;
       saveState('Vista de malla cambiada');
@@ -8413,6 +8470,7 @@ function toggleMode(forceDark) {
     if (profile === 'Usuario Punto') return ['mallas'];
     if (profile === 'Gerencia') return ['dashboard', 'mapa', 'reportes'];
     if (profile === 'Coordinador') return ['dashboard', 'mallas', 'mapa', 'novedades', 'tickets', 'quickers', 'gestion', 'casos', 'reportes', 'calendario', 'archivos', 'config'];
+    if (profile === 'Jefe') return ['dashboard', 'mallas', 'mapa', 'novedades', 'tickets', 'quickers', 'matriz', 'hsq', 'gestion', 'casos', 'reportes', 'calendario', 'archivos', 'config', 'perm:editarTitulosMalla'];
     if (profile === 'HSQ') return ['hsq', 'quickers', 'mallas', 'gestion'];
     return ['dashboard', 'mallas', 'mapa', 'novedades', 'tickets', 'quickers', 'matriz', 'hsq', 'gestion', 'casos', 'reportes', 'calendario', 'archivos', 'config', 'perm:editarTitulosMalla', 'perm:crearUsuarios', 'perm:crearClientes'];
   }
@@ -8430,7 +8488,7 @@ function toggleMode(forceDark) {
       toast('Usuario o contraseña incorrectos');
       return;
     }
-    state.session = { id: user.id, name: user.name, username: user.username, profile: user.profile, scope: user.scope };
+    state.session = { id: user.id, name: user.name, username: user.username, profile: user.profile, scope: user.scope, projects: user.projects || [] };
     touchSession();
     saveState(`Bienvenido ${user.name}`, { syncCloud: false });
     applySession();
