@@ -4845,26 +4845,41 @@ function toggleMode(forceDark) {
 
   // La matriz de activos se guarda en su propio documento (evita el límite de 1MB del estado principal)
   function saveMatrixCloud() {
-    if (!cloudDb) return;
+    if (!cloudDb) { toast('Sin conexión a Firebase — la matriz quedó solo en este equipo'); return; }
     try {
-      const rows = state.assetMatrix || [];
+      // Guardar solo campos normalizados (sin "raw") para evitar valores que Firestore rechace
+      const rows = (state.assetMatrix || []).map(({ raw, ...r }) => {
+        // Convertir cualquier valor no primitivo a string para garantizar compatibilidad
+        const clean = {};
+        Object.entries(r).forEach(([k, v]) => {
+          if (v === undefined || v === null) clean[k] = '';
+          else if (typeof v === 'object') clean[k] = JSON.stringify(v);
+          else clean[k] = v;
+        });
+        return clean;
+      });
       const size = JSON.stringify(rows).length;
-      if (size > 950000) { toast('Matriz muy grande para sincronizar en la nube; queda en este equipo'); return; }
-      cloudDb.collection('quick_matrix').doc('data').set({ rows, at: Date.now(), by: state.session?.name || '' })
-        .catch(err => console.warn('Error guardando matriz:', err.message));
-    } catch (e) { console.warn('Matriz no sincronizada:', e.message); }
+      if (size > 950000) { toast('Matriz muy grande para la nube (' + Math.round(size/1000) + 'KB). Intenta reducir columnas.'); return; }
+      cloudDb.collection('quick_matrix').doc('data')
+        .set({ rows, at: Date.now(), by: state.session?.name || '' })
+        .then(() => toast('✓ Matriz sincronizada con la nube (' + rows.length + ' colaboradores)'))
+        .catch(err => { toast('⚠ Error al subir la matriz: ' + err.message); console.error('saveMatrixCloud:', err); });
+    } catch (e) { toast('Error preparando la matriz: ' + e.message); }
   }
   function loadMatrixCloud() {
     if (!cloudDb) return;
     cloudDb.collection('quick_matrix').doc('data').onSnapshot(snap => {
+      if (!snap.exists) return;
       const rows = snap.data()?.rows;
-      if (Array.isArray(rows)) {
-        matrixCache = rows;
-        state.assetMatrix = rows;
+      if (Array.isArray(rows) && rows.length) {
+        // Restaurar campo raw vacío para compatibilidad con exportación
+        const normalized = rows.map(r => ({ ...r, raw: r.raw ? r.raw : {} }));
+        matrixCache = normalized;
+        state.assetMatrix = normalized;
         localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
         if (activeModule === 'matriz') renderMatriz();
       }
-    }, () => {});
+    }, err => console.warn('loadMatrixCloud error:', err.message));
   }
 
   // Capa de medios sobre Firestore (alternativa gratuita a Storage)
