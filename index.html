@@ -5338,6 +5338,7 @@ function toggleMode(forceDark) {
         const photoHTML = user.avatarUrl
           ? `<img src="${escapeHTML(user.avatarUrl)}" style="width:90px;height:90px;border-radius:50%;object-fit:cover;border:3px solid var(--q)">`
           : `<div style="width:90px;height:90px;border-radius:50%;background:var(--q);display:flex;align-items:center;justify-content:center;font-size:32px;font-weight:900;color:#000">${initials(user.name)}</div>`;
+        window._carnetInfo = { name: user.name || '', role: profile, projects: projectsList, email: user.email || '', phone: user.phone || '' };
         return `<section class="settings-block">
           <div class="settings-block-title">Carnet de presentación</div>
           <div class="settings-block-desc" style="margin-bottom:18px;color:var(--text-2)">Tu carnet digital para presentar en visitas a puntos de venta. Puedes imprimirlo o mostrarlo desde el celular.</div>
@@ -5346,7 +5347,6 @@ function toggleMode(forceDark) {
               <div style="position:absolute;top:-30px;right:-30px;width:120px;height:120px;border-radius:50%;background:rgba(245,197,24,.12)"></div>
               <div style="position:absolute;bottom:-20px;left:-20px;width:80px;height:80px;border-radius:50%;background:rgba(245,197,24,.08)"></div>
               <div style="display:flex;align-items:center;gap:12px;margin-bottom:18px">
-                <img src="https://quicklastmile.github.io/Gesti-nAdministrativa/logo.png" alt="Quick Last Mile" style="height:28px;filter:brightness(0) invert(1)" onerror="this.style.display='none'">
                 <span style="font-size:11px;font-weight:700;letter-spacing:2px;color:#f5c518;text-transform:uppercase">Quick Last Mile</span>
               </div>
               <div style="display:flex;align-items:center;gap:16px;margin-bottom:20px">
@@ -5364,8 +5364,8 @@ function toggleMode(forceDark) {
               <div style="position:absolute;bottom:14px;right:18px;font-size:9px;color:rgba(255,255,255,.3);letter-spacing:1px">quicklastmile.com</div>
             </div>
             <div style="display:flex;flex-direction:column;gap:10px">
-              <button class="dev-btn primary" onclick="window.print()"><i class="ti ti-printer"></i> Imprimir carnet</button>
-              <button class="dev-btn" onclick="(() => { const el = document.getElementById('carnet-card'); if (navigator.share) { navigator.share({ title: 'Mi carnet Quick Last Mile', text: '${escapeHTML(user.name)} - ${escapeHTML(profile)} - ${escapeHTML(projectsList)}' }); } else { navigator.clipboard.writeText('${escapeHTML(user.name)} | ${escapeHTML(profile)} | ${escapeHTML(projectsList)} | ${escapeHTML(user.email||'')} | ${escapeHTML(user.phone||'')}').then(() => alert('Info copiada al portapapeles')); } })()"><i class="ti ti-share"></i> Compartir</button>
+              <button class="dev-btn primary" data-print-carnet><i class="ti ti-printer"></i> Imprimir carnet</button>
+              <button class="dev-btn" data-share-carnet><i class="ti ti-share"></i> Compartir</button>
               <p style="font-size:12px;color:var(--text-2);max-width:200px">Para actualizar la foto ve a <strong>Mi usuario</strong> y sube tu foto de perfil.</p>
             </div>
           </div>
@@ -8098,6 +8098,14 @@ function toggleMode(forceDark) {
     if (addCol) addMallaColumn();
     const resetCols = event.target.closest('[data-reset-columns="mallas"]');
     if (resetCols) resetMallaColumns();
+    if (event.target.closest('[data-print-carnet]')) { window.print(); return; }
+    if (event.target.closest('[data-share-carnet]')) {
+      const info = window._carnetInfo || {};
+      const text = [info.name, info.role, info.projects, info.email, info.phone].filter(Boolean).join(' | ');
+      if (navigator.share) { navigator.share({ title: 'Mi carnet Quick Last Mile', text }); }
+      else { navigator.clipboard.writeText(text).then(() => toast('Info copiada al portapapeles')); }
+      return;
+    }
     const lists = event.target.closest('[data-open-malla-lists]');
     if (lists) openMallaListsForm();
     const downloadTpl = event.target.closest('[data-download-malla-template]');
