@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="UTF-8">
@@ -3447,12 +3447,8 @@ function toggleMode(forceDark) {
     const canEditTitles = hasPermission('perm:editarTitulosMalla');
     const titleTool = canEditTitles ? `<button class="dev-btn icon-btn" data-add-column="mallas" title="Agregar título" aria-label="Agregar título"><i class="ti ti-columns"></i></button>` : '';
 
-    // View mode tabs
-    const viewTabs = `<div class="module-tabs" style="margin-bottom:8px">
-      <button class="module-tab ${viewMode==='diario'?'on':''}" data-malla-view-mode="diario"><i class="ti ti-list"></i> Diario</button>
-      <button class="module-tab ${viewMode==='semanal'?'on':''}" data-malla-view-mode="semanal"><i class="ti ti-calendar-week"></i> Semana</button>
-      <button class="module-tab ${viewMode==='mensual'?'on':''}" data-malla-view-mode="mensual"><i class="ti ti-calendar-month"></i> Mes</button>
-    </div>`;
+    // View mode tab (solo Diario activo)
+    const viewTabs = '';
 
     // Date navigation for planner modes
     const today = new Date().toISOString().slice(0, 10);
@@ -5223,7 +5219,8 @@ function toggleMode(forceDark) {
     const profile = user.profile || state.session?.profile || '';
     const isAdmin = profile === 'Administrador' || !profile;
     const isCoordinator = profile === 'Coordinador';
-    const allowedTabs = ['miUsuario', ...(isAdmin ? ['clientes', 'usuarios', 'quickers', 'modulos', 'tickets', 'hsq'] : []), ...(isCoordinator ? ['quickers'] : []), 'apariencia'];
+    const isJefe = profile === 'Jefe';
+    const allowedTabs = ['miUsuario', ...(isAdmin ? ['clientes', 'usuarios', 'quickers', 'modulos', 'tickets', 'hsq'] : []), ...((isCoordinator || isJefe) ? ['quickers', 'carnet'] : []), 'apariencia'];
     const tab = allowedTabs.includes(state.prefs.configTab) ? state.prefs.configTab : 'miUsuario';
     const navBtn = (id, icon, label) => `<button class="settings-tab ${tab === id ? 'on' : ''}" data-config-tab="${id}"><i class="ti ${icon}"></i><span>${label}</span></button>`;
     const userPhoto = user.avatarUrl ? `<img src="${user.avatarUrl}" alt="${escapeHTML(user.name)}">` : initials(user.name);
@@ -5246,8 +5243,9 @@ function toggleMode(forceDark) {
       <div class="record-meta">ID Proyecto: ${escapeHTML(c.idProyecto || '')}</div>
       <div class="row-actions" style="margin-top:10px">${action('Ver / editar', 'editClient', c.id)}${action('Agregar punto', 'addPoint', c.id)}${action('Eliminar', 'deleteClient', c.id)}</div>
     </div>`).join('');
-    const existing = state.users.map(u => `<option value="${escapeHTML(u.id)}">${escapeHTML(u.name)} · ${escapeHTML(u.username)}</option>`).join('');
-    const userCards = state.users.map(u => `<div class="record-card">
+    const nonQuickerUsers = state.users.filter(u => u.profile !== 'Quicker');
+    const existing = nonQuickerUsers.map(u => `<option value="${escapeHTML(u.id)}">${escapeHTML(u.name)} · ${escapeHTML(u.username)}</option>`).join('');
+    const userCards = nonQuickerUsers.map(u => `<div class="record-card">
       <div class="record-title">${escapeHTML(u.name)}</div>
       <div class="record-meta">${escapeHTML(u.email || u.username)}<br>${escapeHTML(u.phone || 'Sin teléfono')}<br>${escapeHTML(u.profile)} · ${escapeHTML(u.client || u.scope || 'Global')} ${u.point ? `· ${escapeHTML(u.point)}` : ''}</div>
       <div class="row-actions" style="margin-top:10px">${action('Editar', 'editUser', u.id)}${action('Permisos', 'permissionsUser', u.id)}${action('Eliminar', 'deleteUser', u.id)}</div>
@@ -5334,7 +5332,45 @@ function toggleMode(forceDark) {
       hsq: `<section class="settings-block">
         <div class="settings-block-desc" style="margin-bottom:14px;color:var(--text-2)">Define qué se puede publicar en HSQ (capacitaciones, comparendos, tránsito, comunicados…), qué campos pide cada uno y qué puede hacer el mensajero.</div>
         <div class="settings-actions"><button class="dev-btn primary" data-add-hsq-type><i class="ti ti-plus"></i> Agregar tipo de publicación</button></div>
-        <div class="form-builder-list">${hsqCfgCards || '<div class="fp-sub">Sin tipos.</div>'}</div></section>`
+        <div class="form-builder-list">${hsqCfgCards || '<div class="fp-sub">Sin tipos.</div>'}</div></section>`,
+      carnet: (() => {
+        const projectsList = isJefe ? jefeProjecs(user).join(' · ') : (user.client && user.client !== 'Global' ? user.client : 'Global');
+        const photoHTML = user.avatarUrl
+          ? `<img src="${escapeHTML(user.avatarUrl)}" style="width:90px;height:90px;border-radius:50%;object-fit:cover;border:3px solid var(--q)">`
+          : `<div style="width:90px;height:90px;border-radius:50%;background:var(--q);display:flex;align-items:center;justify-content:center;font-size:32px;font-weight:900;color:#000">${initials(user.name)}</div>`;
+        return `<section class="settings-block">
+          <div class="settings-block-title">Carnet de presentación</div>
+          <div class="settings-block-desc" style="margin-bottom:18px;color:var(--text-2)">Tu carnet digital para presentar en visitas a puntos de venta. Puedes imprimirlo o mostrarlo desde el celular.</div>
+          <div style="display:flex;gap:18px;flex-wrap:wrap;align-items:flex-start">
+            <div id="carnet-card" style="width:340px;background:linear-gradient(135deg,#1a1a2e 0%,#16213e 60%,#0f3460 100%);border-radius:20px;padding:28px 24px;color:#fff;box-shadow:0 8px 32px rgba(0,0,0,.4);position:relative;overflow:hidden">
+              <div style="position:absolute;top:-30px;right:-30px;width:120px;height:120px;border-radius:50%;background:rgba(245,197,24,.12)"></div>
+              <div style="position:absolute;bottom:-20px;left:-20px;width:80px;height:80px;border-radius:50%;background:rgba(245,197,24,.08)"></div>
+              <div style="display:flex;align-items:center;gap:12px;margin-bottom:18px">
+                <img src="https://quicklastmile.github.io/Gesti-nAdministrativa/logo.png" alt="Quick Last Mile" style="height:28px;filter:brightness(0) invert(1)" onerror="this.style.display='none'">
+                <span style="font-size:11px;font-weight:700;letter-spacing:2px;color:#f5c518;text-transform:uppercase">Quick Last Mile</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:16px;margin-bottom:20px">
+                ${photoHTML}
+                <div>
+                  <div style="font-size:18px;font-weight:900;line-height:1.2;margin-bottom:4px">${escapeHTML(user.name || 'Sin nombre')}</div>
+                  <div style="font-size:12px;color:#f5c518;font-weight:700;text-transform:uppercase;letter-spacing:1px">${escapeHTML(profile)}</div>
+                </div>
+              </div>
+              <div style="border-top:1px solid rgba(255,255,255,.15);padding-top:14px;display:flex;flex-direction:column;gap:8px">
+                <div style="display:flex;align-items:center;gap:8px;font-size:12px"><i class="ti ti-briefcase" style="color:#f5c518;width:16px"></i><span>${escapeHTML(projectsList)}</span></div>
+                ${user.email ? `<div style="display:flex;align-items:center;gap:8px;font-size:12px"><i class="ti ti-mail" style="color:#f5c518;width:16px"></i><span>${escapeHTML(user.email)}</span></div>` : ''}
+                ${user.phone ? `<div style="display:flex;align-items:center;gap:8px;font-size:12px"><i class="ti ti-phone" style="color:#f5c518;width:16px"></i><span>${escapeHTML(user.phone)}</span></div>` : ''}
+              </div>
+              <div style="position:absolute;bottom:14px;right:18px;font-size:9px;color:rgba(255,255,255,.3);letter-spacing:1px">quicklastmile.com</div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:10px">
+              <button class="dev-btn primary" onclick="window.print()"><i class="ti ti-printer"></i> Imprimir carnet</button>
+              <button class="dev-btn" onclick="(() => { const el = document.getElementById('carnet-card'); if (navigator.share) { navigator.share({ title: 'Mi carnet Quick Last Mile', text: '${escapeHTML(user.name)} - ${escapeHTML(profile)} - ${escapeHTML(projectsList)}' }); } else { navigator.clipboard.writeText('${escapeHTML(user.name)} | ${escapeHTML(profile)} | ${escapeHTML(projectsList)} | ${escapeHTML(user.email||'')} | ${escapeHTML(user.phone||'')}').then(() => alert('Info copiada al portapapeles')); } })()"><i class="ti ti-share"></i> Compartir</button>
+              <p style="font-size:12px;color:var(--text-2);max-width:200px">Para actualizar la foto ve a <strong>Mi usuario</strong> y sube tu foto de perfil.</p>
+            </div>
+          </div>
+        </section>`;
+      })()
     };
     panel('config', 'Configuración', '', '',
       `<div class="settings-shell">
@@ -5343,14 +5379,15 @@ function toggleMode(forceDark) {
           ${navBtn('miUsuario', 'ti-user-circle', user.name || 'Mi usuario')}
           ${(isAdmin || isCoordinator) ? '<div class="settings-section-label">Espacio de trabajo</div>' : ''}
           ${isAdmin ? navBtn('clientes', 'ti-building-store', 'Clientes') + navBtn('usuarios', 'ti-users', 'Usuarios') : ''}
-          ${(isAdmin || isCoordinator) ? navBtn('quickers', 'ti-motorbike', 'Quickers') : ''}
+          ${(isAdmin || isCoordinator || isJefe) ? navBtn('quickers', 'ti-motorbike', 'Quickers') : ''}
+          ${(isCoordinator || isJefe) ? navBtn('carnet', 'ti-id-badge', 'Mi carnet') : ''}
           ${isAdmin ? '<div class="settings-section-label">Módulos</div>' + navBtn('modulos', 'ti-layout-grid-add', 'Módulos') + navBtn('tickets', 'ti-ticket', 'Tickets') + navBtn('hsq', 'ti-shield-half', 'HSQ / Alertas') : ''}
           <div class="settings-section-label">Apariencia</div>
           ${navBtn('apariencia', 'ti-palette', 'Apariencia')}
         </aside>
         <main class="settings-main">
-          <div class="settings-title">${tab === 'miUsuario' ? 'Mi usuario' : tab === 'clientes' ? 'Clientes' : tab === 'usuarios' ? 'Usuarios' : tab === 'quickers' ? 'Quickers' : tab === 'tickets' ? 'Tickets' : tab === 'hsq' ? 'HSQ / Alertas' : tab === 'apariencia' ? 'Apariencia' : 'Módulos'}</div>
-          <div class="settings-desc">${tab === 'miUsuario' ? 'Administra la información de la cuenta con la que ingresaste.' : tab === 'clientes' ? 'Crea clientes, reglas de operación y puntos de venta.' : tab === 'usuarios' ? 'Crea usuarios, perfiles, alcance operativo y permisos.' : tab === 'quickers' ? 'Crea usuarios mensajeros desde matriz de activos y habilita pagos adicionales.' : tab === 'tickets' ? 'Configura las preguntas y listas del formulario de creación de tickets.' : tab === 'apariencia' ? 'Elige el tema visual de la plataforma.' : 'Configura títulos, plantillas y listas que alimentan la malla.'}</div>
+          <div class="settings-title">${tab === 'miUsuario' ? 'Mi usuario' : tab === 'clientes' ? 'Clientes' : tab === 'usuarios' ? 'Usuarios' : tab === 'quickers' ? 'Quickers' : tab === 'tickets' ? 'Tickets' : tab === 'hsq' ? 'HSQ / Alertas' : tab === 'apariencia' ? 'Apariencia' : tab === 'carnet' ? 'Mi carnet' : 'Módulos'}</div>
+          <div class="settings-desc">${tab === 'miUsuario' ? 'Administra la información de la cuenta con la que ingresaste.' : tab === 'clientes' ? 'Crea clientes, reglas de operación y puntos de venta.' : tab === 'usuarios' ? 'Crea usuarios, perfiles, alcance operativo y permisos.' : tab === 'quickers' ? 'Crea usuarios mensajeros desde matriz de activos y habilita pagos adicionales.' : tab === 'tickets' ? 'Configura las preguntas y listas del formulario de creación de tickets.' : tab === 'apariencia' ? 'Elige el tema visual de la plataforma.' : tab === 'carnet' ? 'Carnet digital de presentación para visitas a puntos de venta.' : 'Configura títulos, plantillas y listas que alimentan la malla.'}</div>
           ${sections[tab] || sections.miUsuario}
         </main>
       </div>`
@@ -6192,48 +6229,102 @@ function toggleMode(forceDark) {
   }
 
   function openMallaCreateOptions(opts) {
-    // If called from the planner grid with a pre-selected quicker+date, open form directly
-    if (opts && (opts.prefQuicker || opts.prefDate)) {
-      openForm('malla');
-      const form = document.getElementById('modal-form');
-      if (opts.prefDate && form.elements.date) form.elements.date.value = opts.prefDate;
-      if (opts.prefQuicker && form.elements.quicker) {
-        form.elements.quicker.value = opts.prefQuicker;
-        // Trigger cedula autofill if exists
-        const q = state.quickers.find(x => x.name === opts.prefQuicker);
-        if (q && form.elements.cedula) form.elements.cedula.value = q.cedula || '';
-      }
-      return;
-    }
+    const user = currentUser();
+    const profile = user.profile || 'Administrador';
+    const today = new Date().toISOString().slice(0, 10);
+    const currentDate = (state.prefs.mallaViewDate && state.prefs.mallaViewDate !== 'todos') ? state.prefs.mallaViewDate : today;
+    // Determinar cliente predeterminado según perfil
+    const isCoordOrJefe = profile === 'Coordinador' || profile === 'Jefe';
+    const defaultClient = isCoordOrJefe ? (user.client || (jefeProjecs(user)[0] || '')) : (state.prefs.mallaProjectFilter || '');
+    const clientOptions = isCoordOrJefe && profile === 'Jefe'
+      ? jefeProjecs(user).map(c => `<option value="${escapeHTML(c)}" ${c === defaultClient ? 'selected' : ''}>${escapeHTML(c)}</option>`).join('')
+      : !isCoordOrJefe
+        ? state.clients.map(c => `<option value="${escapeHTML(c.name)}" ${c.name === defaultClient ? 'selected' : ''}>${escapeHTML(c.name)}</option>`).join('')
+        : `<option value="${escapeHTML(defaultClient)}">${escapeHTML(defaultClient)}</option>`;
+    const showClientSel = !isCoordOrJefe || profile === 'Jefe';
+    const clientField = showClientSel
+      ? `<div class="form-field"><label>Cliente / Proyecto</label><select name="client" id="malla-quick-client">${clientOptions}</select></div>`
+      : `<input type="hidden" name="client" value="${escapeHTML(defaultClient)}">`;
+    const initialClient = defaultClient || (state.clients[0]?.name || '');
+    const initialPoints = (() => {
+      const c = state.clients.find(x => x.name === initialClient) || {};
+      return (c.points || []).map(pointName);
+    })();
+    const pointOpts = initialPoints.map(p => `<option value="${escapeHTML(p)}">${escapeHTML(p)}</option>`).join('');
     const form = document.getElementById('modal-form');
-    const dates = [...new Set(state.availabilities.map(d => d.date).filter(Boolean))].sort().reverse();
-    document.getElementById('modal-title').textContent = 'Nueva malla';
-    document.getElementById('modal-subtitle').textContent = 'Crea una disponibilidad individual o duplica la programación de un día ya cargado.';
+    document.getElementById('modal-title').textContent = 'Agregar línea a la malla';
+    document.getElementById('modal-subtitle').textContent = `Fecha: ${currentDate}`;
     form.innerHTML = `<div class="form-grid">
-      <div class="form-field full">
-        <button class="dev-btn primary" type="button" data-create-single-malla><i class="ti ti-plus"></i> Agregar casilla individual</button>
-      </div>
-      <div class="form-field full"><label>Duplicar malla existente</label><span class="fp-sub">Selecciona un día origen y replica sus servicios al rango que necesites.</span></div>
-      <div class="form-field"><label>Día origen</label><select name="sourceDate">${dates.map(date => `<option value="${escapeHTML(date)}">${escapeHTML(date)}</option>`).join('')}</select></div>
-      <div class="form-field"><label>Fecha inicio destino</label><input name="startDate" type="date"></div>
-      <div class="form-field"><label>Fecha fin destino</label><input name="endDate" type="date"></div>
-    </div><div class="modal-foot"><button class="dev-btn" type="button" id="cancel-form">Cancelar</button><button class="dev-btn primary" type="submit">Duplicar día</button></div>`;
-    form.querySelector('[data-create-single-malla]').onclick = () => openForm('malla');
+      ${clientField}
+      <div class="form-field"><label>Punto de venta</label><select name="point" id="malla-quick-point">${pointOpts}</select></div>
+      <div class="form-field"><label>Cédula</label><input name="cedula" id="malla-quick-cedula" type="text" placeholder="Escribe la cédula..."></div>
+      <div class="form-field"><label>Nombre y apellidos</label><input name="quicker" id="malla-quick-quicker" type="text" placeholder="Se llena automático"></div>
+      <div class="form-field"><label>Ciudad</label><input name="city" id="malla-quick-city" type="text" placeholder="Se llena automático"></div>
+      <div class="form-field"><label>Horario inicio</label><input name="plannedStart" type="time"></div>
+      <div class="form-field"><label>Horario fin</label><input name="plannedEnd" type="time"></div>
+      <div class="form-field"><label>Tipo de contrato</label><select name="contractType">${(state.prefs.contractTypes || ['Fijo','Colaborativo','Quick Go','Back Up']).map(t => `<option>${escapeHTML(t)}</option>`).join('')}</select></div>
+      <div class="form-field"><label>Tipo de gestión</label><select name="managementType">${(state.prefs.managementTypes || ['Fijo','Adicional','Relevo','Colaborativo','Flotante','Quick Go']).map(t => `<option>${escapeHTML(t)}</option>`).join('')}</select></div>
+      <div class="form-field full"><label>Observación</label><textarea name="observations" rows="2"></textarea></div>
+    </div><div class="modal-foot"><button class="dev-btn" type="button" id="cancel-form">Cancelar</button><button class="dev-btn primary" type="submit">Guardar línea</button></div>`;
+    // Actualizar puntos al cambiar cliente
+    const clientSel = document.getElementById('malla-quick-client');
+    const pointSel = document.getElementById('malla-quick-point');
+    const updatePoints = (clientName) => {
+      const c = state.clients.find(x => x.name === clientName) || {};
+      const pts = (c.points || []).map(pointName);
+      if (pointSel) pointSel.innerHTML = pts.map(p => `<option value="${escapeHTML(p)}">${escapeHTML(p)}</option>`).join('');
+    };
+    if (clientSel) clientSel.onchange = () => updatePoints(clientSel.value);
+    // Autofill nombre y ciudad desde cédula
+    const cedulaInput = document.getElementById('malla-quick-cedula');
+    const quickerInput = document.getElementById('malla-quick-quicker');
+    const cityInput = document.getElementById('malla-quick-city');
+    if (cedulaInput) {
+      cedulaInput.oninput = () => {
+        const q = state.quickers.find(x => String(x.cedula || '').trim() === String(cedulaInput.value || '').trim());
+        if (q) {
+          if (quickerInput) quickerInput.value = q.name || '';
+          if (cityInput) cityInput.value = q.city || pointInfo(q.client, q.point).city || '';
+        }
+      };
+    }
+    // Pre-fill si viene desde el planner con quicker/date
+    if (opts && opts.prefQuicker) {
+      if (quickerInput) quickerInput.value = opts.prefQuicker;
+      const q = state.quickers.find(x => x.name === opts.prefQuicker);
+      if (q) {
+        if (cedulaInput) cedulaInput.value = q.cedula || '';
+        if (cityInput) cityInput.value = q.city || '';
+      }
+    }
     form.onsubmit = event => {
       event.preventDefault();
       const data = Object.fromEntries(new FormData(form).entries());
-      if (!data.sourceDate || !data.startDate || !data.endDate) { toast('Completa día origen y rango destino'); return; }
-      const source = state.availabilities.filter(d => d.date === data.sourceDate);
-      if (!source.length) { toast('No hay mallas en el día origen'); return; }
-      const start = new Date(`${data.startDate}T00:00:00`);
-      const end = new Date(`${data.endDate}T00:00:00`);
-      for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-        const date = d.toISOString().slice(0, 10);
-        source.forEach(item => state.availabilities.unshift({ ...item, id: uid('DIS'), date, realStart: '', realEnd: '', evidencePhoto: '', status: item.quicker ? 'Programado' : 'Pendiente asignación', custom: { ...(item.custom || {}) } }));
-      }
+      if (!data.quicker && !data.cedula) { toast('Ingresa cédula o nombre del mensajero'); return; }
+      const resolvedClient = data.client || defaultClient || inferClientFromPoint(data.point);
+      const item = {
+        id: uid('DIS'),
+        date: currentDate,
+        client: resolvedClient,
+        city: data.city || '',
+        point: data.point || '',
+        quicker: data.quicker || '',
+        cedula: data.cedula || '',
+        plannedStart: data.plannedStart || '',
+        plannedEnd: data.plannedEnd || '',
+        schedule: data.plannedStart && data.plannedEnd ? `${data.plannedStart} - ${data.plannedEnd}` : '',
+        contractType: data.contractType || 'Fijo',
+        managementType: data.managementType || 'Fijo',
+        observations: data.observations || '',
+        noveltyType: '', realStart: '', realEnd: '', evidencePhoto: '',
+        status: data.quicker ? 'Programado' : 'Pendiente asignación',
+        custom: {}
+      };
+      normalizeQuickGoFields(item);
+      state.availabilities.unshift(item);
+      log('Malla', 'Agregó línea a malla', `${currentDate} · ${item.quicker || item.cedula}`);
+      saveState('Línea agregada');
       closeModal();
-      log('Malla', 'Duplicó malla desde nuevo', `${data.sourceDate} a ${data.startDate}-${data.endDate}`);
-      saveState('Malla duplicada');
     };
     document.getElementById('cancel-form').onclick = closeModal;
     document.getElementById('app-modal').classList.add('open');
@@ -7516,47 +7607,64 @@ function toggleMode(forceDark) {
   }
 
   function findAssetByCedula(cedula) {
-    return state.assetMatrix.find(a => String(a.cedula || '').trim() === String(cedula || '').trim()) || null;
+    return state.assetMatrix.find(a => String(a.cedula || '').trim() === String(cedula || '').trim()) || null;  function messengerPointsHTML(clientName, selectedPoints) {
+    const c = state.clients.find(x => x.name === clientName) || {};
+    const pts = (c.points || []).map(pointName);
+    if (!pts.length) return '<span class="fp-sub">Este cliente no tiene puntos creados.</span>';
+    return pts.map(p => `<label style="display:flex;align-items:center;gap:6px;padding:4px 10px;border:1px solid var(--border);border-radius:8px;cursor:pointer;font-size:13px"><input type="checkbox" name="points" value="${escapeHTML(p)}" ${(selectedPoints||[]).includes(p)?'checked':''}> ${escapeHTML(p)}</label>`).join('');
   }
 
   function openMessengerUserForm(id = '') {
-    const item = state.quickers.find(q => q.id === id) || { cedula: '', name: '', phone: '', email: '', client: '', point: '', projectName: '', dateIngress: '', paymentEnabled: 'No', paymentTypes: [] };
+    const item = state.quickers.find(q => q.id === id) || { cedula: '', name: '', phone: '', email: '', client: '', point: '', points: [], projectName: '', dateIngress: '', paymentEnabled: 'No', paymentTypes: [] };
     const loginUser = state.users.find(u => u.profile === 'Quicker' && (u.email === item.email || u.username === item.email || u.name === item.name)) || {};
     const form = document.getElementById('modal-form');
     document.getElementById('modal-title').textContent = id ? `Editar mensajero · ${item.name}` : 'Crear usuario mensajero';
-    document.getElementById('modal-subtitle').textContent = 'Busca por cédula en la matriz de activos y crea o actualiza el Quicker + usuario de ingreso.';
+    document.getElementById('modal-subtitle').textContent = 'Al pegar la cedula se autocompleta el nombre y telefono desde la matriz.';
     const user = currentUser();
     const clients = user.profile === 'Coordinador' && user.client && user.client !== 'Global' ? [user.client] : state.clients.map(c => c.name);
     const selectedClient = item.client || clients[0] || '';
+    const selectedPoints = item.points || (item.point ? [item.point] : []);
     const paymentTypes = item.paymentTypes || [];
     form.innerHTML = `<div class="form-grid">
-      <div class="form-field"><label>Cédula</label><input name="cedula" id="messenger-cedula" value="${escapeHTML(item.cedula || '')}" required></div>
-      <div class="form-field" style="align-self:end"><button class="dev-btn" type="button" id="lookup-asset"><i class="ti ti-search"></i> Buscar matriz</button></div>
+      <div class="form-field"><label>Cedula</label><input name="cedula" id="messenger-cedula" value="${escapeHTML(item.cedula || '')}" required placeholder="Pega la cedula aqui..."></div>
+      <div class="form-field" style="align-self:end"><button class="dev-btn" type="button" id="lookup-asset"><i class="ti ti-search"></i> Buscar en matriz</button></div>
       <div class="form-field"><label>Nombre completo</label><input name="name" id="messenger-name" value="${escapeHTML(item.name || '')}" required></div>
-      <div class="form-field"><label>Teléfono</label><input name="phone" id="messenger-phone" value="${escapeHTML(item.phone || '')}"></div>
-      <div class="form-field"><label>Correo / usuario ingreso</label><input name="email" id="messenger-email" type="email" value="${escapeHTML(item.email || '')}" required></div>
+      <div class="form-field"><label>Telefono</label><input name="phone" id="messenger-phone" value="${escapeHTML(item.phone || '')}"></div>
+      <div class="form-field"><label>Correo / usuario de ingreso</label><input name="email" id="messenger-email" type="email" value="${escapeHTML(item.email || '')}" required></div>
       <div class="form-field"><label>Cargo</label><select name="cargo">${['Quicker mensajero', 'Quicker conductor', 'Auxiliar', 'Supervisor'].map(c => `<option ${item.cargo === c ? 'selected' : ''}>${c}</option>`).join('')}</select></div>
-      <div class="form-field"><label>Ciudad</label><input name="city" value="${escapeHTML(item.city || '')}"></div>
+      <div class="form-field"><label>Ciudad</label><input name="city" id="messenger-city" value="${escapeHTML(item.city || '')}"></div>
       <div class="form-field"><label>Placa de la moto</label><input name="plate" value="${escapeHTML(item.plate || '')}" placeholder="Ej: ABC12D"></div>
-      <div class="form-field"><label>Contraseña</label><input name="password" type="text" value="${escapeHTML(loginUser.password || '')}" placeholder="Define contraseña" ${id ? '' : 'required'}></div>
+      <div class="form-field"><label>Contrasena</label><input name="password" type="text" value="${escapeHTML(loginUser.password || '')}" placeholder="Define contrasena" ${id ? '' : 'required'}></div>
       <div class="form-field"><label>Proyecto matriz</label><input name="projectName" id="messenger-project" value="${escapeHTML(item.projectName || '')}"></div>
-      <div class="form-field"><label>Fecha contratación</label><input name="dateIngress" id="messenger-date" value="${escapeHTML(item.dateIngress || '')}"></div>
+      <div class="form-field"><label>Fecha contratacion</label><input name="dateIngress" id="messenger-date" type="date" value="${escapeHTML(item.dateIngress || '')}"></div>
       <div class="form-field"><label>Cliente asignado</label><select name="client" id="messenger-client">${clients.map(c => `<option value="${escapeHTML(c)}" ${c === selectedClient ? 'selected' : ''}>${escapeHTML(c)}</option>`).join('')}</select></div>
-      <div class="form-field"><label>Punto de venta</label><select name="point" id="messenger-point">${pointOptionsFor(selectedClient, item.point)}</select></div>
+      <div class="form-field full"><label>Puntos asignados <span class="fp-sub">(puede ser mas de uno)</span></label>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px" id="messenger-points-list">${messengerPointsHTML(selectedClient, selectedPoints)}</div>
+      </div>
       <div class="form-field"><label>Reporta pagos adicionales</label><select name="paymentEnabled"><option>No</option><option>Si</option></select></div>
       <div class="form-field full"><label>Tipos de pago habilitados</label><div class="check-grid">
-        ${['Parqueaderos · valor y factura', 'Periferias · guía y foto servicio', 'Transferencias · guía y foto documento'].map(v => `<label class="check-tile"><input type="checkbox" name="paymentTypes" value="${v}" ${paymentTypes.includes(v) ? 'checked' : ''}> ${v}</label>`).join('')}
+        ${['Parqueaderos - valor y factura', 'Periferias - guia y foto servicio', 'Transferencias - guia y foto documento'].map(v => `<label class="check-tile"><input type="checkbox" name="paymentTypes" value="${v}" ${paymentTypes.includes(v) ? 'checked' : ''}> ${v}</label>`).join('')}
       </div></div>
     </div><div class="modal-foot"><button class="dev-btn" type="button" id="cancel-form">Cancelar</button><button class="dev-btn primary" type="submit">${id ? 'Guardar mensajero' : 'Crear mensajero'}</button></div>`;
     form.elements.paymentEnabled.value = item.paymentEnabled || 'No';
     document.getElementById('messenger-client').onchange = event => {
-      document.getElementById('messenger-point').innerHTML = pointOptionsFor(event.target.value);
+      document.getElementById('messenger-points-list').innerHTML = messengerPointsHTML(event.target.value, []);
+    };
+    document.getElementById('messenger-cedula').oninput = () => {
+      const asset = findAssetByCedula(document.getElementById('messenger-cedula').value);
+      if (!asset) return;
+      document.getElementById('messenger-name').value = asset.name || '';
+      document.getElementById('messenger-phone').value = asset.phone || asset.Phone || '';
+      document.getElementById('messenger-city').value = asset.city || '';
+      if (!document.getElementById('messenger-email').value) document.getElementById('messenger-email').value = asset.email || '';
+      toast('Datos autocargados desde matriz');
     };
     document.getElementById('lookup-asset').onclick = () => {
       const asset = findAssetByCedula(document.getElementById('messenger-cedula').value);
-      if (!asset) { toast('No encontré esa cédula en la matriz cargada'); return; }
+      if (!asset) { toast('No encontre esa cedula en la matriz cargada'); return; }
       document.getElementById('messenger-name').value = asset.name || '';
-      document.getElementById('messenger-phone').value = asset.cellPhone || asset.phone || '';
+      document.getElementById('messenger-phone').value = asset.phone || asset.Phone || '';
+      document.getElementById('messenger-city').value = asset.city || '';
       document.getElementById('messenger-email').value = asset.email || '';
       document.getElementById('messenger-project').value = asset.projectName || '';
       document.getElementById('messenger-date').value = asset.dateIngress || '';
@@ -7565,26 +7673,28 @@ function toggleMode(forceDark) {
     form.onsubmit = event => {
       event.preventDefault();
       const data = Object.fromEntries(new FormData(form).entries());
+      const selectedPts = [...form.querySelectorAll('input[name="points"]:checked')].map(o => o.value);
+      const primaryPoint = selectedPts[0] || '';
       const q = {
         ...item, id: item.id || nextQuickerId(), cedula: data.cedula, name: data.name, phone: data.phone, email: data.email,
         cargo: data.cargo || 'Quicker mensajero', city: data.city || '', plate: (data.plate || '').toUpperCase(),
-        client: data.client, point: data.point, zone: item.zone || '', docName: item.docName || 'Documentos base', docExpires: item.docExpires || '', status: item.status || 'Activo',
+        client: data.client, point: primaryPoint, points: selectedPts,
+        zone: item.zone || '', docName: item.docName || 'Documentos base', docExpires: item.docExpires || '', status: item.status || 'Activo',
         projectName: data.projectName, dateIngress: data.dateIngress, paymentEnabled: data.paymentEnabled,
         paymentTypes: [...form.querySelectorAll('input[name="paymentTypes"]:checked')].map(o => o.value)
       };
       if (id) state.quickers = state.quickers.map(existing => existing.id === id ? q : existing);
       else state.quickers.unshift(q);
-      const userPayload = { ...(loginUser || {}), id: loginUser.id || uid('USR'), name: data.name, email: data.email, phone: data.phone, username: data.email, password: data.password || loginUser.password || '', profile: 'Quicker', scope: data.name, client: data.client, point: data.point, permissions: ['mensajero'] };
+      const userPayload = { ...(loginUser || {}), id: loginUser.id || uid('USR'), name: data.name, email: data.email, phone: data.phone, username: data.email, password: data.password || loginUser.password || '', profile: 'Quicker', scope: data.name, client: data.client, point: primaryPoint, permissions: ['mensajero'] };
       if (loginUser.id) state.users = state.users.map(u => u.id === loginUser.id ? userPayload : u);
       else state.users.unshift(userPayload);
       closeModal();
-      log('Usuario', id ? 'Editó usuario mensajero' : 'Creó usuario mensajero', data.email);
+      log('Usuario', id ? 'Edito usuario mensajero' : 'Creo usuario mensajero', data.email);
       saveState(id ? 'Mensajero actualizado' : 'Mensajero creado');
     };
     document.getElementById('cancel-form').onclick = closeModal;
     document.getElementById('app-modal').classList.add('open');
   }
-
   function openPermissionsForm(userId) {
     const user = state.users.find(u => u.id === userId);
     if (!user) return;
