@@ -6744,6 +6744,7 @@ function toggleMode(forceDark) {
   function mallaTemplateColumns() {
     return [
       { key: 'date', label: 'Fecha (obligatorio)' },
+      { key: 'client', label: 'Cliente (obligatorio)', comment: 'Nombre exacto del proyecto/cliente en la plataforma.' },
       { key: 'city', label: 'Ciudad (obligatorio)' },
       { key: 'point', label: 'Punto (obligatorio)', comment: 'El punto debe ser igual al registrado en la plataforma.' },
       { key: 'quicker', label: 'Nombre y apellidos (obligatorio)' },
@@ -6764,6 +6765,7 @@ function toggleMode(forceDark) {
     const schedule = item.schedule || [item.plannedStart, item.plannedEnd].filter(Boolean).join(' - ');
     return {
       date: item.date || '',
+      client: item.client || '',
       city: item.city || pointInfo(item.client, item.point).city || '',
       point: item.point || '',
       quicker: item.quicker || '',
@@ -6791,7 +6793,7 @@ function toggleMode(forceDark) {
   function decorateMallaSheet(ws, aoa) {
     const cols = mallaTemplateColumns();
     ws['!cols'] = [
-      { wch: 16 }, { wch: 18 }, { wch: 30 }, { wch: 34 }, { wch: 18 }, { wch: 18 }, { wch: 24 },
+      { wch: 16 }, { wch: 28 }, { wch: 18 }, { wch: 30 }, { wch: 34 }, { wch: 18 }, { wch: 18 }, { wch: 24 },
       { wch: 24 }, { wch: 18 }, { wch: 22 }, { wch: 26 }, { wch: 24 }, { wch: 32 }, { wch: 34 }
     ];
     ws['!autofilter'] = { ref: XLSX.utils.encode_range({ s: { r: 1, c: 0 }, e: { r: Math.max(1, aoa.length - 1), c: cols.length - 1 } }) };
@@ -6872,6 +6874,7 @@ function toggleMode(forceDark) {
     const item = {
       id: uid('DIS'),
       date: normalizeImportedDate(get('Fecha', 'FECHA', 'date')),
+      client: get('Cliente', 'CLIENTE', 'client'),
       city: get('Ciudad', 'CIUDAD', 'city') || 'Bogotá',
       point: get('Punto', 'PUNTO', 'point'),
       quicker: get('Nombre y apellidos', 'NOMBRE Y APELLIDOS', 'Nombre y apellido', 'quicker'),
@@ -6899,7 +6902,7 @@ function toggleMode(forceDark) {
     if (!window.XLSX) { toast('No cargó XLSX. Revisa conexión a internet.'); return; }
     const reader = new FileReader();
     reader.onload = () => {
-      const wb = XLSX.read(reader.result, { type: 'array', cellDates: false });
+      const wb = XLSX.read(reader.result, { type: 'array', cellDates: true });
       const ws = wb.Sheets[wb.SheetNames[0]];
       const rows = rowsFromMallaSheet(ws);
       const batchId = uid('IMP');
@@ -6907,6 +6910,9 @@ function toggleMode(forceDark) {
       imported.forEach(item => item.importBatchId = batchId);
       state.availabilities.unshift(...imported);
       log('Malla', 'Importó malla masiva', `${imported.length} registros`);
+      const datesSummary = [...new Set(imported.map(r => r.date).filter(Boolean))].sort().join(', ') || 'sin fecha';
+      const clientsSummary = [...new Set(imported.map(r => r.client).filter(Boolean))].join(', ') || 'sin cliente';
+      toast(`✓ ${imported.length} registros importados — Fechas: ${datesSummary} | Cliente: ${clientsSummary}`);
       saveState('Malla importada');
     };
     reader.readAsArrayBuffer(file);
