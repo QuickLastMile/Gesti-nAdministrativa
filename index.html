@@ -3052,7 +3052,24 @@ function toggleMode(forceDark) {
     }
   }
 
+  function getDesvinculacion(name, cedula) {
+    // Returns fechaUltimoDia if this messenger has a desvinculación registered
+    const match = n =>
+      /desvinculaci/i.test(n.type || '') &&
+      ((cedula && (n.cedula === cedula || n.formData?.cedula === cedula || n.quicker === name)) ||
+       (!cedula && n.quicker === name));
+    const nov = state.novelties.find(n => match(n) && n.formData?.fechaUltimoDia);
+    if (nov) return nov.formData.fechaUltimoDia;
+    const cas = state.cases.find(c => match(c) && c.fechaUltimoDia);
+    if (cas) return cas.fechaUltimoDia;
+    return null;
+  }
+
   function noveltyCell(d) {
+    const lastDay = getDesvinculacion(d.quicker || '', d.cedula || '');
+    if (lastDay && (d.date || '') > lastDay) {
+      return `<div>${pill('DESVINCULACIÓN')}<div class="fp-sub" style="font-size:10px">Último día: ${lastDay}</div></div>`;
+    }
     const selected = d.noveltyType || '';
     return `${selected ? `<div style="margin-bottom:6px">${pill(selected)}</div>` : ''}${optionSelect(noveltyTypes, selected, `data-novelty-type="${d.id}"`, 'Sin novedad')}`;
   }
@@ -3359,70 +3376,145 @@ function toggleMode(forceDark) {
     );
   }
 
-  function renderMallas() {
-    const rows = sortedMallas().map(d => {
-      const q = state.quickers.find(item => item.name === d.quicker) || {};
-      const clientPoints = ((state.clients.find(c => c.name === d.client) || {}).points || []).map(pointName);
-      const values = {
-        date: escapeHTML(d.date),
-        city: escapeHTML(d.city || pointInfo(d.client, d.point).city || 'Bogotá'),
-        cedula: escapeHTML(d.cedula || q.cedula || ''),
-        quicker: escapeHTML(d.quicker || 'Pendiente de asignación'),
-        client: escapeHTML(d.client || ''),
-        point: escapeHTML(d.point || 'Sin punto'),
-        schedule: escapeHTML(d.schedule || `${d.plannedStart || ''} - ${d.plannedEnd || ''}`),
-        contractType: escapeHTML(d.contractType || 'Fijo'),
-        managementType: escapeHTML(d.managementType || 'Fijo'),
-        quickGoId: isQuickGoMalla(d) ? escapeHTML(d.quickGoId || 'Pendiente') : '<span class="fp-sub">No aplica</span>',
-        quickGoStatus: isQuickGoMalla(d) ? pill((d.quickGoStatus || 'ASIGNADO').toUpperCase()) : '<span class="fp-sub">No aplica</span>',
-        observations: escapeHTML(d.observations || ''),
-        planned: `${escapeHTML(d.plannedStart)} - ${escapeHTML(d.plannedEnd)}`,
-        executed: `${escapeHTML(d.realStart || 'Sin inicio')} - ${escapeHTML(d.realEnd || 'En curso')}`,
-        serviceType: escapeHTML(d.serviceType),
-        evidence: evidenceCell(d),
-        ingressStatus: ingressCell(d),
-        noveltyType: noveltyCell(d),
-        approval: pill(d.approval),
-        status: pill(d.status),
-        actions: `<div class="row-actions">${iconAction('Editar malla', 'manageMalla', d.id, 'ti-pencil')}${iconAction('Eliminar', 'deleteAvailability', d.id, 'ti-trash')}</div>`
-      };
-      state.prefs.customMallaColumns.forEach(col => values[col.key] = customCell(d, col));
-      return row(visibleMallaColumns().map(key => values[key] ?? ''));
+  function renderMallaGrid(mode) {
+    const today = new Date().toISOString().slice(0, 10);
+    const baseDate = (state.prefs.mallaViewDate && state.prefs.mallaViewDate !== 'todos') ? state.prefs.mallaViewDate : today;
+    const base = new Date(`${baseDate}T12:00:00`);
+    let dates = [];
+    if (mode === 'semanal') {
+      const monday = new Date(base);
+      monday.setDate(base.getDate() - ((base.getDay() + 6) % 7));
+      for (let i = 0; i < 7; i++) { const d = new Date(monday); d.setDate(monday.getDate() + i); dates.push(d.toISOString().slice(0, 10)); }
+    } else {
+      const y = base.getFullYear(), m = base.getMonth();
+      const days = new Date(y, m + 1, 0).getDate();
+      for (let i = 1; i <= days; i++) dates.push(`${y}-${String(m+1).padStart(2,'0')}-${String(i).padStart(2,'0')}`);
+    }
+    const dayNames = ['Lu','Ma','Mi','Ju','Vi','Sá','Do'];
+    const getDL = s => { const d = new Date(`${s}T12:00:00`); return dayNames[(d.getDay()+6)%7]; };
+    const palette = ['#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#f97316','#ec4899','#14b8a6','#a855f7'];
+    const clientColors = {};
+    state.clients.forEach((c,i) => { clientColors[c.name] = palette[i % palette.length]; });
+    const shiftMap = {};
+    const scopedAvail = scopedItems(state.availabilities, a => ({ client: a.client, point: a.point, quicker: a.quicker }));
+    scopedAvail.filter(a => a.quicker && dates.includes(a.date)).forEach(a => {
+      if (!shiftMap[a.quicker]) shiftMap[a.quicker] = {};
+      if (!shiftMap[a.quicker][a.date]) shiftMap[a.quicker][a.date] = [];
+      shiftMap[a.quicker][a.date].push(a);
     });
-    const headers = visibleMallaColumns().map(key => headerCell(key));
+    const quickerNames = [...new Set([...state.quickers.map(q => q.name), ...Object.keys(shiftMap)])].sort();
+    const hdrs = dates.map(d => { const isToday = d === today; return `<th style="min-width:72px;text-align:center;padding:3px 2px;font-size:11px;${isToday?'background:#E86F1E;color:#fff;':'background:var(--hover);'}border:1px solid var(--border)"><div style="font-weight:700">${getDL(d)}</div><div>${d.slice(8)}</div></th>`; }).join('');
+    const bodyRows = quickerNames.map(q => {
+      const lastDay = getDesvinculacion(q, '');
+      const cells = dates.map(d => {
+        if (lastDay && d > lastDay) return `<td style="border:1px solid var(--border);background:repeating-linear-gradient(45deg,var(--hover),var(--hover) 2px,transparent 2px,transparent 6px);padding:2px" title="Desvinculado desde ${lastDay}"></td>`;
+        const shifts = shiftMap[q]?.[d] || [];
+        const chips = shifts.map(s => { const col = clientColors[s.client] || '#6b7280'; const abbr = escapeHTML((s.client||'?').slice(0,7)); const time = s.plannedStart ? s.plannedStart.slice(0,5) : ''; return `<div style="background:${col}22;border:1px solid ${col};border-radius:4px;padding:1px 4px;font-size:10px;margin:1px;cursor:pointer;white-space:nowrap;line-height:1.3" data-manage-malla="${s.id}" title="${escapeHTML(s.client||'')} · ${escapeHTML(s.point||'')}"><b>${abbr}</b>${time?`<br><span style="opacity:.75">${time}</span>`:''}</div>`; }).join('');
+        const addBtn = `<button class="dev-btn" style="padding:1px 4px;font-size:10px;opacity:.4;width:100%;margin-top:1px" data-plan-add="${escapeHTML(q)}|${d}" title="Agregar turno">+</button>`;
+        return `<td style="border:1px solid var(--border);padding:2px;vertical-align:top;min-width:72px">${chips}${addBtn}</td>`;
+      }).join('');
+      const desRow = lastDay ? `<div style="font-size:10px;color:#ef4444;margin-top:1px">✕ ${lastDay}</div>` : '';
+      return `<tr><td style="white-space:nowrap;padding:4px 8px;border:1px solid var(--border);position:sticky;left:0;background:var(--card-bg);z-index:1;font-size:12px;min-width:120px${lastDay?';opacity:.6':''}"><b>${escapeHTML(q)}</b>${desRow}</td>${cells}</tr>`;
+    }).join('');
+    const periodLabel = mode === 'semanal' ? `Semana ${dates[0]} — ${dates[6]}` : `${dates[0].slice(0,7)} · ${dates.length} días`;
+    return `<div style="color:var(--q);font-weight:700;font-size:12px;margin-bottom:6px">${periodLabel} · ${quickerNames.length} mensajeros</div><div style="overflow-x:auto"><table style="border-collapse:collapse;width:max-content;min-width:100%"><thead><tr><th style="padding:4px 8px;text-align:left;position:sticky;left:0;background:var(--card-bg);z-index:2;border:1px solid var(--border);min-width:120px">Mensajero</th>${hdrs}</tr></thead><tbody>${bodyRows}</tbody></table></div>`;
+  }
+
+  function renderMallas() {
+    const viewMode = state.prefs.mallaViewMode || 'diario';
     const canEditTitles = hasPermission('perm:editarTitulosMalla');
     const titleTool = canEditTitles ? `<button class="dev-btn icon-btn" data-add-column="mallas" title="Agregar título" aria-label="Agregar título"><i class="ti ti-columns"></i></button>` : '';
-    panel('mallas', 'Mallas', '',
-      '',
-      `<div class="malla-command-bar">
-        <div class="malla-action-groups compact-actions">
-          <div class="action-group"><div class="action-group-label">Carga</div><div class="action-group-buttons">
-            <button class="dev-btn primary icon-btn" data-open="malla" title="Nueva malla" aria-label="Nueva malla"><i class="ti ti-plus"></i></button>
-            <label class="dev-btn icon-btn" title="Importar malla" aria-label="Importar malla"><i class="ti ti-upload"></i><input type="file" accept=".xlsx,.xls,.csv" data-import-malla style="display:none"></label>
-            <button class="dev-btn icon-btn" data-download-malla-template title="Descargar base" aria-label="Descargar base"><i class="ti ti-download"></i></button>
-            <button class="dev-btn icon-btn" data-open-malla-records title="Registros diarios" aria-label="Registros diarios"><i class="ti ti-clipboard-list"></i></button>
-          </div></div>
-          <div class="action-group"><div class="action-group-label">Operación</div><div class="action-group-buttons">
-            <button class="dev-btn icon-btn" data-replicate-mass title="Replicar masivo" aria-label="Replicar masivo"><i class="ti ti-copy"></i></button>
-            <button class="dev-btn icon-btn" data-export="availabilities" title="Exportar Excel" aria-label="Exportar Excel"><i class="ti ti-file-export"></i></button>
-            <button class="dev-btn icon-btn" data-delete-malla-mass title="Borrar malla masivo" aria-label="Borrar malla masivo"><i class="ti ti-trash"></i></button>
-          </div></div>
-          <div class="action-group"><div class="action-group-label">Columnas</div><div class="action-group-buttons">
-            ${titleTool || '<span class="fp-sub">Sin permisos para editar títulos.</span>'}
-          </div></div>
-        </div>
+
+    // View mode tabs
+    const viewTabs = `<div class="module-tabs" style="margin-bottom:8px">
+      <button class="module-tab ${viewMode==='diario'?'on':''}" data-malla-view-mode="diario"><i class="ti ti-list"></i> Diario</button>
+      <button class="module-tab ${viewMode==='semanal'?'on':''}" data-malla-view-mode="semanal"><i class="ti ti-calendar-week"></i> Semana</button>
+      <button class="module-tab ${viewMode==='mensual'?'on':''}" data-malla-view-mode="mensual"><i class="ti ti-calendar-month"></i> Mes</button>
+    </div>`;
+
+    // Date navigation for planner modes
+    const today = new Date().toISOString().slice(0, 10);
+    const baseDate = (state.prefs.mallaViewDate && state.prefs.mallaViewDate !== 'todos') ? state.prefs.mallaViewDate : today;
+    const navPrev = viewMode === 'mensual'
+      ? (() => { const d = new Date(`${baseDate}T12:00:00`); d.setMonth(d.getMonth()-1); return d.toISOString().slice(0,10); })()
+      : (() => { const d = new Date(`${baseDate}T12:00:00`); d.setDate(d.getDate()-7); return d.toISOString().slice(0,10); })();
+    const navNext = viewMode === 'mensual'
+      ? (() => { const d = new Date(`${baseDate}T12:00:00`); d.setMonth(d.getMonth()+1); return d.toISOString().slice(0,10); })()
+      : (() => { const d = new Date(`${baseDate}T12:00:00`); d.setDate(d.getDate()+7); return d.toISOString().slice(0,10); })();
+
+    const commandBar = `<div class="malla-command-bar">
+      <div class="malla-action-groups compact-actions">
+        <div class="action-group"><div class="action-group-label">Carga</div><div class="action-group-buttons">
+          <button class="dev-btn primary icon-btn" data-open="malla" title="Nueva malla" aria-label="Nueva malla"><i class="ti ti-plus"></i></button>
+          <label class="dev-btn icon-btn" title="Importar malla" aria-label="Importar malla"><i class="ti ti-upload"></i><input type="file" accept=".xlsx,.xls,.csv" data-import-malla style="display:none"></label>
+          <button class="dev-btn icon-btn" data-download-malla-template title="Descargar base" aria-label="Descargar base"><i class="ti ti-download"></i></button>
+          <button class="dev-btn icon-btn" data-open-malla-records title="Registros diarios" aria-label="Registros diarios"><i class="ti ti-clipboard-list"></i></button>
+        </div></div>
+        <div class="action-group"><div class="action-group-label">Operación</div><div class="action-group-buttons">
+          <button class="dev-btn icon-btn" data-replicate-mass title="Replicar masivo" aria-label="Replicar masivo"><i class="ti ti-copy"></i></button>
+          <button class="dev-btn icon-btn" data-export="availabilities" title="Exportar Excel" aria-label="Exportar Excel"><i class="ti ti-file-export"></i></button>
+          <button class="dev-btn icon-btn" data-delete-malla-mass title="Borrar malla masivo" aria-label="Borrar malla masivo"><i class="ti ti-trash"></i></button>
+        </div></div>
+        <div class="action-group"><div class="action-group-label">Columnas</div><div class="action-group-buttons">
+          ${titleTool || '<span class="fp-sub">Sin permisos para editar títulos.</span>'}
+        </div></div>
       </div>
-      <div class="toolbar-line" style="flex-wrap:wrap;gap:10px">
-        <span class="fp-sub">Clic en un encabezado para ordenar. Usa ‹ › para mover columnas. Tolerancia ingreso:</span>
+    </div>`;
+
+    let mainContent = '';
+    if (viewMode === 'diario') {
+      const rows = sortedMallas().map(d => {
+        const q = state.quickers.find(item => item.name === d.quicker) || {};
+        const values = {
+          date: escapeHTML(d.date),
+          city: escapeHTML(d.city || pointInfo(d.client, d.point).city || 'Bogotá'),
+          cedula: escapeHTML(d.cedula || q.cedula || ''),
+          quicker: escapeHTML(d.quicker || 'Pendiente de asignación'),
+          client: escapeHTML(d.client || ''),
+          point: escapeHTML(d.point || 'Sin punto'),
+          schedule: escapeHTML(d.schedule || `${d.plannedStart || ''} - ${d.plannedEnd || ''}`),
+          contractType: escapeHTML(d.contractType || 'Fijo'),
+          managementType: escapeHTML(d.managementType || 'Fijo'),
+          quickGoId: isQuickGoMalla(d) ? escapeHTML(d.quickGoId || 'Pendiente') : '<span class="fp-sub">No aplica</span>',
+          quickGoStatus: isQuickGoMalla(d) ? pill((d.quickGoStatus || 'ASIGNADO').toUpperCase()) : '<span class="fp-sub">No aplica</span>',
+          observations: escapeHTML(d.observations || ''),
+          planned: `${escapeHTML(d.plannedStart)} - ${escapeHTML(d.plannedEnd)}`,
+          executed: `${escapeHTML(d.realStart || 'Sin inicio')} - ${escapeHTML(d.realEnd || 'En curso')}`,
+          serviceType: escapeHTML(d.serviceType),
+          evidence: evidenceCell(d),
+          ingressStatus: ingressCell(d),
+          noveltyType: noveltyCell(d),
+          approval: pill(d.approval),
+          status: pill(d.status),
+          actions: `<div class="row-actions">${iconAction('Editar malla', 'manageMalla', d.id, 'ti-pencil')}${iconAction('Eliminar', 'deleteAvailability', d.id, 'ti-trash')}</div>`
+        };
+        state.prefs.customMallaColumns.forEach(col => values[col.key] = customCell(d, col));
+        return row(visibleMallaColumns().map(key => values[key] ?? ''));
+      });
+      const headers = visibleMallaColumns().map(key => headerCell(key));
+      const toolbar = `<div class="toolbar-line" style="flex-wrap:wrap;gap:10px">
+        <span class="fp-sub">Clic en encabezado para ordenar. Tolerancia ingreso:</span>
         <input type="number" data-ingress-grace value="${escapeHTML(state.prefs.ingressGraceMinutes || 30)}" style="width:74px">
-        <span class="fp-sub">minutos</span>
-        <span class="fp-sub" style="margin-left:8px">|</span>
-        <span class="fp-sub">Fecha malla:</span>
-        <input type="date" data-malla-view-date value="${escapeHTML(state.prefs.mallaViewDate || new Date().toISOString().slice(0,10))}" style="min-height:32px;border:1px solid var(--border);border-radius:9px;background:var(--card-bg);color:var(--text-1);padding:0 10px;font:inherit">
+        <span class="fp-sub">min &nbsp;|&nbsp; Fecha:</span>
+        <input type="date" data-malla-view-date value="${escapeHTML(state.prefs.mallaViewDate || today)}" style="min-height:32px;border:1px solid var(--border);border-radius:9px;background:var(--card-bg);color:var(--text-1);padding:0 10px;font:inherit">
         <button class="dev-btn" style="padding:4px 10px;font-size:12px" data-malla-view-all>Ver todas</button>
-        <span class="fp-sub" style="color:var(--q);font-weight:700">${(state.prefs.mallaViewDate && state.prefs.mallaViewDate !== 'todos') ? 'Malla: ' + escapeHTML(state.prefs.mallaViewDate) : (state.prefs.mallaViewDate === 'todos' ? 'Mostrando historial completo' : 'Malla: hoy ' + new Date().toISOString().slice(0,10))}</span>
-      </div>` +
-      (!rows.length ? `<div class="dropzone" style="margin-bottom:12px"><strong>Malla sin información</strong><span class="fp-sub">Crea una nueva malla, importa un archivo masivo o descarga la base para empezar a cargar datos.</span></div>` : '') + table(headers, rows)
+        <span class="fp-sub" style="color:var(--q);font-weight:700">${(state.prefs.mallaViewDate && state.prefs.mallaViewDate !== 'todos') ? 'Malla: ' + escapeHTML(state.prefs.mallaViewDate) : (state.prefs.mallaViewDate === 'todos' ? 'Historial completo' : 'Hoy ' + today)}</span>
+      </div>`;
+      mainContent = toolbar + (!rows.length ? `<div class="dropzone" style="margin-bottom:12px"><strong>Malla sin información</strong><span class="fp-sub">Crea una nueva malla, importa un archivo masivo o descarga la base para empezar a cargar datos.</span></div>` : '') + table(headers, rows);
+    } else {
+      // Semana / Mes planner
+      const navBar = `<div class="toolbar-line" style="flex-wrap:wrap;gap:8px;margin-bottom:8px">
+        <button class="dev-btn icon-btn" data-malla-view-date="${navPrev}" title="Período anterior"><i class="ti ti-chevron-left"></i></button>
+        <input type="date" data-malla-view-date value="${escapeHTML(baseDate)}" style="min-height:32px;border:1px solid var(--border);border-radius:9px;background:var(--card-bg);color:var(--text-1);padding:0 10px;font:inherit">
+        <button class="dev-btn icon-btn" data-malla-view-date="${navNext}" title="Período siguiente"><i class="ti ti-chevron-right"></i></button>
+        <button class="dev-btn" style="padding:4px 10px;font-size:12px" data-malla-view-date="${today}">Hoy</button>
+        <span class="fp-sub" style="font-size:11px">Clic en <b>+</b> para agregar turno · Clic en un turno para editar</span>
+      </div>`;
+      mainContent = navBar + renderMallaGrid(viewMode);
+    }
+
+    panel('mallas', 'Mallas', '', '',
+      viewTabs + commandBar + mainContent
     );
     const page = document.getElementById('page-mallas');
     if (page) [...page.children].forEach(el => { if (!el.classList.contains('functional-panel')) el.hidden = true; });
@@ -6039,7 +6131,20 @@ function toggleMode(forceDark) {
     return current;
   }
 
-  function openMallaCreateOptions() {
+  function openMallaCreateOptions(opts) {
+    // If called from the planner grid with a pre-selected quicker+date, open form directly
+    if (opts && (opts.prefQuicker || opts.prefDate)) {
+      openForm('malla');
+      const form = document.getElementById('modal-form');
+      if (opts.prefDate && form.elements.date) form.elements.date.value = opts.prefDate;
+      if (opts.prefQuicker && form.elements.quicker) {
+        form.elements.quicker.value = opts.prefQuicker;
+        // Trigger cedula autofill if exists
+        const q = state.quickers.find(x => x.name === opts.prefQuicker);
+        if (q && form.elements.cedula) form.elements.cedula.value = q.cedula || '';
+      }
+      return;
+    }
     const form = document.getElementById('modal-form');
     const dates = [...new Set(state.availabilities.map(d => d.date).filter(Boolean))].sort().reverse();
     document.getElementById('modal-title').textContent = 'Nueva malla';
@@ -8054,12 +8159,25 @@ function toggleMode(forceDark) {
       saveState('Filtro de gestión actualizado');
     }
     if (event.target.matches('[data-malla-view-date]')) {
-      state.prefs.mallaViewDate = event.target.value;
+      state.prefs.mallaViewDate = event.target.value || event.target.dataset.mallaViewDate;
       saveState('Fecha de malla actualizada');
     }
     if (event.target.matches('[data-malla-view-all]')) {
       state.prefs.mallaViewDate = 'todos';
       saveState('Mostrando historial completo');
+    }
+    if (event.target.closest('[data-malla-view-mode]')) {
+      state.prefs.mallaViewMode = event.target.closest('[data-malla-view-mode]').dataset.mallaViewMode;
+      saveState('Vista de malla cambiada');
+    }
+    const planAdd = event.target.closest('[data-plan-add]');
+    if (planAdd) {
+      const [quicker, date] = planAdd.dataset.planAdd.split('|');
+      openMallaCreateOptions({ prefQuicker: quicker, prefDate: date });
+    }
+    const manageMallaGrid = event.target.closest('[data-manage-malla]');
+    if (manageMallaGrid && !event.target.closest('.row-actions')) {
+      openMallaManagement(manageMallaGrid.dataset.manageMalla);
     }
     if (event.target.matches('[data-form-config-type]')) {
       state.prefs.formConfigType = event.target.value;
