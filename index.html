@@ -2960,6 +2960,45 @@ function toggleMode(forceDark) {
     genQRImages();
   }
 
+  // Historial de marcaciones de un mensajero: turnos, horas reales, dónde marcó, evidencias y extras/retrasos
+  function openQuickerMarcaciones(id) {
+    const q = state.quickers.find(x => x.id === id);
+    if (!q) return;
+    const shifts = (state.availabilities || [])
+      .filter(d => d.quicker === q.name && (d.realStart || d.realEnd))
+      .sort((a, b) => String(b.date).localeCompare(String(a.date)))
+      .slice(0, 30);
+    const evsFor = avId => (state.evidences || []).filter(e => e.availability === avId && /inicio|fin|turno|almuerzo/i.test(e.stage || ''));
+    const cards = shifts.map(d => {
+      const delay = d.realStart && d.plannedStart ? minutesBetween(d.plannedStart, d.realStart) : 0;
+      const extra = d.realEnd && d.plannedEnd ? minutesBetween(d.plannedEnd, d.realEnd) : 0;
+      const alerts = [
+        delay > 0 ? `<span class="b b-red"><i class="ti ti-alert-triangle"></i> Retraso ${delay} min</span>` : (d.realStart ? '<span class="b b-green">Ingreso puntual</span>' : ''),
+        extra > 0 ? `<span class="b b-yellow"><i class="ti ti-clock-plus"></i> Extras ${Math.floor(extra / 60)}h ${extra % 60}m</span>` : (d.realEnd ? '<span class="b b-green">Salida a tiempo</span>' : '')
+      ].filter(Boolean).join(' ');
+      const marks = evsFor(d.id).map(e => `<div class="detail-row" style="align-items:flex-start">
+        <span style="min-width:130px"><strong>${escapeHTML(e.stage || '')}</strong><br><span class="fp-sub">${escapeHTML(e.time || '')}</span></span>
+        <span class="fp-sub" style="flex:1">${escapeHTML(e.address || 'Sin dirección')}</span>
+        ${hasMedia(e) ? `<img class="qdoc-img" style="max-width:120px;border-radius:8px;cursor:pointer" ${mediaAttr(e)} alt="Evidencia">` : '<span class="fp-sub">Sin foto</span>'}
+      </div>`).join('');
+      return `<div class="qdoc-card" style="margin-bottom:12px">
+        <div class="qdoc-head"><strong>${escapeHTML(d.date)} · ${escapeHTML(d.client || '')} · ${escapeHTML(d.point || '')}</strong>${alerts}</div>
+        <div class="fp-sub">Turno programado: ${escapeHTML(d.plannedStart || '—')} - ${escapeHTML(d.plannedEnd || '—')} · Ingreso real: <strong>${escapeHTML(d.realStart || '—')}</strong> · Salida real: <strong>${escapeHTML(d.realEnd || '—')}</strong>${d.lunchStart ? ` · Almuerzo: ${escapeHTML(d.lunchStart)}${d.lunchEnd ? ' - ' + escapeHTML(d.lunchEnd) : ''}` : ''}</div>
+        ${marks || '<div class="fp-sub">Sin evidencias de marcación para este turno.</div>'}
+      </div>`;
+    }).join('');
+    const form = document.getElementById('modal-form');
+    document.getElementById('modal-title').textContent = `Historial de marcaciones · ${q.name || ''}`;
+    document.getElementById('modal-subtitle').textContent = 'Turnos, horas reales de ingreso/salida, ubicación de marcación, evidencia fotográfica y alertas de extras o retrasos.';
+    form.innerHTML = `${cards || '<div class="dropzone" style="text-align:center"><strong>Sin marcaciones registradas</strong><span class="fp-sub">Este mensajero aún no tiene ingresos o salidas marcadas.</span></div>'}
+    <div class="modal-foot"><button class="dev-btn" type="button" id="cancel-form">Cerrar</button></div>`;
+    document.getElementById('cancel-form').onclick = closeModal;
+    const modal = document.getElementById('app-modal');
+    modal.classList.add('wide', 'open');
+    modal.setAttribute('aria-hidden', 'false');
+    loadMediaImages();
+  }
+
   function openQuickerDocs(id) {
     const q = state.quickers.find(x => x.id === id);
     if (!q) return;
@@ -3991,7 +4030,28 @@ function toggleMode(forceDark) {
     const fromNovelties = state.novelties
       .filter(n => /hora extra/i.test(`${n.type} ${n.subtype || ''}`))
       .map(n => ({ ...n, ...noveltyContext(n), status: noveltyGestionStatus(n), justification: n.note || '' }));
-    return [...saved, ...fromNovelties].filter(n => passesNovedadesDateFilter(n.date));
+    const storedRefs = new Set([...saved, ...fromNovelties].map(n => n.ref).filter(Boolean));
+    const computed = (state.availabilities || [])
+      .filter(d => d.realEnd && d.plannedEnd && minutesBetween(d.plannedEnd, d.realEnd) > 0 && !storedRefs.has(d.id))
+      .map(d => {
+        const mins = minutesBetween(d.plannedEnd, d.realEnd);
+        return {
+          id: `OT-${d.id}`,
+          type: 'Hora extra',
+          subtype: `${mins} min`,
+          ref: d.id,
+          date: d.date,
+          client: d.client,
+          point: d.point,
+          cedula: d.cedula || (state.quickers.find(q => q.name === d.quicker)?.cedula || ''),
+          quicker: d.quicker,
+          hours: (mins / 60).toFixed(2),
+          justification: `Salida real ${d.realEnd} vs programada ${d.plannedEnd} (marcación en malla)`,
+          status: 'Pendiente',
+          source: 'malla'
+        };
+      });
+    return [...saved, ...fromNovelties, ...computed].filter(n => passesNovedadesDateFilter(n.date));
   }
 
   function getAdditionalRows() {
@@ -4269,7 +4329,7 @@ function toggleMode(forceDark) {
         escapeHTML(q.id), escapeHTML(q.name), escapeHTML(q.client || '—'), escapeHTML(q.coordinator || q.point || '—'),
         `<span class="b ${ds.cls}">${ds.label}</span>`,
         quickerStatusBadge(q.status),
-        `<div class="row-actions">${iconAction('Carnet', 'quickerCarnet', q.id, 'ti-id-badge-2')}${iconAction('Documentación', 'quickerDocs', q.id, 'ti-files')}${iconAction(active ? 'Inactivar' : 'Activar', active ? 'quickerDeactivate' : 'quickerActivate', q.id, active ? 'ti-user-off' : 'ti-user-check')}${iconAction('Editar', 'editMessenger', q.id, 'ti-pencil')}</div>`
+        `<div class="row-actions">${iconAction('Historial de marcaciones', 'quickerMarcaciones', q.id, 'ti-clock-hour-4')}${iconAction('Carnet', 'quickerCarnet', q.id, 'ti-id-badge-2')}${iconAction('Documentación', 'quickerDocs', q.id, 'ti-files')}${iconAction(active ? 'Inactivar' : 'Activar', active ? 'quickerDeactivate' : 'quickerActivate', q.id, active ? 'ti-user-off' : 'ti-user-check')}${iconAction('Editar', 'editMessenger', q.id, 'ti-pencil')}</div>`
       ]);
     });
 
@@ -5797,6 +5857,34 @@ function toggleMode(forceDark) {
     return created;
   }
 
+  // Materializa en overtimeReports una hora extra calculada desde la malla (id OT-xxx)
+  function ensureOvertimeReport(id) {
+    if (!String(id).startsWith('OT-')) return null;
+    const avId = String(id).replace('OT-', '');
+    state.overtimeReports = state.overtimeReports || [];
+    const existing = state.overtimeReports.find(h => h.ref === avId);
+    if (existing) return existing;
+    const item = state.availabilities.find(d => d.id === avId);
+    if (!item) return null;
+    const mins = minutesBetween(item.plannedEnd, item.realEnd);
+    const created = {
+      id: uid('OTR'),
+      type: 'Hora extra',
+      origin: 'Malla',
+      ref: item.id,
+      date: item.date,
+      client: item.client,
+      point: item.point,
+      cedula: item.cedula || (state.quickers.find(q => q.name === item.quicker)?.cedula || ''),
+      quicker: item.quicker,
+      hours: (mins / 60).toFixed(2),
+      justification: `Salida real ${item.realEnd} vs programada ${item.plannedEnd} (marcación en malla)`,
+      status: 'Pendiente'
+    };
+    state.overtimeReports.unshift(created);
+    return created;
+  }
+
   function openNoveltyCaseDetail(id) {
     const item = state.novelties.find(n => n.id === id);
     if (!item) { toast('No se encontró la novedad'); return; }
@@ -6398,6 +6486,7 @@ function toggleMode(forceDark) {
     if (actionName === 'permissionsUser') { openPermissionsForm(id); return; }
     if (actionName === 'editMessenger') { openMessengerUserForm(id); return; }
     if (actionName === 'viewEvidence') { openEvidenceModal(id); return; }
+    if (actionName === 'quickerMarcaciones') { openQuickerMarcaciones(id); return; }
     if (actionName === 'quickerCarnet') { openQuickerCarnet(id); return; }
     if (actionName === 'quickerDocs') { openQuickerDocs(id); return; }
     if (actionName === 'hsqEdit') { const p = (state.hsqPublications || []).find(x => x.id === id); if (p) openHsqForm(p.kind, id); return; }
@@ -6407,7 +6496,7 @@ function toggleMode(forceDark) {
     if (actionName === 'viewNoveltyCase') { openNoveltyCaseDetail(id); return; }
     if (actionName === 'viewDelay') { openDelayDetail(id); return; }
     if (actionName === 'viewGestionRow') { openGestionRowDetail(id); return; }
-    if (actionName === 'viewOvertime') { openSupportDetail('overtimeReports', id, 'Horas extras'); return; }
+    if (actionName === 'viewOvertime') { const m = ensureOvertimeReport(id); openSupportDetail('overtimeReports', m ? m.id : id, 'Horas extras'); return; }
     if (actionName === 'viewAdditional') { openSupportDetail('parkingReports', id, 'Adicional reportado'); return; }
     if (actionName === 'editFormQuestion') {
       const [type, rawIndex] = String(id || '').split('::');
@@ -6428,10 +6517,10 @@ function toggleMode(forceDark) {
         log('Retraso', item.delayStatus, item.id);
       }
     }
-    if (actionName === 'rejectOvertime') { openRejectForm(state.overtimeReports?.some(x => x.id === id) ? 'overtimeReports' : 'novelties', id, 'Horas extras', 'HorasExtra'); return; }
+    if (actionName === 'rejectOvertime') { const m = ensureOvertimeReport(id); const rid = m ? m.id : id; openRejectForm(state.overtimeReports?.some(x => x.id === rid) ? 'overtimeReports' : 'novelties', rid, 'Horas extras', 'HorasExtra'); return; }
     if (actionName === 'approveOvertime') {
-      const item = find('overtimeReports') || find('novelties');
-      if (item) { item.status = 'Aprobado'; log('HorasExtra', 'Aprobado', id); }
+      const item = ensureOvertimeReport(id) || find('overtimeReports') || find('novelties');
+      if (item) { item.status = 'Aprobado'; log('HorasExtra', 'Aprobado', item.id); }
     }
     if (actionName === 'rejectAdditional') { openRejectForm(state.parkingReports?.some(x => x.id === id) ? 'parkingReports' : 'novelties', id, 'Adicional', 'Adicional'); return; }
     if (actionName === 'approveAdditional') {

@@ -24,7 +24,7 @@
     .muted{color:var(--muted);font-size:13px;line-height:1.4}.turn h2{margin:12px 0 4px;font-size:24px}.meta{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:14px 0}.meta div{border:1px solid var(--line);background:rgba(255,255,255,.05);border-radius:16px;padding:12px}.meta small{display:block;color:var(--muted);font-size:11px}.meta strong{font-size:16px}
     .camera{border:1px dashed rgba(245,197,24,.45);border-radius:18px;padding:12px;margin-top:10px;background:rgba(245,197,24,.06)} video,.snapshot{width:100%;border-radius:14px;background:#050505;min-height:190px;object-fit:cover;border:1px solid var(--line)}.snapshot{display:none}.cam-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}
     .map{height:340px;border-radius:20px;overflow:hidden;border:1px solid var(--line);background:#111}.map-tools{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}
-    .row{display:flex;justify-content:space-between;gap:10px;border-bottom:1px solid var(--line);padding:10px 0}.row:last-child{border-bottom:0}.toast{position:fixed;left:14px;right:14px;bottom:24px;background:#111;border:1px solid rgba(245,197,24,.3);padding:13px;border-radius:16px;opacity:0;transform:translateY(10px);transition:.2s;z-index:20;text-align:center}.toast.on{opacity:1;transform:none}
+    .row{display:flex;justify-content:space-between;gap:10px;border-bottom:1px solid var(--line);padding:10px 0}.row:last-child{border-bottom:0}.toast{position:fixed;left:14px;right:14px;bottom:24px;background:#111;border:1px solid rgba(245,197,24,.3);padding:13px;border-radius:16px;opacity:0;transform:translateY(10px);transition:.2s;z-index:20;text-align:center}.toast.on{opacity:1;transform:none}.toast.ok{border-color:rgba(34,197,94,.6);background:#08240f;color:#86efac;font-weight:800}.toast.bad{border-color:rgba(239,68,68,.6);background:#2a0b0b;color:#fca5a5;font-weight:800}.btn:disabled{opacity:.5;cursor:not-allowed;filter:grayscale(.4)}
     .doc-grid{display:grid;gap:10px}.doc-item{border:1px solid var(--line);border-radius:16px;padding:12px;background:rgba(255,255,255,.045)}.doc-item h4{margin:0 0 4px;display:flex;align-items:center;gap:6px}
     .status-line{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:10px 0}.status-line div{border:1px solid var(--line);border-radius:14px;padding:10px;background:rgba(245,197,24,.06)}
     .logo img{width:100%;height:100%;object-fit:cover;border-radius:inherit}
@@ -203,7 +203,7 @@
       return s;}
     function initCloud(){try{const cfg=window.QUICK_FIREBASE_CONFIG;if(!cfg?.enabled||!window.firebase)return;if(!firebase.apps.length)firebase.initializeApp(cfg.firebaseConfig);try{if(firebase.storage)storage=firebase.storage()}catch{}cloudRef=firebase.firestore().collection(cfg.collection||'quick_lastmile').doc(cfg.documentId||'platform_state');cloudRef.onSnapshot(s=>{if(s.metadata?.fromCache&&!cloudHydrated)return;if(!s.exists){cloudHydrated=true;save();return}if(s.metadata?.hasPendingWrites)return;const remote=s.data()?.state;if(!remote)return;const keep=session;state={...fallback,...remote};localStorage.setItem(KEY,JSON.stringify(state));session=keep;cloudHydrated=true;if(session)renderHome(false)})}catch{}}
     function uid(p){return `${p}-${Date.now().toString(36).toUpperCase()}${Math.floor(Math.random()*90+10)}`}
-    function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('on');setTimeout(()=>t.classList.remove('on'),1900)}
+    let toastTimer=null;function toast(msg,cls,ms){const t=document.getElementById('toast');t.textContent=msg;t.className='toast on'+(cls?' '+cls:'');clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.classList.remove('on'),ms||1900)}
     function today(){return new Date().toISOString().slice(0,10)}
     function locate(cb){if(!navigator.geolocation){cb(null);return}navigator.geolocation.getCurrentPosition(pos=>{lastGps={lat:pos.coords.latitude,lng:pos.coords.longitude,time:new Date().toLocaleString('es-CO')};cb(lastGps)},()=>cb(lastGps),{enableHighAccuracy:true,timeout:9000})}
     function reverseGeocode(lat,lng,cb){fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&accept-language=es`,{headers:{'Accept':'application/json'}}).then(r=>r.json()).then(d=>cb(d.display_name||'')).catch(()=>cb(''))}
@@ -268,10 +268,22 @@
       const lunchOn=client.lunch==='Si';document.getElementById('lunchBlock').classList.toggle('hidden',!lunchOn);
       document.getElementById('scheduleList').innerHTML=list.length?list.map(d=>`<div class="row"><span>${d.date}<br><small class="muted">${d.client} · ${d.point||''}</small></span><strong>${d.status||'Creado'}</strong></div>`).join(''):'<p class="muted">Sin turnos asignados.</p>';
       const plateEl=document.getElementById('plateInput');if(plateEl)plateEl.value=q.plate||'';
-      renderTimers();renderMyState();renderTurnHistory();renderDocs(q);renderTickets();renderInfo();renderCarnet(q);renderBell();setTimeout(initMap,0)}
+      renderTimers();renderMyState();renderTurnHistory();updateTurnButtons();renderDocs(q);renderTickets();renderInfo();renderCarnet(q);renderBell();setTimeout(initMap,0)}
 
     function renderMyState(){const el=document.getElementById('myState');if(!el)return;let st='Fuera de turno';if(current){if(current.realStart&&!current.realEnd){st=current.lunchStart&&!current.lunchEnd?'En almuerzo':'En turno'}else if(current.realEnd){st='Turno finalizado'}else{const tol=Number(state.prefs?.ingressGraceMinutes||30);const ps=current.plannedStart;if(ps){const[h,m]=ps.split(':').map(Number);const now=new Date();const plan=new Date();plan.setHours(h,m+tol,0,0);if(now>plan)st='Retraso'}}}el.textContent=st}
-    function renderTurnHistory(){const box=document.getElementById('turnHistory');if(!box)return;const evs=(state.evidences||[]).filter(e=>e.quicker===session.name).slice(0,15);box.innerHTML=evs.length?evs.map(e=>`<div class="row"><span>${e.stage||'Registro'}<br><small class="muted">${e.time||''}</small></span><strong style="font-size:11px;color:var(--muted);max-width:140px;text-align:right">${(e.address||'').slice(0,40)}</strong></div>`).join(''):'<p class="muted">Sin registros aún.</p>'}
+    function renderTurnHistory(){const box=document.getElementById('turnHistory');if(!box)return;
+      const shifts=(state.availabilities||[]).filter(d=>d.quicker===session.name&&(d.realStart||d.realEnd)).sort((a,b)=>String(b.date).localeCompare(String(a.date))).slice(0,10);
+      const rows=shifts.map(d=>`<div class="row"><span><b>${d.date}</b><br><small class="muted">${d.client||''} · ${d.point||''}</small>${d.lunchStart?`<br><small class="muted">Almuerzo ${d.lunchStart}${d.lunchEnd?' - '+d.lunchEnd:''}</small>`:''}</span><span style="text-align:right"><small class="muted">Ingreso</small> <strong style="color:var(--ok)">${d.realStart||'—'}</strong><br><small class="muted">Salida</small> <strong style="color:${d.realEnd?'#fca5a5':'var(--muted)'}">${d.realEnd||'—'}</strong></span></div>`).join('');
+      const evs=(state.evidences||[]).filter(e=>e.quicker===session.name).slice(0,6);
+      const evRows=evs.map(e=>`<div class="row"><span>${e.stage||'Registro'}<br><small class="muted">${e.time||''}</small></span><strong style="font-size:11px;color:var(--muted);max-width:140px;text-align:right">${(e.address||'').slice(0,40)}</strong></div>`).join('');
+      box.innerHTML=(rows||evRows)?`${rows?`<p class="muted" style="margin:0 0 4px;font-weight:800">Mis turnos</p>${rows}`:''}${evRows?`<p class="muted" style="margin:10px 0 4px;font-weight:800">Últimas marcaciones</p>${evRows}`:''}`:'<p class="muted">Sin registros aún.</p>'}
+    function updateTurnButtons(){const set=(btn,done,doneLabel)=>{if(!btn)return;if(done){btn.disabled=true;btn.innerHTML=doneLabel}else{btn.disabled=false}};
+      if(!current)return;
+      const bIn=document.querySelector('[data-turn-action="inicio"]'),bOut=document.querySelector('[data-turn-action="cierre"]');
+      set(bIn,current.realStart,`<i class="ti ti-circle-check"></i> Ingreso marcado ${current.realStart||''}`);
+      set(bOut,current.realEnd,`<i class="ti ti-circle-check"></i> Salida marcada ${current.realEnd||''}`);
+      set(document.getElementById('lunchStart'),current.lunchStart,`<i class="ti ti-circle-check"></i> Almuerzo iniciado ${current.lunchStart||''}`);
+      set(document.getElementById('lunchEnd'),current.lunchEnd,`<i class="ti ti-circle-check"></i> Almuerzo finalizado ${current.lunchEnd||''}`)}
 
     function carnetValidationText(q){return `QUICK HELP S.A.S. - Validacion de colaborador\nNombre: ${q.name||''}\nCedula: ${q.cedula||''}\nProyecto: ${q.client||''}\nPlaca: ${q.plate||''}\nEstado: ${q.status||'Activo'}`}
     function resolveMedia(ref,cb){const direct=ref&&(ref.url||ref.dataUrl);if(direct){cb(direct);return}if(ref&&ref.mediaId&&window.firebase){firebase.firestore().collection('quick_media').doc(ref.mediaId).get().then(s=>cb(s.data()?.data||'')).catch(()=>cb(''));return}cb('')}
@@ -297,6 +309,13 @@
     document.getElementById('lunchToggle').onclick=()=>document.getElementById('lunchActions').classList.toggle('hidden');
     function registerExtraPhoto(){takePhotoThen(raw=>{if(!raw){return}toast('Tomando ubicación...');locate(gps=>{const stamp=new Date().toLocaleString('es-CO');const proceed=address=>stampPhoto(raw,address,stamp,stamped=>{const img=document.getElementById('snapshot');img.src=stamped;img.style.display='block';const eid=uid('EVI');state.evidences=state.evidences||[];const ev={id:eid,availability:current?.id||'',quicker:session.name,stage:'Foto adicional',type:'Foto/GPS',required:'No',status:'Cargada',file:'extra.jpg',photoData:stamped,address,time:stamp};state.evidences.unshift(ev);save('Foto adicional enviada');renderTurnHistory();uploadMedia(eid,stamped,mid=>{if(mid){const e=(state.evidences||[]).find(x=>x.id===eid);if(e){e.mediaId=mid;save()}}})});if(gps)reverseGeocode(gps.lat,gps.lng,addr=>proceed(addr||`${gps.lat.toFixed(6)}, ${gps.lng.toFixed(6)}`));else proceed('Ubicación no disponible')})})}
     function registerTurn(action){if(!current){toast('No tienes turno asignado hoy');return}
+      if(action==='inicio'&&current.realStart){toast(`Ya marcaste tu ingreso a las ${current.realStart}. No se permite doble marcación`,'bad',3200);return}
+      if(action==='cierre'&&!current.realStart){toast('Primero debes marcar el ingreso','bad',3000);return}
+      if(action==='cierre'&&current.realEnd){toast(`Ya marcaste tu salida a las ${current.realEnd}. No se permite doble marcación`,'bad',3200);return}
+      if(action==='almuerzo_inicio'&&!current.realStart){toast('Primero debes marcar el ingreso','bad',3000);return}
+      if(action==='almuerzo_inicio'&&current.lunchStart){toast(`Ya iniciaste el almuerzo a las ${current.lunchStart}`,'bad',3200);return}
+      if(action==='almuerzo_fin'&&!current.lunchStart){toast('Primero debes iniciar el almuerzo','bad',3000);return}
+      if(action==='almuerzo_fin'&&current.lunchEnd){toast(`Ya finalizaste el almuerzo a las ${current.lunchEnd}`,'bad',3200);return}
       takePhotoThen(raw=>{if(!raw){toast('Necesitas tomar la foto');return}
         toast('Tomando ubicación...');
         locate(gps=>{const stamp=new Date().toLocaleString('es-CO');
@@ -316,8 +335,35 @@
       state.evidences.unshift(ev);
       state.locationPings=state.locationPings||[];if(gps)state.locationPings.unshift({quicker:session.name,availability:current.id,client:current.client,point:current.point,address,...gps});
       document.getElementById('gpsText').textContent=gps?`${stageLabel} · ${address} · ${stamp}`:'No fue posible tomar GPS';
-      save(`${stageLabel} registrado`);renderHome(false);
+      localStorage.setItem(KEY,JSON.stringify(state));touchSess();
+      toast(`Sincronizando ${stageLabel}...`,'',6000);
+      syncMarcacion(stageLabel,ev);
+      renderHome(false);
       uploadMedia(eid,stamped,mid=>{if(mid){const e=(state.evidences||[]).find(x=>x.id===eid);if(e){e.mediaId=mid;save()}}});
+    }
+    // Sincronización inmediata de la marcación a la nube, con confirmación y reintentos.
+    // Si aún no llegó el snapshot inicial, baja el estado remoto, re-aplica la marcación y luego sube.
+    function syncMarcacion(label,ev){
+      if(!cloudRef){toast(`⚠ ${label} quedó guardado solo en este teléfono (sin conexión a la nube)`,'bad',4500);return}
+      const push=()=>cloudRef.set({state:publicState(),updatedAt:firebase.firestore.FieldValue.serverTimestamp(),updatedBy:session?.username||'mensajero'},{merge:true});
+      const attempt=n=>push().then(()=>{cloudHydrated=true;toast(`✅ Marcación efectiva: ${label} registrado en la malla`,'ok',4500)}).catch(()=>{if(n<3){setTimeout(()=>attempt(n+1),1500*n)}else{toast(`❌ ${label} NO se sincronizó con la malla. Revisa tu señal; se reintentará al volver la conexión`,'bad',6000)}});
+      if(cloudHydrated){attempt(1);return}
+      cloudRef.get().then(s=>{
+        const remote=s.exists?(s.data()||{}).state:null;
+        if(remote){
+          const myAvail=JSON.parse(JSON.stringify(current));
+          const myEv=ev?JSON.parse(JSON.stringify(ev)):null;
+          const keep=session;
+          state={...fallback,...remote};session=keep;
+          state.availabilities=state.availabilities||[];
+          if(state.availabilities.some(d=>d.id===myAvail.id))state.availabilities=state.availabilities.map(d=>d.id===myAvail.id?{...d,...myAvail}:d);
+          else state.availabilities.unshift(myAvail);
+          if(myEv){state.evidences=state.evidences||[];if(!state.evidences.some(x=>x.id===myEv.id))state.evidences.unshift(myEv)}
+          current=state.availabilities.find(d=>d.id===myAvail.id)||myAvail;
+          localStorage.setItem(KEY,JSON.stringify(state));
+        }
+        cloudHydrated=true;attempt(1);
+      }).catch(()=>attempt(1));
     }
 
     // GPS en tiempo real para Mapa en Vivo
