@@ -182,6 +182,7 @@
     <button class="tab" data-tab="solicitudes"><i class="ti ti-ticket"></i><span>Solicitud / PQR</span></button>
     <button class="tab" data-tab="malla"><i class="ti ti-calendar"></i><span>Mi malla</span></button>
     <button class="tab" data-tab="docs"><i class="ti ti-id-badge-2"></i><span>Perfil y carnet</span></button>
+    <button class="tab" id="drawerLogout" style="margin-top:auto;color:#fca5a5"><i class="ti ti-logout"></i><span>Cerrar sesión</span></button>
   </nav>
   <div class="toast" id="toast"></div>
 
@@ -201,7 +202,12 @@
       if(Array.isArray(s.quickers))s.quickers=s.quickers.map(q=>({...q,documents:Object.fromEntries(Object.entries(q.documents||{}).map(([k,v])=>[k,{...v,dataUrl:null}]))}));
       if(Array.isArray(s.hsqPublications))s.hsqPublications=s.hsqPublications.map(p=>({...p,cover:p.cover?{...p.cover,dataUrl:null}:p.cover,doc:p.doc?{...p.doc,dataUrl:null}:p.doc}));
       return s;}
-    function initCloud(){try{const cfg=window.QUICK_FIREBASE_CONFIG;if(!cfg?.enabled||!window.firebase)return;if(!firebase.apps.length)firebase.initializeApp(cfg.firebaseConfig);try{if(firebase.storage)storage=firebase.storage()}catch{}cloudRef=firebase.firestore().collection(cfg.collection||'quick_lastmile').doc(cfg.documentId||'platform_state');cloudRef.onSnapshot(s=>{if(s.metadata?.fromCache&&!cloudHydrated)return;if(!s.exists){cloudHydrated=true;save();return}if(s.metadata?.hasPendingWrites)return;const remote=s.data()?.state;if(!remote)return;const keep=session;state={...fallback,...remote};localStorage.setItem(KEY,JSON.stringify(state));session=keep;cloudHydrated=true;if(session)renderHome(false)})}catch{}}
+    function initCloud(){try{const cfg=window.QUICK_FIREBASE_CONFIG;if(!cfg?.enabled||!window.firebase)return;if(!firebase.apps.length)firebase.initializeApp(cfg.firebaseConfig);try{if(firebase.storage)storage=firebase.storage()}catch{}cloudRef=firebase.firestore().collection(cfg.collection||'quick_lastmile').doc(cfg.documentId||'platform_state');cloudRef.onSnapshot(s=>{if(s.metadata?.fromCache&&!cloudHydrated)return;if(!s.exists){cloudHydrated=true;save();return}if(s.metadata?.hasPendingWrites)return;const remote=s.data()?.state;if(!remote)return;const keep=session;
+      // Conservar marcaciones locales que el estado remoto aún no tiene (evita que un snapshot viejo las borre)
+      const myMarks={};(state.availabilities||[]).forEach(d=>{if(d.realStart||d.realEnd||d.lunchStart||d.lunchEnd)myMarks[d.id]={realStart:d.realStart,realEnd:d.realEnd,lunchStart:d.lunchStart,lunchEnd:d.lunchEnd,status:d.status}});
+      state={...fallback,...remote};
+      (state.availabilities||[]).forEach(d=>{const m=myMarks[d.id];if(!m)return;['realStart','realEnd','lunchStart','lunchEnd'].forEach(k=>{if(m[k]&&!d[k])d[k]=m[k]});if(m.realStart&&(!d.status||d.status==='Creado'))d.status=m.status||d.status});
+      localStorage.setItem(KEY,JSON.stringify(state));session=keep;cloudHydrated=true;if(session)renderHome(false)})}catch{}}
     function uid(p){return `${p}-${Date.now().toString(36).toUpperCase()}${Math.floor(Math.random()*90+10)}`}
     let toastTimer=null;function toast(msg,cls,ms){const t=document.getElementById('toast');t.textContent=msg;t.className='toast on'+(cls?' '+cls:'');clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.classList.remove('on'),ms||1900)}
     function today(){return new Date().toISOString().slice(0,10)}
@@ -274,9 +280,7 @@
     function renderTurnHistory(){const box=document.getElementById('turnHistory');if(!box)return;
       const shifts=(state.availabilities||[]).filter(d=>d.quicker===session.name&&(d.realStart||d.realEnd)).sort((a,b)=>String(b.date).localeCompare(String(a.date))).slice(0,10);
       const rows=shifts.map(d=>`<div class="row"><span><b>${d.date}</b><br><small class="muted">${d.client||''} · ${d.point||''}</small>${d.lunchStart?`<br><small class="muted">Almuerzo ${d.lunchStart}${d.lunchEnd?' - '+d.lunchEnd:''}</small>`:''}</span><span style="text-align:right"><small class="muted">Ingreso</small> <strong style="color:var(--ok)">${d.realStart||'—'}</strong><br><small class="muted">Salida</small> <strong style="color:${d.realEnd?'#fca5a5':'var(--muted)'}">${d.realEnd||'—'}</strong></span></div>`).join('');
-      const evs=(state.evidences||[]).filter(e=>e.quicker===session.name).slice(0,6);
-      const evRows=evs.map(e=>`<div class="row"><span>${e.stage||'Registro'}<br><small class="muted">${e.time||''}</small></span><strong style="font-size:11px;color:var(--muted);max-width:140px;text-align:right">${(e.address||'').slice(0,40)}</strong></div>`).join('');
-      box.innerHTML=(rows||evRows)?`${rows?`<p class="muted" style="margin:0 0 4px;font-weight:800">Mis turnos</p>${rows}`:''}${evRows?`<p class="muted" style="margin:10px 0 4px;font-weight:800">Últimas marcaciones</p>${evRows}`:''}`:'<p class="muted">Sin registros aún.</p>'}
+      box.innerHTML=rows?`<p class="muted" style="margin:0 0 4px;font-weight:800">Mis turnos</p>${rows}`:'<p class="muted">Sin registros aún.</p>'}
     function updateTurnButtons(){const set=(btn,done,doneLabel)=>{if(!btn)return;if(done){btn.disabled=true;btn.innerHTML=doneLabel}else{btn.disabled=false}};
       if(!current)return;
       const bIn=document.querySelector('[data-turn-action="inicio"]'),bOut=document.querySelector('[data-turn-action="cierre"]');
@@ -342,29 +346,20 @@
       uploadMedia(eid,stamped,mid=>{if(mid){const e=(state.evidences||[]).find(x=>x.id===eid);if(e){e.mediaId=mid;save()}}});
     }
     // Sincronización inmediata de la marcación a la nube, con confirmación y reintentos.
-    // Si aún no llegó el snapshot inicial, baja el estado remoto, re-aplica la marcación y luego sube.
+    // La marcación se guarda en su PROPIO documento (quick_media/MARC-<id>) para que ningún
+    // guardado del estado completo (admin o mensajero) pueda pisarla. El estado completo se
+    // sube después como mejor esfuerzo.
     function syncMarcacion(label,ev){
-      if(!cloudRef){toast(`⚠ ${label} quedó guardado solo en este teléfono (sin conexión a la nube)`,'bad',4500);return}
-      const push=()=>cloudRef.set({state:publicState(),updatedAt:firebase.firestore.FieldValue.serverTimestamp(),updatedBy:session?.username||'mensajero'},{merge:true});
-      const attempt=n=>push().then(()=>{cloudHydrated=true;toast(`✅ Marcación efectiva: ${label} registrado en la malla`,'ok',4500)}).catch(()=>{if(n<3){setTimeout(()=>attempt(n+1),1500*n)}else{toast(`❌ ${label} NO se sincronizó con la malla. Revisa tu señal; se reintentará al volver la conexión`,'bad',6000)}});
-      if(cloudHydrated){attempt(1);return}
-      cloudRef.get().then(s=>{
-        const remote=s.exists?(s.data()||{}).state:null;
-        if(remote){
-          const myAvail=JSON.parse(JSON.stringify(current));
-          const myEv=ev?JSON.parse(JSON.stringify(ev)):null;
-          const keep=session;
-          state={...fallback,...remote};session=keep;
-          state.availabilities=state.availabilities||[];
-          if(state.availabilities.some(d=>d.id===myAvail.id))state.availabilities=state.availabilities.map(d=>d.id===myAvail.id?{...d,...myAvail}:d);
-          else state.availabilities.unshift(myAvail);
-          if(myEv){state.evidences=state.evidences||[];if(!state.evidences.some(x=>x.id===myEv.id))state.evidences.unshift(myEv)}
-          current=state.availabilities.find(d=>d.id===myAvail.id)||myAvail;
-          localStorage.setItem(KEY,JSON.stringify(state));
-        }
-        cloudHydrated=true;attempt(1);
-      }).catch(()=>attempt(1));
+      if(!cloudRef||!window.firebase){toast(`⚠ ${label} quedó guardado solo en este teléfono (sin conexión a la nube)`,'bad',4500);return}
+      const marks={kind:'marcacion',availability:current.id,quicker:session.name,client:current.client||'',point:current.point||'',date:current.date||'',realStart:current.realStart||'',realEnd:current.realEnd||'',lunchStart:current.lunchStart||'',lunchEnd:current.lunchEnd||'',status:current.status||'',at:new Date().toISOString()};
+      const doc=firebase.firestore().collection('quick_media').doc('MARC-'+current.id);
+      const attempt=n=>doc.set(marks,{merge:true}).then(()=>{
+        toast(`✅ Marcación efectiva: ${label} registrado en la malla`,'ok',4500);
+        pushFullState();
+      }).catch(()=>{if(n<3){setTimeout(()=>attempt(n+1),1500*n)}else{toast(`❌ ${label} NO se sincronizó con la malla. Revisa tu señal y NO cierres la app; se reintentará`,'bad',6000);setTimeout(()=>attempt(1),15000)}});
+      attempt(1);
     }
+    function pushFullState(){if(!cloudRef||!cloudHydrated)return;cloudRef.set({state:publicState(),updatedAt:firebase.firestore.FieldValue.serverTimestamp(),updatedBy:session?.username||'mensajero'},{merge:true}).catch(()=>{})}
 
     // GPS en tiempo real para Mapa en Vivo
     function startWatch(){if(watchId||!navigator.geolocation)return;watchId=navigator.geolocation.watchPosition(pos=>{lastGps={lat:pos.coords.latitude,lng:pos.coords.longitude,time:new Date().toLocaleString('es-CO')};const now=Date.now();if(now-lastPingSave>120000){lastPingSave=now;state.locationPings=state.locationPings||[];state.locationPings.unshift({quicker:session.name,availability:current?.id||'',client:current?.client||myQuicker().client||'',point:current?.point||'',lat:lastGps.lat,lng:lastGps.lng,time:lastGps.time});state.locationPings=state.locationPings.slice(0,300);save()}},()=>{},{enableHighAccuracy:true,maximumAge:30000,timeout:20000})}
@@ -415,7 +410,9 @@
       L.marker([ptLat,ptLng]).addTo(map).bindPopup(`<strong>${pt.name||current?.point||'Punto'}</strong><br>${pt.address||client.name||''}`);
       if(lastGps)L.circleMarker(here,{radius:9,color:'#22C55E',fillColor:'#22C55E',fillOpacity:.9}).addTo(map).bindPopup(`<strong>Tú</strong><br>${session.name}`);
       const zone=kmlLatLngs();if(zone.length>2){L.polygon(zone,{color:'#F5C518',weight:2,dashArray:'7 5',fillColor:'#F5C518',fillOpacity:.18}).addTo(map);map.fitBounds([[ptLat,ptLng],...zone,...(lastGps?[here]:[])],{padding:[24,24],maxZoom:15});document.getElementById('zoneText').textContent=`Zona: ${state.prefs.kmlName||'cargada'} · Punto: ${pt.name||current?.point||''}`}else{document.getElementById('zoneText').textContent=`Punto: ${pt.name||current?.point||''} · ${pt.address||''}`}}
-    document.getElementById('logout').onclick=()=>{if(watchId)navigator.geolocation.clearWatch(watchId);location.reload()};
+    function doLogout(){try{localStorage.removeItem('quick_session_v1')}catch(e){}if(watchId)navigator.geolocation.clearWatch(watchId);location.reload()}
+    document.getElementById('logout').onclick=doLogout;
+    document.getElementById('drawerLogout').onclick=doLogout;
     document.addEventListener('click',e=>{
       const open=e.target.closest('[data-info-open]');if(open){const id=open.dataset.infoOpen;const b=document.getElementById('info-body-'+id);if(b){const show=b.style.display==='none';b.style.display=show?'block':'none';if(show){const pill=open.querySelector('.pill');if(hsqAck(id,true)&&pill){pill.textContent='Visto';pill.classList.add('ok')}document.querySelectorAll('[data-info-media]:not([data-done])').forEach(img=>{img.dataset.done='1';try{firebase.firestore().collection('quick_media').doc(img.dataset.infoMedia).get().then(s=>{if(s.data()&&s.data().data)img.src=s.data().data}).catch(()=>{})}catch(x){}})}}return}
       const ack=e.target.closest('[data-info-ack]');if(ack){hsqAck(ack.dataset.infoAck);renderInfo();return}

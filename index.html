@@ -2383,6 +2383,36 @@ function toggleMode(forceDark) {
   }
 
   let cloudInitTries = 0;
+  // Marcaciones individuales del mensajero (docs quick_media/MARC-<idMalla>).
+  // Viven en su propio documento para que ningún guardado del estado completo pueda pisarlas.
+  let marcacionesCache = {};
+  function applyMarcacionesOverlay() {
+    let changed = false;
+    (state.availabilities || []).forEach(d => {
+      const m = marcacionesCache['MARC-' + d.id];
+      if (!m) return;
+      ['realStart', 'realEnd', 'lunchStart', 'lunchEnd'].forEach(k => { if (m[k] && d[k] !== m[k]) { d[k] = m[k]; changed = true; } });
+      if (m.status && (m.realStart || m.realEnd) && d.status !== m.status && !/finaliz/i.test(d.status || '')) { d.status = m.status; changed = true; }
+    });
+    return changed;
+  }
+  function listenMarcaciones() {
+    if (!cloudDb) return;
+    try {
+      cloudDb.collection('quick_media')
+        .orderBy(firebase.firestore.FieldPath.documentId())
+        .startAt('MARC-').endAt('MARC-')
+        .onSnapshot(qs => {
+          qs.forEach(doc => { marcacionesCache[doc.id] = doc.data(); });
+          if (applyMarcacionesOverlay()) {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+            rerenderPreservingScroll();
+            if (cloudHydrated) scheduleCloudSave(800);
+          }
+        }, () => {});
+    } catch (e) {}
+  }
+
   function initCloudSync() {
     if (!firebaseConfigReady()) {
       cloudStatus = FIREBASE_SETTINGS.enabled ? 'Firebase pendiente de configuración' : 'Modo local';
@@ -2474,6 +2504,7 @@ function toggleMode(forceDark) {
           state = remoteNormalized;
           if (keepMatrix) state.assetMatrix = keepMatrix;
           state.session = currentSession;
+          applyMarcacionesOverlay();
           localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
           lastRemoteStateHash = remoteHash;
           cloudHydrated = true;
@@ -2501,6 +2532,7 @@ function toggleMode(forceDark) {
         renderCloudStatus();
       });
       loadMatrixCloud();
+      listenMarcaciones();
     } catch (error) {
       cloudStatus = `Firebase error: ${error.message}`;
       renderCloudStatus();
@@ -2976,21 +3008,27 @@ function toggleMode(forceDark) {
         delay > 0 ? `<span class="b b-red"><i class="ti ti-alert-triangle"></i> Retraso ${delay} min</span>` : (d.realStart ? '<span class="b b-green">Ingreso puntual</span>' : ''),
         extra > 0 ? `<span class="b b-yellow"><i class="ti ti-clock-plus"></i> Extras ${Math.floor(extra / 60)}h ${extra % 60}m</span>` : (d.realEnd ? '<span class="b b-green">Salida a tiempo</span>' : '')
       ].filter(Boolean).join(' ');
-      const marks = evsFor(d.id).map(e => `<div class="detail-row" style="align-items:flex-start">
+      const marks = evsFor(d.id).map(e => `<div class="detail-row" style="align-items:flex-start;gap:12px;flex-wrap:wrap">
         <span style="min-width:130px"><strong>${escapeHTML(e.stage || '')}</strong><br><span class="fp-sub">${escapeHTML(e.time || '')}</span></span>
-        <span class="fp-sub" style="flex:1">${escapeHTML(e.address || 'Sin dirección')}</span>
-        ${hasMedia(e) ? `<img class="qdoc-img" style="max-width:120px;border-radius:8px;cursor:pointer" ${mediaAttr(e)} alt="Evidencia">` : '<span class="fp-sub">Sin foto</span>'}
+        <span class="fp-sub" style="flex:1;min-width:160px">${escapeHTML(e.address || 'Sin dirección')}</span>
+        ${hasMedia(e) ? `<img class="qdoc-img" style="width:100%;max-width:320px;border-radius:10px;border:1px solid var(--border)" ${mediaAttr(e)} alt="Evidencia">` : '<span class="fp-sub">Sin foto</span>'}
       </div>`).join('');
-      return `<div class="qdoc-card" style="margin-bottom:12px">
-        <div class="qdoc-head"><strong>${escapeHTML(d.date)} · ${escapeHTML(d.client || '')} · ${escapeHTML(d.point || '')}</strong>${alerts}</div>
-        <div class="fp-sub">Turno programado: ${escapeHTML(d.plannedStart || '—')} - ${escapeHTML(d.plannedEnd || '—')} · Ingreso real: <strong>${escapeHTML(d.realStart || '—')}</strong> · Salida real: <strong>${escapeHTML(d.realEnd || '—')}</strong>${d.lunchStart ? ` · Almuerzo: ${escapeHTML(d.lunchStart)}${d.lunchEnd ? ' - ' + escapeHTML(d.lunchEnd) : ''}` : ''}</div>
-        ${marks || '<div class="fp-sub">Sin evidencias de marcación para este turno.</div>'}
-      </div>`;
+      return `<details class="qdoc-card" style="margin-bottom:10px" data-marc-detail>
+        <summary style="cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;list-style:none">
+          <span><i class="ti ti-chevron-right" style="transition:transform .15s"></i> <strong>${escapeHTML(d.date)}</strong> · ${escapeHTML(d.client || '')} · ${escapeHTML(d.point || '')} <span class="fp-sub">Ingreso ${escapeHTML(d.realStart || '—')} · Salida ${escapeHTML(d.realEnd || '—')}</span></span>
+          <span>${alerts}</span>
+        </summary>
+        <div style="margin-top:10px;border-top:1px solid var(--border);padding-top:10px">
+          <div class="fp-sub" style="margin-bottom:8px">Turno programado: ${escapeHTML(d.plannedStart || '—')} - ${escapeHTML(d.plannedEnd || '—')} · Ingreso real: <strong>${escapeHTML(d.realStart || '—')}</strong> · Salida real: <strong>${escapeHTML(d.realEnd || '—')}</strong>${d.lunchStart ? ` · Almuerzo: ${escapeHTML(d.lunchStart)}${d.lunchEnd ? ' - ' + escapeHTML(d.lunchEnd) : ''}` : ''}</div>
+          ${marks || '<div class="fp-sub">Sin evidencias de marcación para este turno.</div>'}
+        </div>
+      </details>`;
     }).join('');
     const form = document.getElementById('modal-form');
     document.getElementById('modal-title').textContent = `Historial de marcaciones · ${q.name || ''}`;
     document.getElementById('modal-subtitle').textContent = 'Turnos, horas reales de ingreso/salida, ubicación de marcación, evidencia fotográfica y alertas de extras o retrasos.';
-    form.innerHTML = `${cards || '<div class="dropzone" style="text-align:center"><strong>Sin marcaciones registradas</strong><span class="fp-sub">Este mensajero aún no tiene ingresos o salidas marcadas.</span></div>'}
+    form.innerHTML = `<style>details[data-marc-detail][open] summary .ti-chevron-right{transform:rotate(90deg)}details[data-marc-detail] summary::-webkit-details-marker{display:none}</style>
+    ${cards || '<div class="dropzone" style="text-align:center"><strong>Sin marcaciones registradas</strong><span class="fp-sub">Este mensajero aún no tiene ingresos o salidas marcadas.</span></div>'}
     <div class="modal-foot"><button class="dev-btn" type="button" id="cancel-form">Cerrar</button></div>`;
     document.getElementById('cancel-form').onclick = closeModal;
     const modal = document.getElementById('app-modal');
