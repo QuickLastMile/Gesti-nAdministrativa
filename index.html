@@ -2393,6 +2393,20 @@ function toggleMode(forceDark) {
       if (!m) return;
       ['realStart', 'realEnd', 'lunchStart', 'lunchEnd'].forEach(k => { if (m[k] && d[k] !== m[k]) { d[k] = m[k]; changed = true; } });
       if (m.status && (m.realStart || m.realEnd) && d.status !== m.status && !/finaliz/i.test(d.status || '')) { d.status = m.status; changed = true; }
+      // Reconstruir evidencias de marcación si el estado principal las perdió
+      Object.values(m.evidences || {}).forEach(ev => {
+        if (!ev || !ev.id) return;
+        state.evidences = state.evidences || [];
+        const existing = state.evidences.find(e => e.id === ev.id);
+        if (!existing) {
+          state.evidences.unshift({ id: ev.id, availability: d.id, quicker: m.quicker || d.quicker, stage: ev.stage || '', type: 'Foto/GPS', required: 'Si', status: 'Cargada', file: '', mediaId: ev.mediaId || '', address: ev.address || '', gps: ev.gps || '', time: ev.time || '' });
+          changed = true;
+        } else if (ev.mediaId && !existing.mediaId) {
+          existing.mediaId = ev.mediaId;
+          changed = true;
+        }
+        if (!d.evidencePhoto) { d.evidencePhoto = 'foto_marcacion.jpg'; changed = true; }
+      });
     });
     return changed;
   }

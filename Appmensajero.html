@@ -343,15 +343,20 @@
       toast(`Sincronizando ${stageLabel}...`,'',6000);
       syncMarcacion(stageLabel,ev);
       renderHome(false);
-      uploadMedia(eid,stamped,mid=>{if(mid){const e=(state.evidences||[]).find(x=>x.id===eid);if(e){e.mediaId=mid;save()}}});
+      uploadMedia(eid,stamped,mid=>{if(mid){const e=(state.evidences||[]).find(x=>x.id===eid);if(e){e.mediaId=mid;pushFullState()}
+        // Registrar la foto también en el doc protegido de la marcación
+        try{firebase.firestore().collection('quick_media').doc('MARC-'+current.id).set({evidences:{[marcKey(stageLabel)]:{mediaId:mid}}},{merge:true}).catch(()=>{})}catch(x){}
+      }});
     }
     // Sincronización inmediata de la marcación a la nube, con confirmación y reintentos.
     // La marcación se guarda en su PROPIO documento (quick_media/MARC-<id>) para que ningún
     // guardado del estado completo (admin o mensajero) pueda pisarla. El estado completo se
     // sube después como mejor esfuerzo.
+    function marcKey(label){return String(label||'').replace(/[^a-zA-Z0-9]+/g,'_')}
     function syncMarcacion(label,ev){
       if(!cloudRef||!window.firebase){toast(`⚠ ${label} quedó guardado solo en este teléfono (sin conexión a la nube)`,'bad',4500);return}
       const marks={kind:'marcacion',availability:current.id,quicker:session.name,client:current.client||'',point:current.point||'',date:current.date||'',realStart:current.realStart||'',realEnd:current.realEnd||'',lunchStart:current.lunchStart||'',lunchEnd:current.lunchEnd||'',status:current.status||'',at:new Date().toISOString()};
+      if(ev)marks.evidences={[marcKey(label)]:{id:ev.id,stage:ev.stage||label,time:ev.time||'',address:ev.address||'',gps:ev.gps||'',mediaId:ev.mediaId||''}};
       const doc=firebase.firestore().collection('quick_media').doc('MARC-'+current.id);
       const attempt=n=>doc.set(marks,{merge:true}).then(()=>{
         toast(`✅ Marcación efectiva: ${label} registrado en la malla`,'ok',4500);
