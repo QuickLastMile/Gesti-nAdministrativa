@@ -332,7 +332,7 @@
       if(action==='almuerzo_inicio')current.lunchStart=new Date().toTimeString().slice(0,5);
       if(action==='almuerzo_fin')current.lunchEnd=new Date().toTimeString().slice(0,5);
       const stageLabel={inicio:'Inicio de turno',cierre:'Fin de turno',almuerzo_inicio:'Inicio almuerzo',almuerzo_fin:'Fin almuerzo'}[action]||action;
-      current.evidencePhoto=stamped;
+      if(action==='inicio'||action==='cierre')current.evidencePhoto=stamped;
       const eid=uid('EVI');
       state.evidences=state.evidences||[];
       const ev={id:eid,availability:current.id,quicker:session.name,stage:stageLabel,type:'Foto/GPS',required:'Si',status:'Cargada',file:`${action}.jpg`,photoData:stamped,address:address,gps:gps?`${gps.lat.toFixed(6)}, ${gps.lng.toFixed(6)}`:'',time:stamp};

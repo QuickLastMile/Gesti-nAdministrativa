@@ -2405,7 +2405,7 @@ function toggleMode(forceDark) {
           existing.mediaId = ev.mediaId;
           changed = true;
         }
-        if (!d.evidencePhoto) { d.evidencePhoto = 'foto_marcacion.jpg'; changed = true; }
+        if (!d.evidencePhoto && /inicio de turno|fin de turno/i.test(ev.stage || '')) { d.evidencePhoto = 'foto_marcacion.jpg'; changed = true; }
       });
     });
     return changed;
@@ -3015,35 +3015,45 @@ function toggleMode(forceDark) {
       .sort((a, b) => String(b.date).localeCompare(String(a.date)))
       .slice(0, 30);
     const evsFor = avId => (state.evidences || []).filter(e => e.availability === avId && /inicio|fin|turno|almuerzo/i.test(e.stage || ''));
-    const cards = shifts.map(d => {
+    const bodyRows = shifts.map(d => {
       const delay = d.realStart && d.plannedStart ? minutesBetween(d.plannedStart, d.realStart) : 0;
       const extra = d.realEnd && d.plannedEnd ? minutesBetween(d.plannedEnd, d.realEnd) : 0;
       const alerts = [
-        delay > 0 ? `<span class="b b-red"><i class="ti ti-alert-triangle"></i> Retraso ${delay} min</span>` : (d.realStart ? '<span class="b b-green">Ingreso puntual</span>' : ''),
-        extra > 0 ? `<span class="b b-yellow"><i class="ti ti-clock-plus"></i> Extras ${Math.floor(extra / 60)}h ${extra % 60}m</span>` : (d.realEnd ? '<span class="b b-green">Salida a tiempo</span>' : '')
+        delay > 0 ? `<span class="b b-red">Retraso ${delay} min</span>` : (d.realStart ? '<span class="b b-green">Puntual</span>' : ''),
+        extra > 0 ? `<span class="b b-yellow">Extras ${Math.floor(extra / 60)}h ${extra % 60}m</span>` : ''
       ].filter(Boolean).join(' ');
-      const marks = evsFor(d.id).map(e => `<div class="detail-row" style="align-items:flex-start;gap:12px;flex-wrap:wrap">
+      const marks = evsFor(d.id).map(e => `<div class="detail-row" style="align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:8px">
         <span style="min-width:130px"><strong>${escapeHTML(e.stage || '')}</strong><br><span class="fp-sub">${escapeHTML(e.time || '')}</span></span>
         <span class="fp-sub" style="flex:1;min-width:160px">${escapeHTML(e.address || 'Sin dirección')}</span>
         ${hasMedia(e) ? `<img class="qdoc-img" style="width:100%;max-width:320px;border-radius:10px;border:1px solid var(--border)" ${mediaAttr(e)} alt="Evidencia">` : '<span class="fp-sub">Sin foto</span>'}
       </div>`).join('');
-      return `<details class="qdoc-card" style="margin-bottom:10px" data-marc-detail>
-        <summary style="cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;list-style:none">
-          <span><i class="ti ti-chevron-right" style="transition:transform .15s"></i> <strong>${escapeHTML(d.date)}</strong> · ${escapeHTML(d.client || '')} · ${escapeHTML(d.point || '')} <span class="fp-sub">Ingreso ${escapeHTML(d.realStart || '—')} · Salida ${escapeHTML(d.realEnd || '—')}</span></span>
-          <span>${alerts}</span>
-        </summary>
-        <div style="margin-top:10px;border-top:1px solid var(--border);padding-top:10px">
-          <div class="fp-sub" style="margin-bottom:8px">Turno programado: ${escapeHTML(d.plannedStart || '—')} - ${escapeHTML(d.plannedEnd || '—')} · Ingreso real: <strong>${escapeHTML(d.realStart || '—')}</strong> · Salida real: <strong>${escapeHTML(d.realEnd || '—')}</strong>${d.lunchStart ? ` · Almuerzo: ${escapeHTML(d.lunchStart)}${d.lunchEnd ? ' - ' + escapeHTML(d.lunchEnd) : ''}` : ''}</div>
-          ${marks || '<div class="fp-sub">Sin evidencias de marcación para este turno.</div>'}
-        </div>
-      </details>`;
+      const detail = `<div class="fp-sub" style="margin-bottom:8px">Turno programado: ${escapeHTML(d.plannedStart || '—')} - ${escapeHTML(d.plannedEnd || '—')} · Punto: ${escapeHTML(d.point || '—')} ${alerts}</div>
+        ${marks || '<div class="fp-sub">Sin evidencias de marcación para este turno.</div>'}`;
+      return `<tr class="ticket-row" data-marc-row="${escapeHTML(d.id)}" style="cursor:pointer">
+        <td><i class="ti ti-chevron-right"></i> ${escapeHTML(d.date)}</td>
+        <td>${escapeHTML(d.client || '—')}</td>
+        <td>${escapeHTML(d.quicker || q.name || '')}</td>
+        <td><strong>${escapeHTML(d.realStart || '—')}</strong></td>
+        <td><strong>${escapeHTML(d.realEnd || '—')}</strong></td>
+        <td>${escapeHTML(d.lunchStart || '—')}</td>
+        <td>${escapeHTML(d.lunchEnd || '—')}</td>
+      </tr>
+      <tr data-marc-det="${escapeHTML(d.id)}" style="display:none"><td colspan="7" style="background:var(--card-bg)">${detail}</td></tr>`;
     }).join('');
     const form = document.getElementById('modal-form');
     document.getElementById('modal-title').textContent = `Historial de marcaciones · ${q.name || ''}`;
-    document.getElementById('modal-subtitle').textContent = 'Turnos, horas reales de ingreso/salida, ubicación de marcación, evidencia fotográfica y alertas de extras o retrasos.';
-    form.innerHTML = `<style>details[data-marc-detail][open] summary .ti-chevron-right{transform:rotate(90deg)}details[data-marc-detail] summary::-webkit-details-marker{display:none}</style>
-    ${cards || '<div class="dropzone" style="text-align:center"><strong>Sin marcaciones registradas</strong><span class="fp-sub">Este mensajero aún no tiene ingresos o salidas marcadas.</span></div>'}
+    document.getElementById('modal-subtitle').textContent = 'Selecciona una fila para ver el detalle y las evidencias de ingreso, salida y almuerzo.';
+    form.innerHTML = `${shifts.length ? table(['Fecha', 'Operación', 'Nombre', 'Hora ingreso', 'Hora salida', 'Ingreso almuerzo', 'Salida almuerzo'], [bodyRows]) : '<div class="dropzone" style="text-align:center"><strong>Sin marcaciones registradas</strong><span class="fp-sub">Este mensajero aún no tiene ingresos o salidas marcadas.</span></div>'}
     <div class="modal-foot"><button class="dev-btn" type="button" id="cancel-form">Cerrar</button></div>`;
+    form.querySelectorAll('[data-marc-row]').forEach(tr => tr.onclick = () => {
+      const det = form.querySelector(`[data-marc-det="${tr.dataset.marcRow}"]`);
+      if (!det) return;
+      const show = det.style.display === 'none';
+      det.style.display = show ? '' : 'none';
+      const chev = tr.querySelector('.ti-chevron-right, .ti-chevron-down');
+      if (chev) chev.className = show ? 'ti ti-chevron-down' : 'ti ti-chevron-right';
+      if (show) loadMediaImages();
+    });
     document.getElementById('cancel-form').onclick = closeModal;
     const modal = document.getElementById('app-modal');
     modal.classList.add('wide', 'open');
