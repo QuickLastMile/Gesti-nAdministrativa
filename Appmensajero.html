@@ -77,6 +77,7 @@
 
       <!-- TURNO -->
       <section class="screen on" id="screen-turno">
+        <div id="pendCierre"></div>
         <div class="card turn">
           <span class="pill" id="turnStatus">Turno asignado</span>
           <h2 id="client">Cliente</h2><p class="muted" id="point">Punto</p>
@@ -266,12 +267,21 @@
 
     function renderHome(camera=true){document.getElementById('login').classList.add('hidden');document.getElementById('home').classList.remove('hidden');document.getElementById('drawer').classList.remove('hidden');document.getElementById('hello').textContent=`Hola, ${session.name.split(' ')[0]}`;document.getElementById('todayLabel').textContent=new Date().toLocaleDateString('es-CO',{weekday:'long',day:'numeric',month:'long'});
       const pqr=(state.prefs&&state.prefs.pqrTypes&&state.prefs.pqrTypes.length)?state.prefs.pqrTypes:['Permiso','Queja','PQR','Solicitud','Novedad','Incapacidad'];document.getElementById('tkType').innerHTML=pqr.map(t=>`<option>${t}</option>`).join('');
-      const list=(state.availabilities||[]).filter(d=>d.quicker===session.name).sort((a,b)=>a.date.localeCompare(b.date));current=list.find(d=>d.date===today())||list[list.length-1];
+      const list=(state.availabilities||[]).filter(d=>d.quicker===session.name).sort((a,b)=>a.date.localeCompare(b.date));
+      // Solo el turno de HOY. Un turno anterior sin cierre no debe arrastrarse al día siguiente.
+      current=list.find(d=>d.date===today())||null;
+      const sinCierre=list.filter(d=>d.date<today()&&d.realStart&&!d.realEnd).slice(-3);
       const q=myQuicker();const client=(state.clients||[]).find(c=>c.name===(current?.client||q.client))||{};
       if(current){document.getElementById('client').textContent=current.client;document.getElementById('point').textContent=current.point||'Sin punto asignado';document.getElementById('operation').textContent=current.client||q.client||'—';document.getElementById('schedule').textContent=`${current.plannedStart||''} - ${current.plannedEnd||''}`;document.getElementById('turnStatus').textContent=current.status||'Creado'}
       else{document.getElementById('client').textContent=q.client||'Sin operación';document.getElementById('point').textContent=q.point||'';document.getElementById('operation').textContent=q.client||'—';document.getElementById('schedule').textContent='Sin turno hoy'}
+      // Alerta (no bloqueante) por turnos anteriores sin marcación de salida
+      const av=document.getElementById('pendCierre');
+      if(av)av.innerHTML=sinCierre.length?sinCierre.map(d=>`<div class="alert warn"><i class="ti ti-clock-exclamation"></i> No marcaste la salida del ${d.date} (ingreso ${d.realStart}). Queda reportado a tu coordinador; hoy puedes marcar con normalidad.</div>`).join(''):'';
       const payments=q.paymentEnabled==='Si';document.querySelector('[data-tab="gastos"]').style.display=payments?'flex':'none';document.getElementById('paymentType').innerHTML=(q.paymentTypes||['Parqueaderos']).map(t=>`<option>${t}</option>`).join('');
       const lunchOn=client.lunch==='Si';document.getElementById('lunchBlock').classList.toggle('hidden',!lunchOn);
+      // La foto adicional se activa/inactiva desde la plataforma administrativa
+      const extraOn=(state.prefs&&state.prefs.extraPhotoEnabled)!==false;
+      document.getElementById('extraPhotoBtn').style.display=extraOn?'':'none';
       document.getElementById('scheduleList').innerHTML=list.length?list.map(d=>`<div class="row"><span>${d.date}<br><small class="muted">${d.client} · ${d.point||''}</small></span><strong>${d.status||'Creado'}</strong></div>`).join(''):'<p class="muted">Sin turnos asignados.</p>';
       const plateEl=document.getElementById('plateInput');if(plateEl)plateEl.value=q.plate||'';
       renderTimers();renderMyState();renderTurnHistory();updateTurnButtons();renderDocs(q);renderTickets();renderInfo();renderCarnet(q);renderBell();setTimeout(initMap,0)}
@@ -308,6 +318,52 @@
     // La cámara se abre solo al marcar (input nativo con capture). No queda abierta en la app.
     function takePhotoThen(cb){const inp=document.getElementById('turnFileInput');inp.value='';inp.onchange=()=>{const f=inp.files&&inp.files[0];if(!f){cb('');return}const r=new FileReader();r.onload=()=>cb(String(r.result||''));r.readAsDataURL(f)};inp.click()}
 
+    // ───── Validación de foto tipo perfil: debe verse UNA sola persona ─────
+    // Usa el detector de rostros del navegador cuando existe; si no, aplica una
+    // verificación básica de imagen (nitidez/luz/tono de piel) para descartar fotos vacías.
+    function validarFotoPerfil(dataUrl,cb){
+      const img=new Image();
+      img.onerror=()=>cb({ok:false,msg:'No se pudo leer la foto. Intenta de nuevo.'});
+      img.onload=()=>{
+        const finishHeur=()=>cb(heuristicaFoto(img));
+        if(window.FaceDetector){
+          try{
+            new FaceDetector({fastMode:false,maxDetectedFaces:5}).detect(img).then(faces=>{
+              const n=(faces||[]).length;
+              if(n===1){cb({ok:true});return}
+              if(n===0){cb({ok:false,msg:'No se detectó ninguna persona en la foto. Debe ser tipo perfil, con tu rostro visible.'});return}
+              cb({ok:false,msg:`Se detectaron ${n} personas. La foto debe ser tipo perfil, solo tú.`});
+            }).catch(finishHeur);
+            return;
+          }catch(e){}
+        }
+        finishHeur();
+      };
+      img.src=dataUrl;
+    }
+    function heuristicaFoto(img){
+      try{
+        const W=160,H=Math.max(1,Math.round(img.height*(W/img.width)));
+        const c=document.createElement('canvas');c.width=W;c.height=H;
+        const ctx=c.getContext('2d');ctx.drawImage(img,0,0,W,H);
+        const d=ctx.getImageData(0,0,W,H).data;
+        let sum=0,sum2=0,skin=0,n=0;
+        for(let i=0;i<d.length;i+=4){
+          const r=d[i],g=d[i+1],b=d[i+2];
+          const lum=.299*r+.587*g+.114*b;
+          sum+=lum;sum2+=lum*lum;n++;
+          const mx=Math.max(r,g,b),mn=Math.min(r,g,b);
+          if(r>95&&g>40&&b>20&&mx-mn>15&&Math.abs(r-g)>15&&r>g&&r>b)skin++;
+        }
+        const mean=sum/n, sd=Math.sqrt(Math.max(0,sum2/n-mean*mean));
+        const skinPct=skin/n;
+        if(mean<28)return{ok:false,msg:'La foto está demasiado oscura. Toma la foto con buena luz y tu rostro visible.'};
+        if(sd<12)return{ok:false,msg:'La foto no muestra a ninguna persona (imagen vacía o tapada). Debe ser tipo perfil.'};
+        if(skinPct<0.02)return{ok:false,msg:'No se detectó una persona en la foto. Debe ser tipo perfil, con tu rostro visible.'};
+        return{ok:true};
+      }catch(e){return{ok:true}}
+    }
+
     document.querySelectorAll('[data-turn-action]').forEach(btn=>btn.onclick=()=>registerTurn(btn.dataset.turnAction));
     document.getElementById('extraPhotoBtn').onclick=()=>registerExtraPhoto();
     document.getElementById('lunchToggle').onclick=()=>document.getElementById('lunchActions').classList.toggle('hidden');
@@ -320,12 +376,21 @@
       if(action==='almuerzo_inicio'&&current.lunchStart){toast(`Ya iniciaste el almuerzo a las ${current.lunchStart}`,'bad',3200);return}
       if(action==='almuerzo_fin'&&!current.lunchStart){toast('Primero debes iniciar el almuerzo','bad',3000);return}
       if(action==='almuerzo_fin'&&current.lunchEnd){toast(`Ya finalizaste el almuerzo a las ${current.lunchEnd}`,'bad',3200);return}
-      takePhotoThen(raw=>{if(!raw){toast('Necesitas tomar la foto');return}
+      takePhotoThen(raw=>{if(!raw){toast('❌ No se registró la marcación: necesitas tomar la foto','bad',4000);return}
+        const needFace=(action==='inicio'||action==='cierre');
+        const seguir=()=>{
         toast('Tomando ubicación...');
         locate(gps=>{const stamp=new Date().toLocaleString('es-CO');
           const proceed=address=>stampPhoto(raw,address,stamp,stamped=>{capturedPhoto=stamped;const img=document.getElementById('snapshot');img.src=stamped;img.style.display='block';applyTurn(action,gps,address,stamp,stamped)});
           if(gps)reverseGeocode(gps.lat,gps.lng,addr=>proceed(addr||`${gps.lat.toFixed(6)}, ${gps.lng.toFixed(6)}`));
-          else proceed('Ubicación no disponible')})})}
+          else proceed('Ubicación no disponible')})};
+        if(!needFace){seguir();return}
+        toast('Validando la foto...');
+        validarFotoPerfil(raw,res=>{
+          if(res.ok){seguir();return}
+          toast('❌ Marcación NO registrada. '+res.msg,'bad',6000);
+        });
+      })}
     function applyTurn(action,gps,address,stamp,stamped){
       if(action==='inicio'){current.realStart=new Date().toTimeString().slice(0,5);current.status='En turno'}
       if(action==='cierre'){current.realEnd=new Date().toTimeString().slice(0,5);current.status='Finalizado'}
@@ -367,7 +432,7 @@
     function pushFullState(){if(!cloudRef||!cloudHydrated)return;cloudRef.set({state:publicState(),updatedAt:firebase.firestore.FieldValue.serverTimestamp(),updatedBy:session?.username||'mensajero'},{merge:true}).catch(()=>{})}
 
     // GPS en tiempo real para Mapa en Vivo
-    function startWatch(){if(watchId||!navigator.geolocation)return;watchId=navigator.geolocation.watchPosition(pos=>{lastGps={lat:pos.coords.latitude,lng:pos.coords.longitude,time:new Date().toLocaleString('es-CO')};const now=Date.now();if(now-lastPingSave>120000){lastPingSave=now;state.locationPings=state.locationPings||[];state.locationPings.unshift({quicker:session.name,availability:current?.id||'',client:current?.client||myQuicker().client||'',point:current?.point||'',lat:lastGps.lat,lng:lastGps.lng,time:lastGps.time});state.locationPings=state.locationPings.slice(0,300);save()}},()=>{},{enableHighAccuracy:true,maximumAge:30000,timeout:20000})}
+    function startWatch(){if(watchId||!navigator.geolocation)return;watchId=navigator.geolocation.watchPosition(pos=>{lastGps={lat:pos.coords.latitude,lng:pos.coords.longitude,time:new Date().toLocaleString('es-CO')};const now=Date.now();if(now-lastPingSave>120000){lastPingSave=now;state.locationPings=state.locationPings||[];state.locationPings.unshift({quicker:session.name,availability:current?.id||'',client:current?.client||myQuicker().client||'',point:current?.point||'',lat:lastGps.lat,lng:lastGps.lng,time:lastGps.time,day:today()});state.locationPings=state.locationPings.slice(0,300);save()}},()=>{},{enableHighAccuracy:true,maximumAge:30000,timeout:20000})}
 
     // GASTOS / ADICIONALES
     document.getElementById('paymentType').onchange=()=>{const t=document.getElementById('paymentType').value||'';const needInv=/parq/i.test(t);document.getElementById('invoiceLabel').textContent=needInv?'Factura electrónica (obligatoria)':'Soporte (opcional)';};
@@ -413,6 +478,19 @@
     function initMap(){const el=document.getElementById('messengerMap');if(!el||!window.L)return;if(map){map.remove();map=null}const q=myQuicker();const client=(state.clients||[]).find(c=>c.name===(current?.client||q.client))||{};const pt=(client.points||[]).find(p=>(p.name||p)===( current?.point||q.point))||{};const ptLat=Number(pt.lat||client.lat||q.lat)||4.6872,ptLng=Number(pt.lng||client.lng||q.lng)||-74.0488;const here=lastGps?[lastGps.lat,lastGps.lng]:[ptLat,ptLng];
       map=L.map(el,{zoomControl:true}).setView(here,14);const road=L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap'});const sat=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,attribution:'Tiles &copy; Esri'});(document.getElementById('mapStyle').value==='road'?road:sat).addTo(map);L.control.layers({'Normal':road,'Satelital':sat},{},{position:'topleft'}).addTo(map);
       L.marker([ptLat,ptLng]).addTo(map).bindPopup(`<strong>${pt.name||current?.point||'Punto'}</strong><br>${pt.address||client.name||''}`);
+      // Puntos de la operación (creados en la plataforma o importados desde KML): tocar para ver la dirección
+      const myClient=current?.client||q.client||'';
+      const extraPts=[];
+      (client.points||[]).forEach(p=>{if(p&&typeof p==='object'&&Number.isFinite(Number(p.lat))&&Number.isFinite(Number(p.lng)))extraPts.push({name:p.name||'Punto',address:p.address||'',lat:Number(p.lat),lng:Number(p.lng)})});
+      (state.mapPoints||[]).forEach(p=>{if((!p.operation||p.operation===myClient)&&Number.isFinite(Number(p.lat))&&Number.isFinite(Number(p.lng)))extraPts.push({name:p.name||'Punto',address:p.address||'',lat:Number(p.lat),lng:Number(p.lng)})});
+      const seen={};
+      extraPts.forEach(p=>{
+        const k=p.name+'|'+p.lat.toFixed(5);
+        if(seen[k])return;seen[k]=1;
+        if(Math.abs(p.lat-ptLat)<1e-6&&Math.abs(p.lng-ptLng)<1e-6)return;
+        const ic=L.divIcon({className:'',html:`<span style="display:grid;place-items:center;width:22px;height:22px;border-radius:50%;background:#1E5CA8;color:#fff;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.5);font-size:11px">🏪</span>`,iconSize:[22,22]});
+        L.marker([p.lat,p.lng],{icon:ic}).addTo(map).bindPopup(`<strong>${p.name}</strong><br>${p.address||'Sin dirección registrada'}`);
+      });
       if(lastGps)L.circleMarker(here,{radius:9,color:'#22C55E',fillColor:'#22C55E',fillOpacity:.9}).addTo(map).bindPopup(`<strong>Tú</strong><br>${session.name}`);
       const zone=kmlLatLngs();if(zone.length>2){L.polygon(zone,{color:'#F5C518',weight:2,dashArray:'7 5',fillColor:'#F5C518',fillOpacity:.18}).addTo(map);map.fitBounds([[ptLat,ptLng],...zone,...(lastGps?[here]:[])],{padding:[24,24],maxZoom:15});document.getElementById('zoneText').textContent=`Zona: ${state.prefs.kmlName||'cargada'} · Punto: ${pt.name||current?.point||''}`}else{document.getElementById('zoneText').textContent=`Punto: ${pt.name||current?.point||''} · ${pt.address||''}`}}
     function doLogout(){try{localStorage.removeItem('quick_session_v1')}catch(e){}if(watchId)navigator.geolocation.clearWatch(watchId);location.reload()}

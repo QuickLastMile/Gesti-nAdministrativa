@@ -2347,6 +2347,7 @@ function toggleMode(forceDark) {
       mapa: {
         mapZones: source.mapZones,
         mapPoints: source.mapPoints,
+        mapPoints: source.mapPoints,
         locationPings: source.locationPings,
         quickers: source.quickers,
         clients: source.clients,
@@ -2945,6 +2946,169 @@ function toggleMode(forceDark) {
     loadMediaImages();
   }
 
+  // ───── Carnet de presentación administrativo (Administrador, Jefe, Coordinador, HSQ) ─────
+  const BLOOD_TYPES = ['O+', 'O-', 'A+', 'A-', 'B+', 'B-', 'AB+', 'AB-'];
+  function adminCarnetData(user) {
+    const c = user.carnet || {};
+    const asset = c.cedula ? findAssetByCedula(c.cedula) : null;
+    return {
+      cedula: c.cedula || '',
+      name: c.name || asset?.name || user.name || '',
+      cargo: c.cargo || asset?.cargo || user.profile || '',
+      city: c.city || asset?.city || '',
+      email: c.email || '',
+      phone: c.phone || '',
+      blood: c.blood || '',
+      photo: c.photo || '',
+      logo: c.logo || QUICK_LOGO,
+      profile: user.profile || ''
+    };
+  }
+  function adminCarnetHTML(d) {
+    const photo = d.photo
+      ? `<img src="${escapeHTML(d.photo)}" alt="" style="width:100%;height:100%;object-fit:cover">`
+      : `<div style="width:100%;height:100%;display:grid;place-items:center;background:#F5C518;color:#111;font-size:44px;font-weight:900">${initials(d.name)}</div>`;
+    const field = (label, value) => value
+      ? `<div style="padding-bottom:7px;border-bottom:1px solid rgba(255,255,255,.09)"><div style="font-size:8.5px;letter-spacing:1.1px;text-transform:uppercase;color:rgba(255,255,255,.45);font-weight:700">${label}</div><div style="font-size:12.5px;font-weight:700;color:#fff;margin-top:2px;word-break:break-word">${escapeHTML(value)}</div></div>`
+      : '';
+    return `<div id="carnet-card" style="width:340px;background:linear-gradient(158deg,#0B1220 0%,#111C33 45%,#0A1526 100%);border-radius:18px;color:#fff;box-shadow:0 18px 50px rgba(0,0,0,.5);position:relative;overflow:hidden;font-family:Arial,Helvetica,sans-serif">
+      <div style="position:absolute;top:-70px;right:-70px;width:190px;height:190px;border-radius:50%;background:rgba(245,197,24,.10)"></div>
+      <div style="height:5px;background:linear-gradient(90deg,#F5C518,#C9A200)"></div>
+      <div style="display:flex;align-items:center;gap:10px;padding:14px 18px 0">
+        <img src="${escapeHTML(d.logo)}" alt="Quick" style="width:38px;height:38px;border-radius:9px;object-fit:cover;background:#fff">
+        <div style="line-height:1.15"><div style="font-size:13.5px;font-weight:900;letter-spacing:.4px">QUICK HELP S.A.S.</div><div style="font-size:8.5px;font-weight:700;color:#F5C518;letter-spacing:1.4px;text-transform:uppercase">Carnet de presentación</div></div>
+      </div>
+      <div style="width:118px;height:140px;margin:16px auto 10px;border-radius:12px;overflow:hidden;border:3px solid #F5C518;background:#1b2942">${photo}</div>
+      <div style="text-align:center;padding:0 16px">
+        <div style="font-size:18px;font-weight:900;line-height:1.15">${escapeHTML(d.name || 'Sin nombre')}</div>
+        <div style="font-size:10px;font-weight:800;color:#F5C518;letter-spacing:1.2px;text-transform:uppercase;margin-top:4px">${escapeHTML(d.cargo || '')}</div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:9px 14px;padding:16px 18px 12px">
+        ${field('Cédula', d.cedula)}
+        ${field('Ciudad', d.city)}
+        ${field('Celular', d.phone)}
+        ${field('Tipo de sangre', d.blood)}
+        ${d.email ? `<div style="grid-column:1/-1;padding-bottom:7px;border-bottom:1px solid rgba(255,255,255,.09)"><div style="font-size:8.5px;letter-spacing:1.1px;text-transform:uppercase;color:rgba(255,255,255,.45);font-weight:700">Correo</div><div style="font-size:11.5px;font-weight:700;color:#fff;margin-top:2px;word-break:break-all">${escapeHTML(d.email)}</div></div>` : ''}
+      </div>
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 18px;background:#F5C518;color:#111">
+        <span style="font-size:9.5px;font-weight:900;text-transform:uppercase;letter-spacing:.6px">Colaborador autorizado</span>
+        <span style="font-size:9px;font-weight:800">quicklastmile.com</span>
+      </div>
+    </div>`;
+  }
+  // Dibuja el carnet en un canvas y lo descarga como PNG (sin librerías externas)
+  function downloadAdminCarnet(d) {
+    const S = 2, W = 340 * S, H = 560 * S;
+    const cv = document.createElement('canvas');
+    cv.width = W; cv.height = H;
+    const x = cv.getContext('2d');
+    const g = x.createLinearGradient(0, 0, W, H);
+    g.addColorStop(0, '#0B1220'); g.addColorStop(.45, '#111C33'); g.addColorStop(1, '#0A1526');
+    x.fillStyle = g; x.fillRect(0, 0, W, H);
+    x.fillStyle = 'rgba(245,197,24,.10)'; x.beginPath(); x.arc(W, 0, 190 * S, 0, 7); x.fill();
+    x.fillStyle = '#F5C518'; x.fillRect(0, 0, W, 5 * S);
+    const txt = (t, px, py, size, color, weight, align) => {
+      x.font = `${weight || '700'} ${size * S}px Arial`; x.fillStyle = color; x.textAlign = align || 'left';
+      x.fillText(t || '', px * S, py * S);
+    };
+    txt('QUICK HELP S.A.S.', 68, 32, 13.5, '#fff', '900');
+    txt('CARNET DE PRESENTACIÓN', 68, 46, 8.5, '#F5C518', '700');
+    const drawRest = () => {
+      txt((d.name || '').toUpperCase(), 170, 232, 17, '#fff', '900', 'center');
+      txt((d.cargo || '').toUpperCase(), 170, 249, 10, '#F5C518', '800', 'center');
+      const rows = [['CÉDULA', d.cedula], ['CIUDAD', d.city], ['CELULAR', d.phone], ['TIPO DE SANGRE', d.blood]];
+      rows.forEach((r, i) => {
+        const cx = 20 + (i % 2) * 165, cy = 285 + Math.floor(i / 2) * 48;
+        txt(r[0], cx, cy, 8.5, 'rgba(255,255,255,.45)', '700');
+        txt(r[1] || '—', cx, cy + 15, 12.5, '#fff', '700');
+        x.strokeStyle = 'rgba(255,255,255,.09)'; x.lineWidth = 1 * S;
+        x.beginPath(); x.moveTo(cx * S, (cy + 22) * S); x.lineTo((cx + 145) * S, (cy + 22) * S); x.stroke();
+      });
+      if (d.email) { txt('CORREO', 20, 381, 8.5, 'rgba(255,255,255,.45)', '700'); txt(d.email, 20, 396, 11.5, '#fff', '700'); }
+      x.fillStyle = '#F5C518'; x.fillRect(0, H - 34 * S, W, 34 * S);
+      txt('COLABORADOR AUTORIZADO', 20, H / S - 13, 9.5, '#111', '900');
+      txt('quicklastmile.com', 320, H / S - 13, 9, '#111', '800', 'right');
+      cv.toBlob(b => {
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(b);
+        a.download = `carnet_${(d.name || 'quick').replace(/[^a-zA-Z0-9]+/g, '_')}.png`;
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+      }, 'image/png');
+    };
+    const drawPhoto = () => {
+      const pw = 118 * S, ph = 140 * S, px = (W - pw) / 2, py = 74 * S;
+      const done = () => { x.strokeStyle = '#F5C518'; x.lineWidth = 3 * S; x.strokeRect(px, py, pw, ph); drawRest(); };
+      if (d.photo) {
+        const im = new Image(); im.crossOrigin = 'anonymous';
+        im.onload = () => { x.save(); x.beginPath(); x.rect(px, py, pw, ph); x.clip(); const r = Math.max(pw / im.width, ph / im.height); x.drawImage(im, px + (pw - im.width * r) / 2, py + (ph - im.height * r) / 2, im.width * r, im.height * r); x.restore(); done(); };
+        im.onerror = () => { x.fillStyle = '#F5C518'; x.fillRect(px, py, pw, ph); done(); };
+        im.src = d.photo;
+      } else { x.fillStyle = '#F5C518'; x.fillRect(px, py, pw, ph); txt(initials(d.name), 170, 152, 40, '#111', '900', 'center'); done(); }
+    };
+    const logo = new Image(); logo.crossOrigin = 'anonymous';
+    logo.onload = () => { x.drawImage(logo, 18 * S, 14 * S, 38 * S, 38 * S); drawPhoto(); };
+    logo.onerror = drawPhoto;
+    logo.src = d.logo || QUICK_LOGO;
+  }
+  function buildAdminCarnetSection(user, profile) {
+    const d = adminCarnetData(user);
+    window._carnetData = d;
+    const inS = 'width:100%;min-height:40px;border:1px solid var(--border);border-radius:10px;background:var(--card-bg);color:var(--text-1);padding:0 10px;font:inherit';
+    return `<section class="settings-block">
+      <div class="settings-block-title">Carnet de presentación</div>
+      <div class="settings-block-desc" style="margin-bottom:16px;color:var(--text-2)">Carnet para presentar al cliente en visitas. Escribe tu cédula y se completan automáticamente el nombre, cargo y ciudad desde la matriz; los demás datos y la foto se cargan aquí.</div>
+      <div style="display:flex;gap:24px;flex-wrap:wrap;align-items:flex-start">
+        <div>${adminCarnetHTML(d)}</div>
+        <div style="flex:1;min-width:280px">
+          <div class="form-grid">
+            <div class="form-field"><label>Cédula (autocompleta desde matriz)</label><input id="carnet-cedula" value="${escapeHTML(d.cedula)}" placeholder="Pega tu cédula" style="${inS}"></div>
+            <div class="form-field"><label>Nombre y apellidos</label><input id="carnet-name" value="${escapeHTML(d.name)}" style="${inS}"></div>
+            <div class="form-field"><label>Cargo</label><input id="carnet-cargo" value="${escapeHTML(d.cargo)}" style="${inS}"></div>
+            <div class="form-field"><label>Ciudad</label><input id="carnet-city" value="${escapeHTML(d.city)}" style="${inS}"></div>
+            <div class="form-field"><label>Correo</label><input id="carnet-email" type="email" value="${escapeHTML(d.email)}" placeholder="correo@quicklastmile.com" style="${inS}"></div>
+            <div class="form-field"><label>Celular</label><input id="carnet-phone" value="${escapeHTML(d.phone)}" placeholder="3001234567" style="${inS}"></div>
+            <div class="form-field"><label>Tipo de sangre</label><select id="carnet-blood" style="${inS}"><option value="">Seleccionar</option>${BLOOD_TYPES.map(b => `<option ${b === d.blood ? 'selected' : ''}>${b}</option>`).join('')}</select></div>
+            <div class="form-field"><label>Foto del carnet</label><input type="file" accept="image/*" id="carnet-photo" style="${inS};padding-top:8px"></div>
+            <div class="form-field full"><label>Logo (opcional, por defecto el de Quick)</label><input type="file" accept="image/*" id="carnet-logo" style="${inS};padding-top:8px"></div>
+          </div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:14px">
+            <button class="dev-btn primary" type="button" data-save-carnet><i class="ti ti-device-floppy"></i> Guardar carnet</button>
+            <button class="dev-btn" type="button" data-download-carnet><i class="ti ti-download"></i> Descargar PNG</button>
+            <button class="dev-btn" type="button" data-print-carnet><i class="ti ti-printer"></i> Imprimir</button>
+          </div>
+          <p class="fp-sub" style="margin-top:10px">La foto del carnet es independiente de la foto de tu perfil en la plataforma.</p>
+        </div>
+      </div>
+    </section>`;
+  }
+
+  const carnetVal = id => document.getElementById(id)?.value?.trim() || '';
+  function readAdminCarnetForm() {
+    const prev = window._carnetData || {};
+    return {
+      ...prev,
+      cedula: carnetVal('carnet-cedula'), name: carnetVal('carnet-name'), cargo: carnetVal('carnet-cargo'),
+      city: carnetVal('carnet-city'), email: carnetVal('carnet-email'), phone: carnetVal('carnet-phone'),
+      blood: carnetVal('carnet-blood'),
+      photo: prev.photo || '', logo: prev.logo || QUICK_LOGO
+    };
+  }
+  function refreshAdminCarnetPreview() {
+    const d = readAdminCarnetForm();
+    window._carnetData = d;
+    const card = document.getElementById('carnet-card');
+    if (card) card.outerHTML = adminCarnetHTML(d);
+  }
+  function saveAdminCarnet() {
+    const d = readAdminCarnetForm();
+    const u = state.users.find(x => x.id === currentUser().id);
+    if (!u) { toast('No se encontró tu usuario'); return; }
+    u.carnet = d;
+    log('Carnet', 'Guardó carnet de presentación', d.name);
+    saveState('Carnet guardado');
+  }
+
   // Carnet tipo tarjeta de presentación del Quicker
   function carnetValidationText(q) {
     return `QUICK HELP S.A.S. — Validación de colaborador\nNombre: ${q.name || ''}\nCédula: ${q.cedula || ''}\nProyecto: ${q.client || ''}\nPlaca: ${q.plate || ''}\nEstado: ${q.status || 'Activo'}`;
@@ -3006,6 +3170,33 @@ function toggleMode(forceDark) {
     genQRImages();
   }
 
+  // Elimina la marcación de ingreso o salida de un turno (solo administrador).
+  // Limpia también el documento protegido MARC- para que no se vuelva a aplicar.
+  function deleteMarcacion(availabilityId, kind, quickerId) {
+    if (!canDeleteSolicitudes()) { toast('Solo el administrador puede eliminar marcaciones'); return; }
+    const d = (state.availabilities || []).find(x => x.id === availabilityId);
+    if (!d) { toast('No se encontró el turno'); return; }
+    const label = kind === 'realStart' ? 'ingreso' : 'salida';
+    if (!confirm(`¿Eliminar la marcación de ${label} de ${d.quicker || ''} del ${d.date}?`)) return;
+    const stageRe = kind === 'realStart' ? /inicio de turno/i : /fin de turno/i;
+    d[kind] = '';
+    if (kind === 'realStart') { d.status = 'Programado'; d.evidencePhoto = ''; }
+    else if (d.realStart) d.status = 'En turno';
+    state.evidences = (state.evidences || []).filter(e => !(e.availability === availabilityId && stageRe.test(e.stage || '')));
+    // Borrar del documento protegido en la nube
+    const docId = 'MARC-' + availabilityId;
+    if (marcacionesCache[docId]) {
+      const m = { ...marcacionesCache[docId] };
+      m[kind] = '';
+      if (m.evidences) { Object.keys(m.evidences).forEach(k => { if (stageRe.test(m.evidences[k]?.stage || k.replace(/_/g, ' '))) delete m.evidences[k]; }); }
+      marcacionesCache[docId] = m;
+      if (cloudDb) cloudDb.collection('quick_media').doc(docId).set(m).catch(() => {});
+    }
+    log('Marcación', `Eliminó marcación de ${label}`, `${d.quicker} · ${d.date}`);
+    saveState(`Marcación de ${label} eliminada`);
+    if (quickerId) openQuickerMarcaciones(quickerId);
+  }
+
   // Historial de marcaciones de un mensajero: turnos, horas reales, dónde marcó, evidencias y extras/retrasos
   function openQuickerMarcaciones(id) {
     const q = state.quickers.find(x => x.id === id);
@@ -3029,22 +3220,30 @@ function toggleMode(forceDark) {
       </div>`).join('');
       const detail = `<div class="fp-sub" style="margin-bottom:8px">Turno programado: ${escapeHTML(d.plannedStart || '—')} - ${escapeHTML(d.plannedEnd || '—')} · Punto: ${escapeHTML(d.point || '—')} ${alerts}</div>
         ${marks || '<div class="fp-sub">Sin evidencias de marcación para este turno.</div>'}`;
+      const canDel = canDeleteSolicitudes();
       return `<tr class="ticket-row" data-marc-row="${escapeHTML(d.id)}" style="cursor:pointer">
         <td><i class="ti ti-chevron-right"></i> ${escapeHTML(d.date)}</td>
         <td>${escapeHTML(d.client || '—')}</td>
+        <td>${escapeHTML(d.point || '—')}</td>
         <td>${escapeHTML(d.quicker || q.name || '')}</td>
+        <td>${escapeHTML(d.plannedStart || '—')} - ${escapeHTML(d.plannedEnd || '—')}</td>
         <td><strong>${escapeHTML(d.realStart || '—')}</strong></td>
         <td><strong>${escapeHTML(d.realEnd || '—')}</strong></td>
         <td>${escapeHTML(d.lunchStart || '—')}</td>
         <td>${escapeHTML(d.lunchEnd || '—')}</td>
+        <td>${canDel ? `<div class="row-actions">${d.realStart ? `<button class="mini-action" type="button" data-del-marc="${escapeHTML(d.id)}" data-del-kind="realStart" title="Eliminar marcación de ingreso"><i class="ti ti-clock-off"></i></button>` : ''}${d.realEnd ? `<button class="mini-action" type="button" data-del-marc="${escapeHTML(d.id)}" data-del-kind="realEnd" title="Eliminar marcación de salida"><i class="ti ti-clock-x"></i></button>` : ''}</div>` : ''}</td>
       </tr>
-      <tr data-marc-det="${escapeHTML(d.id)}" style="display:none"><td colspan="7" style="background:var(--card-bg)">${detail}</td></tr>`;
+      <tr data-marc-det="${escapeHTML(d.id)}" style="display:none"><td colspan="10" style="background:var(--card-bg)">${detail}</td></tr>`;
     }).join('');
     const form = document.getElementById('modal-form');
     document.getElementById('modal-title').textContent = `Historial de marcaciones · ${q.name || ''}`;
     document.getElementById('modal-subtitle').textContent = 'Selecciona una fila para ver el detalle y las evidencias de ingreso, salida y almuerzo.';
-    form.innerHTML = `${shifts.length ? table(['Fecha', 'Operación', 'Nombre', 'Hora ingreso', 'Hora salida', 'Ingreso almuerzo', 'Salida almuerzo'], [bodyRows]) : '<div class="dropzone" style="text-align:center"><strong>Sin marcaciones registradas</strong><span class="fp-sub">Este mensajero aún no tiene ingresos o salidas marcadas.</span></div>'}
+    form.innerHTML = `${shifts.length ? table(['Fecha', 'Operación', 'Punto', 'Nombre', 'Turno programado', 'Hora ingreso', 'Hora salida', 'Ingreso almuerzo', 'Salida almuerzo', 'Acciones'], [bodyRows]) : '<div class="dropzone" style="text-align:center"><strong>Sin marcaciones registradas</strong><span class="fp-sub">Este mensajero aún no tiene ingresos o salidas marcadas.</span></div>'}
     <div class="modal-foot"><button class="dev-btn" type="button" id="cancel-form">Cerrar</button></div>`;
+    form.querySelectorAll('[data-del-marc]').forEach(btn => btn.onclick = ev => {
+      ev.stopPropagation();
+      deleteMarcacion(btn.dataset.delMarc, btn.dataset.delKind, id);
+    });
     form.querySelectorAll('[data-marc-row]').forEach(tr => tr.onclick = () => {
       const det = form.querySelector(`[data-marc-det="${tr.dataset.marcRow}"]`);
       if (!det) return;
@@ -3664,6 +3863,7 @@ function toggleMode(forceDark) {
 
   // ════════════════════ MAPA EN VIVO / ZONAS ════════════════════
   const mapFilters = { operacion: 'todos' };
+  let mapPingMarkers = {};
   function mapIsAdmin() { const p = currentUser().profile || 'Administrador'; return !p || p === 'Administrador' || p === 'Gerencia'; }
   function zonesVisibleTo() {
     const u = currentUser(); const p = u.profile || ''; const all = state.mapZones || [];
@@ -3671,11 +3871,24 @@ function toggleMode(forceDark) {
     if (p === 'Coordinador') return all.filter(z => z.coordinator === u.name || (u.client && u.client !== 'Global' && z.operation === u.client));
     return all.filter(z => !u.client || u.client === 'Global' || z.operation === u.client);
   }
+  // ¿El ping es de hoy? Acepta el campo `day` (nuevo) o la fecha es-CO del campo `time`.
+  function pingIsToday(p) {
+    const hoy = new Date().toISOString().slice(0, 10);
+    if (p.day) return p.day === hoy;
+    const t = String(p.time || '');
+    const m = t.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    if (m) {
+      const iso = `${m[3]}-${String(m[2]).padStart(2, '0')}-${String(m[1]).padStart(2, '0')}`;
+      return iso === hoy;
+    }
+    if (/^\d{4}-\d{2}-\d{2}/.test(t)) return t.slice(0, 10) === hoy;
+    return false; // sin fecha reconocible: no mostrar como ubicación de hoy
+  }
   function latestPings() {
     const m = {};
     const activos = new Set((state.quickers || []).filter(q => (q.status || 'Activo') === 'Activo').map(q => q.name));
-    // Solo mensajeros que existen y están activos (evita pings viejos de nombres renombrados/eliminados)
-    (state.locationPings || []).forEach(p => { if (p.quicker && activos.has(p.quicker) && !m[p.quicker]) m[p.quicker] = p; });
+    // Solo mensajeros activos y solo ubicaciones de HOY (no arrastrar días anteriores)
+    (state.locationPings || []).forEach(p => { if (p.quicker && activos.has(p.quicker) && pingIsToday(p) && !m[p.quicker]) m[p.quicker] = p; });
     return Object.values(m);
   }
   function pointInPolygon(pt, poly) {
@@ -3698,6 +3911,36 @@ function toggleMode(forceDark) {
       if (pts.length >= 3) polys.push(pts);
     }
     return polys;
+  }
+  // Paleta para diferenciar visualmente cada zona del KML
+  const ZONE_COLORS = ['#F5C518', '#22C55E', '#3B82F6', '#EF4444', '#A855F7', '#F97316', '#06B6D4', '#EC4899', '#84CC16', '#14B8A6'];
+  function zoneColor(z, i) { return z.color || ZONE_COLORS[i % ZONE_COLORS.length]; }
+  // Extrae cada Placemark con su nombre original del KML.
+  // Devuelve { areas:[{name,polygons}], points:[{name,address,lat,lng}] }
+  function parseKmlPlacemarks(text) {
+    const areas = [], points = [];
+    const pmRe = /<Placemark[\s\S]*?<\/Placemark>/gi;
+    const blocks = text.match(pmRe) || [];
+    const clean = s => String(s || '').replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1').replace(/<[^>]*>/g, '').trim();
+    blocks.forEach((b, i) => {
+      const nameM = b.match(/<name[^>]*>([\s\S]*?)<\/name>/i);
+      const descM = b.match(/<description[^>]*>([\s\S]*?)<\/description>/i);
+      const name = clean(nameM && nameM[1]) || `Zona ${i + 1}`;
+      const address = clean(descM && descM[1]).slice(0, 160);
+      const polys = [];
+      const coordRe = /<coordinates[^>]*>([\s\S]*?)<\/coordinates>/gi; let cm;
+      while ((cm = coordRe.exec(b))) {
+        const pts = cm[1].trim().split(/\s+/).map(p => { const [lng, lat] = p.split(',').map(Number); return Number.isFinite(lat) && Number.isFinite(lng) ? [lat, lng] : null; }).filter(Boolean);
+        if (pts.length >= 3) polys.push(pts);
+        else if (pts.length === 1) points.push({ name, address, lat: pts[0][0], lng: pts[0][1] });
+      }
+      if (polys.length) areas.push({ name, polygons: polys });
+    });
+    // Si el KML no trae Placemarks, caer al parser simple
+    if (!areas.length && !points.length) {
+      parseKmlText(text).forEach((p, i) => areas.push({ name: `Zona ${i + 1}`, polygons: [p] }));
+    }
+    return { areas, points };
   }
 
   // Calcula todos los datos derivados del mapa (zonas, pings, alertas, puntos de venta).
@@ -3763,7 +4006,8 @@ function toggleMode(forceDark) {
       const st = statusFor(q.name);
       const col = st === 'fuera' ? '#EF4444' : st === 'dentro' ? '#22C55E' : st === 'sin-zona' ? '#F59E0B' : '#6b7280';
       const lbl = st === 'fuera' ? 'Fuera de zona' : st === 'dentro' ? 'En zona' : st === 'sin-zona' ? 'Sin zona' : 'Sin ping';
-      return `<div class="map-person"><span class="map-dot-legend" style="background:${col}"></span><div><strong>${escapeHTML(q.name)}</strong><span class="fp-sub">${escapeHTML(q.client || '')}${q.point ? ' · ' + escapeHTML(q.point) : ''}</span><br><span class="fp-sub" style="color:${col};font-weight:700">${lbl}</span></div></div>`;
+      const locatable = st !== 'offline';
+      return `<div class="map-person" ${locatable ? `data-map-focus="${escapeHTML(q.name)}" style="cursor:pointer" title="Ver en el mapa"` : ''}><span class="map-dot-legend" style="background:${col}"></span><div><strong>${escapeHTML(q.name)}</strong>${locatable ? ' <i class="ti ti-target" style="font-size:12px;opacity:.7"></i>' : ''}<span class="fp-sub">${escapeHTML(q.client || '')}${q.point ? ' · ' + escapeHTML(q.point) : ''}</span><br><span class="fp-sub" style="color:${col};font-weight:700">${lbl}</span></div></div>`;
     }).join('') : '<p class="fp-sub">No hay mensajeros activos en esta operación.</p>';
 
     const inS = 'min-height:38px;border:1px solid var(--border);border-radius:10px;background:var(--card-bg);color:var(--text-1);padding:0 10px;font:inherit';
@@ -3780,13 +4024,15 @@ function toggleMode(forceDark) {
       return `<div class="row"><span><strong>${escapeHTML(a.pg.quicker)}</strong><br><small class="fp-sub">${escapeHTML(a.cl || '')} · ${escapeHTML(a.pg.time || '')}</small></span><span class="b" style="background:${col}22;color:${col};border:1px solid ${col}55">${lbl}</span></div>`;
     }).join('') : '<p class="fp-sub">Sin alertas de salida de zona.</p>';
 
-    const zoneList = zonesAll.length ? zonesAll.map(z => `<div class="row"><span><strong>${escapeHTML(z.name)}</strong><br><small class="fp-sub">${escapeHTML(z.operation || 'Sin operación')} · Coord: ${escapeHTML(z.coordinator || '—')} · ${(z.polygons || []).length} polígono(s)</small></span>${(mapIsAdmin() || z.coordinator === currentUser().name) ? `<button class="mini-action" data-zone-delete="${z.id}"><i class="ti ti-trash"></i></button>` : ''}</div>`).join('') : '<p class="fp-sub">No hay zonas registradas. Sube un KML/KMZ.</p>';
+    const zoneList = zonesAll.length ? zonesAll.map((z, i) => `<div class="row"><span style="display:flex;align-items:center;gap:9px"><span style="width:14px;height:14px;border-radius:4px;background:${zoneColor(z, i)};flex:none"></span><span><strong>${escapeHTML(z.name)}</strong><br><small class="fp-sub">${escapeHTML(z.operation || 'Sin operación')} · Coord: ${escapeHTML(z.coordinator || '—')} · ${(z.polygons || []).length} polígono(s)</small></span></span>${(mapIsAdmin() || z.coordinator === currentUser().name) ? `<button class="mini-action" data-zone-delete="${z.id}"><i class="ti ti-trash"></i></button>` : ''}</div>`).join('') : '<p class="fp-sub">No hay zonas registradas. Sube un KML/KMZ.</p>';
+    const kmlPts = (state.mapPoints || []).filter(p => !opsVisibleSet || opsVisibleSet.has(p.operation));
+    const kmlPtsList = kmlPts.length ? kmlPts.map(p => `<div class="row"><span><strong>${escapeHTML(p.name)}</strong><br><small class="fp-sub">${escapeHTML(p.operation || '')}${p.address ? ' · ' + escapeHTML(p.address) : ''}</small></span>${mapIsAdmin() ? `<button class="mini-action" data-mappoint-delete="${p.id}"><i class="ti ti-trash"></i></button>` : ''}</div>`).join('') : '<p class="fp-sub">No hay puntos importados. Sube un KML/KMZ de ubicaciones.</p>';
 
     // Puntos de venta desde la configuración de la operación (nombre + dirección)
     const { cps, located, pending } = mapData;
 
     panel('mapa', 'Mapa en Vivo', 'Zonas por operación (KML/KMZ), puntos de venta de la operación, ubicación de mensajeros y alertas de salida de zona.',
-      `<label class="dev-btn primary"><i class="ti ti-map-plus"></i> Zona (KML/KMZ)<input type="file" accept=".kml,.kmz" data-zone-file style="display:none"></label>`,
+      `<label class="dev-btn primary"><i class="ti ti-map-plus"></i> Zona (KML/KMZ)<input type="file" accept=".kml,.kmz" data-zone-file style="display:none"></label><label class="dev-btn"><i class="ti ti-map-pin-plus"></i> Puntos (KML/KMZ)<input type="file" accept=".kml,.kmz" data-point-file style="display:none"></label>`,
       `${kpisHTML}${filtersHTML}
       <div class="map-layout">
         <div id="admin-leaflet-map" class="leaflet-map" aria-label="Mapa en vivo"></div>
@@ -3794,7 +4040,8 @@ function toggleMode(forceDark) {
       </div>
       ${pending ? `<div class="fp-sub" style="margin-top:8px"><i class="ti ti-map-search"></i> Ubicando ${pending} punto(s) de venta por dirección...</div>` : ''}
       <div style="margin-top:14px"><div class="settings-block-title"><i class="ti ti-map-pin-off"></i> Alertas de salida de zona</div>${alertsHTML}</div>
-      <div style="margin-top:14px"><div class="settings-block-title"><i class="ti ti-vector"></i> Zonas registradas</div>${zoneList}</div>`
+      <div style="margin-top:14px"><div class="settings-block-title"><i class="ti ti-vector"></i> Zonas registradas</div>${zoneList}</div>
+      <div style="margin-top:14px"><div class="settings-block-title"><i class="ti ti-map-pin"></i> Puntos importados (KML)</div>${kmlPtsList}</div>`
     );
     const style = document.querySelector('[data-map-style]');
     if (style) style.value = state.prefs.mapStyle || 'hybrid';
@@ -3846,12 +4093,25 @@ function toggleMode(forceDark) {
       adminOverlayLayer = L.layerGroup().addTo(map);
     }
     adminOverlayLayer.clearLayers();
+    mapPingMarkers = {};
     const bounds = [];
-    (zones || []).forEach(z => (z.polygons || []).forEach(poly => {
-      if (poly.length < 3) return;
-      L.polygon(poly, { color: '#F5C518', weight: 2, fillColor: '#F5C518', fillOpacity: .14 }).addTo(adminOverlayLayer).bindPopup(`<strong>${escapeHTML(z.name)}</strong><br>${escapeHTML(z.operation || '')}`);
-      poly.forEach(p => bounds.push(p));
-    }));
+    (zones || []).forEach((z, zi) => {
+      const col = zoneColor(z, zi);
+      (z.polygons || []).forEach(poly => {
+        if (poly.length < 3) return;
+        L.polygon(poly, { color: col, weight: 2, fillColor: col, fillOpacity: .16 }).addTo(adminOverlayLayer)
+          .bindPopup(`<strong>${escapeHTML(z.name)}</strong><br>${escapeHTML(z.operation || '')}`)
+          .bindTooltip(escapeHTML(z.name), { permanent: false, direction: 'center', className: 'zone-label' });
+        poly.forEach(p => bounds.push(p));
+      });
+    });
+    // Puntos importados desde KML de ubicaciones
+    (state.mapPoints || []).forEach(pt => {
+      if (!Number.isFinite(pt.lat) || !Number.isFinite(pt.lng)) return;
+      const icon = L.divIcon({ className: '', html: `<span style="display:grid;place-items:center;width:22px;height:22px;border-radius:50%;background:#A855F7;color:#fff;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.5);font-size:11px">📍</span>`, iconSize: [22, 22] });
+      L.marker([pt.lat, pt.lng], { icon }).addTo(adminOverlayLayer).bindPopup(`<strong>${escapeHTML(pt.name || 'Punto')}</strong><br>${escapeHTML(pt.operation || '')}${pt.address ? '<br>' + escapeHTML(pt.address) : ''}`);
+      bounds.push([pt.lat, pt.lng]);
+    });
     // Puntos de venta de la operación (marcadores tipo tienda)
     (salePoints || []).forEach(pt => {
       if (!Number.isFinite(pt.lat) || !Number.isFinite(pt.lng)) return;
@@ -3864,7 +4124,8 @@ function toggleMode(forceDark) {
       const a = (alerts || []).find(x => x.pg === pg);
       const color = a?.status === 'fuera' ? '#EF4444' : a?.status === 'sin-zona' ? '#F59E0B' : '#22C55E';
       const icon = L.divIcon({ className: '', html: `<span style="width:16px;height:16px;display:block;border-radius:50%;background:${color};border:3px solid #111;box-shadow:0 0 0 8px ${color}33"></span>`, iconSize: [16, 16] });
-      L.marker([pg.lat, pg.lng], { icon }).addTo(adminOverlayLayer).bindPopup(`<strong>${escapeHTML(pg.quicker)}</strong><br>${escapeHTML(pg.client || '')}<br>${escapeHTML(pg.time || '')}<br>${a?.status === 'fuera' ? '<b style="color:#EF4444">FUERA DE ZONA</b>' : a?.status === 'sin-zona' ? 'Sin zona asignada' : 'En zona'}`);
+      const mk = L.marker([pg.lat, pg.lng], { icon }).addTo(adminOverlayLayer).bindPopup(`<strong>${escapeHTML(pg.quicker)}</strong><br>${escapeHTML(pg.client || '')}<br>${escapeHTML(pg.time || '')}<br>${a?.status === 'fuera' ? '<b style="color:#EF4444">FUERA DE ZONA</b>' : a?.status === 'sin-zona' ? 'Sin zona asignada' : 'En zona'}`);
+      mapPingMarkers[pg.quicker] = mk;
       bounds.push([pg.lat, pg.lng]);
     });
     return bounds;
@@ -3911,27 +4172,80 @@ function toggleMode(forceDark) {
     setTimeout(() => map.invalidateSize(), 80);
   }
 
-  function openZoneForm(polygons) {
+  // areas: [{name, polygons}] — cada Placemark del KML se guarda como su propia zona,
+  // conservando el nombre original y con un color distinto para diferenciarlas en el mapa.
+  function openZoneForm(areas) {
     const clients = (state.clients || []).map(c => c.name);
     const coords = (state.users || []).filter(u => u.profile === 'Coordinador' && u.name);
     const me = currentUser();
     const inS = 'width:100%;min-height:40px;border:1px solid var(--border);border-radius:10px;background:var(--card-bg);color:var(--text-1);padding:0 10px;font:inherit;margin-top:4px';
     const isCoord = me.profile === 'Coordinador';
-    openModal('Registrar zona', `${polygons.length} polígono(s) detectado(s) en el archivo.`,
+    const usados = (state.mapZones || []).length;
+    const lista = areas.map((a, i) => `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)">
+      <span style="width:14px;height:14px;border-radius:4px;background:${ZONE_COLORS[(usados + i) % ZONE_COLORS.length]};flex:none"></span>
+      <input name="zname_${i}" value="${escapeHTML(a.name)}" style="${inS};margin:0">
+      <span class="fp-sub" style="flex:none">${a.polygons.length} polígono(s)</span>
+    </div>`).join('');
+    openModal('Registrar zonas del KML', `${areas.length} zona(s) detectada(s). Puedes ajustar los nombres tomados del archivo.`,
       `<div class="form-grid">
-        <div class="form-field full"><label>Nombre de la zona</label><input name="name" required style="${inS}" placeholder="Ej: Zona norte Cafam"></div>
         <div class="form-field"><label>Operación / cliente</label><select name="operation" style="${inS}">${(isCoord && me.client && me.client !== 'Global' ? [me.client] : clients).map(c => `<option>${escapeHTML(c)}</option>`).join('')}</select></div>
-        <div class="form-field"><label>Coordinador responsable</label>${isCoord ? `<input name="coordinator" value="${escapeHTML(me.name)}" readonly style="${inS}">` : `<select name="coordinator" style="${inS}"><option value="">Sin asignar</option>${coords.map(u => `<option ${''}>${escapeHTML(u.name)}${u.client ? ' · ' + escapeHTML(u.client) : ''}</option>`).join('')}</select>`}</div>
-      </div><div class="modal-foot"><button class="dev-btn" type="button" id="cancel-form">Cancelar</button><button class="dev-btn primary" type="submit"><i class="ti ti-map-plus"></i> Guardar zona</button></div>`,
+        <div class="form-field"><label>Coordinador responsable</label>${isCoord ? `<input name="coordinator" value="${escapeHTML(me.name)}" readonly style="${inS}">` : `<select name="coordinator" style="${inS}"><option value="">Sin asignar</option>${coords.map(u => `<option>${escapeHTML(u.name)}${u.client ? ' · ' + escapeHTML(u.client) : ''}</option>`).join('')}</select>`}</div>
+        <div class="form-field full"><label>Zonas encontradas (nombre original del KML)</label><div style="max-height:260px;overflow:auto">${lista}</div></div>
+      </div><div class="modal-foot"><button class="dev-btn" type="button" id="cancel-form">Cancelar</button><button class="dev-btn primary" type="submit"><i class="ti ti-map-plus"></i> Guardar ${areas.length} zona(s)</button></div>`,
       event => {
         event.preventDefault();
         const data = Object.fromEntries(new FormData(event.currentTarget).entries());
         const coordName = (data.coordinator || '').split(' · ')[0];
         state.mapZones = state.mapZones || [];
-        state.mapZones.unshift({ id: uid('ZON'), name: data.name || 'Zona', operation: data.operation || '', coordinator: coordName || '', polygons, createdAt: new Date().toISOString(), createdBy: me.name || '' });
+        areas.forEach((a, i) => {
+          state.mapZones.unshift({
+            id: uid('ZON'), name: (data[`zname_${i}`] || a.name || 'Zona').trim(),
+            operation: data.operation || '', coordinator: coordName || '',
+            color: ZONE_COLORS[(usados + i) % ZONE_COLORS.length],
+            polygons: a.polygons, createdAt: new Date().toISOString(), createdBy: me.name || ''
+          });
+        });
         closeModal();
-        log('Mapa', 'Registró zona', data.name);
-        saveState('Zona registrada');
+        log('Mapa', 'Registró zonas KML', `${areas.length} zona(s)`);
+        saveState(`${areas.length} zona(s) registrada(s)`);
+      });
+  }
+
+  // Puntos importados desde un KML de ubicaciones (visibles en admin y en la app del mensajero)
+  function openKmlPointsForm(points) {
+    const clients = (state.clients || []).map(c => c.name);
+    const me = currentUser();
+    const inS = 'width:100%;min-height:40px;border:1px solid var(--border);border-radius:10px;background:var(--card-bg);color:var(--text-1);padding:0 10px;font:inherit;margin-top:4px';
+    const isCoord = me.profile === 'Coordinador';
+    const lista = points.slice(0, 60).map(p => `<div class="detail-row"><span><strong>${escapeHTML(p.name)}</strong>${p.address ? `<br><span class="fp-sub">${escapeHTML(p.address)}</span>` : ''}</span><span class="fp-sub">${p.lat.toFixed(5)}, ${p.lng.toFixed(5)}</span></div>`).join('');
+    openModal('Importar puntos desde KML', `${points.length} ubicación(es) encontrada(s) en el archivo.`,
+      `<div class="form-grid">
+        <div class="form-field full"><label>Operación / cliente</label><select name="operation" style="${inS}">${(isCoord && me.client && me.client !== 'Global' ? [me.client] : clients).map(c => `<option>${escapeHTML(c)}</option>`).join('')}</select></div>
+        <div class="form-field full"><label>Agregar a los puntos de la operación</label><select name="addToClient" style="${inS}"><option value="si">Sí, crear los puntos que no existan</option><option value="no">No, solo mostrarlos en el mapa</option></select></div>
+        <div class="form-field full"><div style="max-height:260px;overflow:auto">${lista}${points.length > 60 ? `<div class="fp-sub">…y ${points.length - 60} más</div>` : ''}</div></div>
+      </div><div class="modal-foot"><button class="dev-btn" type="button" id="cancel-form">Cancelar</button><button class="dev-btn primary" type="submit"><i class="ti ti-map-pin-plus"></i> Importar puntos</button></div>`,
+      event => {
+        event.preventDefault();
+        const data = Object.fromEntries(new FormData(event.currentTarget).entries());
+        const op = data.operation || '';
+        state.mapPoints = state.mapPoints || [];
+        let creados = 0;
+        points.forEach(p => {
+          if (!state.mapPoints.some(x => x.name === p.name && x.operation === op)) {
+            state.mapPoints.push({ id: uid('MPT'), operation: op, name: p.name, address: p.address || '', lat: p.lat, lng: p.lng });
+          }
+          if (data.addToClient === 'si') {
+            const c = (state.clients || []).find(x => x.name === op);
+            if (c) {
+              c.points = c.points || [];
+              const exists = c.points.some(cp => pointName(cp) === p.name);
+              if (!exists) { c.points.push({ name: p.name, address: p.address || '', lat: p.lat, lng: p.lng }); creados++; }
+            }
+          }
+        });
+        closeModal();
+        log('Mapa', 'Importó puntos KML', `${points.length} punto(s)`);
+        saveState(`${points.length} punto(s) importados${creados ? ` · ${creados} agregados a ${op}` : ''}`);
       });
   }
 
@@ -3990,6 +4304,7 @@ function toggleMode(forceDark) {
       cedula: row.ClientId || row.Cedula || row.CEDULA || row.cedula || '',
       name: row.ClientName || row.Nombre || row['NOMBRE Y APELLIDOS'] || row.nombre || '',
       city: row.Ciudad || row.CIUDAD || '',
+      cargo: row.Cargo || row.CARGO || row.Position || row.Puesto || row.Rol || '',
       salary: row.Salary || row.Salario || '',
       rodamiento: row.Rodamientos || row.Rodamiento || '',
       projectId: row.ProjectId || row.Proyecto || '',
@@ -4057,10 +4372,23 @@ function toggleMode(forceDark) {
   }
 
   function getGeneralNoveltyRows() {
-    return state.novelties
+    const stored = state.novelties
       .filter(n => !/retardo|retraso|hora extra|adicional|parqueadero|periferia|transferencia/i.test(`${n.type} ${n.subtype || ''}`))
-      .map(n => ({ ...n, ...noveltyContext(n), gestionStatus: noveltyGestionStatus(n) }))
-      .filter(n => passesNovedadesDateFilter(n.date));
+      .map(n => ({ ...n, ...noveltyContext(n), gestionStatus: noveltyGestionStatus(n) }));
+    // Turnos de días anteriores donde el mensajero ingresó pero nunca marcó la salida
+    const hoy = new Date().toISOString().slice(0, 10);
+    const refs = new Set(stored.map(n => n.ref).filter(Boolean));
+    const dismissed = new Set(state.prefs.dismissedNoClose || []);
+    const sinCierre = (state.availabilities || [])
+      .filter(d => d.date < hoy && d.realStart && !d.realEnd && !refs.has(d.id) && !dismissed.has(d.id))
+      .map(d => ({
+        id: `NOCLOSE-${d.id}`, type: 'SIN CIERRE', subtype: `Ingresó ${d.realStart}, sin salida`,
+        ref: d.id, date: d.date, client: d.client, point: d.point,
+        cedula: d.cedula || (state.quickers.find(q => q.name === d.quicker)?.cedula || ''),
+        quicker: d.quicker, gestionStatus: 'Pendiente', status: 'Reportada',
+        note: `El mensajero no marcó la salida del turno del ${d.date}.`, source: 'malla'
+      }));
+    return [...stored, ...sinCierre].filter(n => passesNovedadesDateFilter(n.date));
   }
 
   function getDelayRows() {
@@ -4068,8 +4396,9 @@ function toggleMode(forceDark) {
       .filter(n => /retardo|retraso/i.test(`${n.type} ${n.subtype || ''}`))
       .map(n => ({ ...n, ...noveltyContext(n), delayStatus: n.delayStatus || 'Pendiente', source: 'novelty' }));
     const storedRefs = new Set(stored.map(n => n.ref));
+    const dismissed = new Set(state.prefs.dismissedDelays || []);
     const computed = state.availabilities
-      .filter(d => d.realStart && minutesBetween(d.plannedStart, d.realStart) > 0 && !storedRefs.has(d.id))
+      .filter(d => d.realStart && minutesBetween(d.plannedStart, d.realStart) > 0 && !storedRefs.has(d.id) && !dismissed.has(d.id))
       .map(d => ({
         id: `DELAY-${d.id}`,
         type: 'Retraso',
@@ -4093,8 +4422,9 @@ function toggleMode(forceDark) {
       .filter(n => /hora extra/i.test(`${n.type} ${n.subtype || ''}`))
       .map(n => ({ ...n, ...noveltyContext(n), status: noveltyGestionStatus(n), justification: n.note || '' }));
     const storedRefs = new Set([...saved, ...fromNovelties].map(n => n.ref).filter(Boolean));
+    const dismissedOt = new Set(state.prefs.dismissedOvertime || []);
     const computed = (state.availabilities || [])
-      .filter(d => d.realEnd && d.plannedEnd && minutesBetween(d.plannedEnd, d.realEnd) > 0 && !storedRefs.has(d.id))
+      .filter(d => d.realEnd && d.plannedEnd && minutesBetween(d.plannedEnd, d.realEnd) > 0 && !storedRefs.has(d.id) && !dismissedOt.has(d.id))
       .map(d => {
         const mins = minutesBetween(d.plannedEnd, d.realEnd);
         return {
@@ -4289,7 +4619,7 @@ function toggleMode(forceDark) {
         escapeHTML(n.quicker || ''),
         escapeHTML(n.cedula || ''),
         escapeHTML(n.observation || n.note || ''),
-        `<div class="row-actions">${iconAction('Gestionar retraso', 'viewDelay', n.id, 'ti-eye')}${iconAction('Justificado', 'justifyDelay', n.id, 'ti-circle-check')}${iconAction('No justificado', 'rejectDelay', n.id, 'ti-circle-x')}</div>`
+        `<div class="row-actions">${iconAction('Gestionar retraso', 'viewDelay', n.id, 'ti-eye')}${iconAction('Justificado', 'justifyDelay', n.id, 'ti-circle-check')}${iconAction('No justificado', 'rejectDelay', n.id, 'ti-circle-x')}${canDeleteSolicitudes() ? iconAction('Eliminar', 'deleteDelay', n.id, 'ti-trash') : ''}</div>`
       ]));
       body = table(['Tipo', 'Estado', ...(showClient ? ['Cliente'] : []), 'Fecha', 'Nombre', 'Cédula', 'Observación', 'Acciones'], rows);
     } else if (active === 'horas') {
@@ -4314,7 +4644,7 @@ function toggleMode(forceDark) {
       });
       const rows = filtered.map(n => row([
         novPill(n.type || ''), pill(n.gestionStatus || 'Pendiente'), escapeHTML(n.subtype || ''), escapeHTML(n.date || ''), escapeHTML(n.quicker || ''), escapeHTML(n.cedula || ''), escapeHTML(n.oasisId || ''),
-        `<div class="row-actions">${iconAction('Ver y gestionar', 'viewNoveltyCase', n.id, 'ti-eye')}</div>`
+        `<div class="row-actions">${iconAction('Ver y gestionar', 'viewNoveltyCase', n.id, 'ti-eye')}${canDeleteSolicitudes() ? iconAction('Eliminar', 'deleteNovelty', n.id, 'ti-trash') : ''}</div>`
       ]));
       const emptyMsg = filtered.length === 0 ? `<div class="dropzone" style="margin:10px 0"><strong>Sin novedades</strong><span class="fp-sub">No hay registros para los filtros seleccionados.</span></div>` : '';
       body = emptyMsg + table(['Tipo', 'Estado gestión', 'Subtipo', 'Fecha', 'Nombre', 'Cédula', 'ID OASIS', 'Acciones'], rows);
@@ -5342,7 +5672,9 @@ function toggleMode(forceDark) {
     const isAdmin = profile === 'Administrador' || !profile;
     const isCoordinator = profile === 'Coordinador';
     const isJefe = profile === 'Jefe';
-    const allowedTabs = ['miUsuario', ...(isAdmin ? ['clientes', 'usuarios', 'quickers', 'modulos', 'tickets', 'hsq'] : []), ...((isCoordinator || isJefe) ? ['quickers', 'carnet'] : []), 'apariencia'];
+    // El carnet de presentación solo lo pueden crear estos perfiles
+    const canCarnet = ['Administrador', 'Jefe', 'Coordinador', 'HSQ'].includes(profile) || !profile;
+    const allowedTabs = ['miUsuario', ...(isAdmin ? ['clientes', 'usuarios', 'quickers', 'modulos', 'tickets', 'hsq'] : []), ...((isCoordinator || isJefe) ? ['quickers'] : []), ...(canCarnet ? ['carnet'] : []), 'apariencia'];
     const tab = allowedTabs.includes(state.prefs.configTab) ? state.prefs.configTab : 'miUsuario';
     const navBtn = (id, icon, label) => `<button class="settings-tab ${tab === id ? 'on' : ''}" data-config-tab="${id}"><i class="ti ${icon}"></i><span>${label}</span></button>`;
     const userPhoto = user.avatarUrl ? `<img src="${user.avatarUrl}" alt="${escapeHTML(user.name)}">` : initials(user.name);
@@ -5437,7 +5769,12 @@ function toggleMode(forceDark) {
       </div><div class="settings-block-title">Columnas adicionales de la malla</div><div class="module-pill-grid">${customCols || '<div class="fp-sub">No hay títulos adicionales creados.</div>'}</div>
       <div class="settings-block-title" style="margin-top:18px">Formularios de novedades</div>
       <div class="settings-actions"><select class="form-config-select" data-form-config-type>${formOptions}</select><button class="dev-btn primary" data-add-form-question><i class="ti ti-plus"></i> Agregar pregunta</button></div>
-      <div class="form-builder-list">${formCards || '<div class="fp-sub">Este formulario no tiene preguntas configuradas.</div>'}</div></section>`,
+      <div class="form-builder-list">${formCards || '<div class="fp-sub">Este formulario no tiene preguntas configuradas.</div>'}</div>
+      <div class="settings-block-title" style="margin-top:18px">App del mensajero</div>
+      <label style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--border);border-radius:12px;background:var(--card-bg);cursor:pointer;max-width:520px">
+        <input type="checkbox" data-pref-extra-photo ${state.prefs.extraPhotoEnabled !== false ? 'checked' : ''}>
+        <span><strong>Botón "Tomar foto adicional"</strong><br><span class="fp-sub">Muestra u oculta el botón de foto adicional en la pantalla principal del mensajero.</span></span>
+      </label></section>`,
       tickets: `<section class="settings-block">
         <div class="settings-block-title">Requisitos de gestión</div>
         <div class="settings-block-desc" style="margin-bottom:14px;color:var(--text-2)">Define qué puede exigirle el creador al coordinador para finalizar (comentario, evidencia o tus propios ítems). Al crear el ticket se eligen cuáles aplican.</div>
@@ -5455,44 +5792,7 @@ function toggleMode(forceDark) {
         <div class="settings-block-desc" style="margin-bottom:14px;color:var(--text-2)">Define qué se puede publicar en HSQ (capacitaciones, comparendos, tránsito, comunicados…), qué campos pide cada uno y qué puede hacer el mensajero.</div>
         <div class="settings-actions"><button class="dev-btn primary" data-add-hsq-type><i class="ti ti-plus"></i> Agregar tipo de publicación</button></div>
         <div class="form-builder-list">${hsqCfgCards || '<div class="fp-sub">Sin tipos.</div>'}</div></section>`,
-      carnet: (() => {
-        const projectsList = isJefe ? jefeProjecs(user).join(' · ') : (user.client && user.client !== 'Global' ? user.client : 'Global');
-        const photoHTML = user.avatarUrl
-          ? `<img src="${escapeHTML(user.avatarUrl)}" style="width:90px;height:90px;border-radius:50%;object-fit:cover;border:3px solid var(--q)">`
-          : `<div style="width:90px;height:90px;border-radius:50%;background:var(--q);display:flex;align-items:center;justify-content:center;font-size:32px;font-weight:900;color:#000">${initials(user.name)}</div>`;
-        window._carnetInfo = { name: user.name || '', role: profile, projects: projectsList, email: user.email || '', phone: user.phone || '' };
-        return `<section class="settings-block">
-          <div class="settings-block-title">Carnet de presentación</div>
-          <div class="settings-block-desc" style="margin-bottom:18px;color:var(--text-2)">Tu carnet digital para presentar en visitas a puntos de venta. Puedes imprimirlo o mostrarlo desde el celular.</div>
-          <div style="display:flex;gap:18px;flex-wrap:wrap;align-items:flex-start">
-            <div id="carnet-card" style="width:340px;background:linear-gradient(135deg,#1a1a2e 0%,#16213e 60%,#0f3460 100%);border-radius:20px;padding:28px 24px;color:#fff;box-shadow:0 8px 32px rgba(0,0,0,.4);position:relative;overflow:hidden">
-              <div style="position:absolute;top:-30px;right:-30px;width:120px;height:120px;border-radius:50%;background:rgba(245,197,24,.12)"></div>
-              <div style="position:absolute;bottom:-20px;left:-20px;width:80px;height:80px;border-radius:50%;background:rgba(245,197,24,.08)"></div>
-              <div style="display:flex;align-items:center;gap:12px;margin-bottom:18px">
-                <span style="font-size:11px;font-weight:700;letter-spacing:2px;color:#f5c518;text-transform:uppercase">Quick Last Mile</span>
-              </div>
-              <div style="display:flex;align-items:center;gap:16px;margin-bottom:20px">
-                ${photoHTML}
-                <div>
-                  <div style="font-size:18px;font-weight:900;line-height:1.2;margin-bottom:4px">${escapeHTML(user.name || 'Sin nombre')}</div>
-                  <div style="font-size:12px;color:#f5c518;font-weight:700;text-transform:uppercase;letter-spacing:1px">${escapeHTML(profile)}</div>
-                </div>
-              </div>
-              <div style="border-top:1px solid rgba(255,255,255,.15);padding-top:14px;display:flex;flex-direction:column;gap:8px">
-                <div style="display:flex;align-items:center;gap:8px;font-size:12px"><i class="ti ti-briefcase" style="color:#f5c518;width:16px"></i><span>${escapeHTML(projectsList)}</span></div>
-                ${user.email ? `<div style="display:flex;align-items:center;gap:8px;font-size:12px"><i class="ti ti-mail" style="color:#f5c518;width:16px"></i><span>${escapeHTML(user.email)}</span></div>` : ''}
-                ${user.phone ? `<div style="display:flex;align-items:center;gap:8px;font-size:12px"><i class="ti ti-phone" style="color:#f5c518;width:16px"></i><span>${escapeHTML(user.phone)}</span></div>` : ''}
-              </div>
-              <div style="position:absolute;bottom:14px;right:18px;font-size:9px;color:rgba(255,255,255,.3);letter-spacing:1px">quicklastmile.com</div>
-            </div>
-            <div style="display:flex;flex-direction:column;gap:10px">
-              <button class="dev-btn primary" data-print-carnet><i class="ti ti-printer"></i> Imprimir carnet</button>
-              <button class="dev-btn" data-share-carnet><i class="ti ti-share"></i> Compartir</button>
-              <p style="font-size:12px;color:var(--text-2);max-width:200px">Para actualizar la foto ve a <strong>Mi usuario</strong> y sube tu foto de perfil.</p>
-            </div>
-          </div>
-        </section>`;
-      })()
+      carnet: buildAdminCarnetSection(user, profile)
     };
     panel('config', 'Configuración', '', '',
       `<div class="settings-shell">
@@ -5502,7 +5802,7 @@ function toggleMode(forceDark) {
           ${(isAdmin || isCoordinator) ? '<div class="settings-section-label">Espacio de trabajo</div>' : ''}
           ${isAdmin ? navBtn('clientes', 'ti-building-store', 'Clientes') + navBtn('usuarios', 'ti-users', 'Usuarios') : ''}
           ${(isAdmin || isCoordinator || isJefe) ? navBtn('quickers', 'ti-motorbike', 'Quickers') : ''}
-          ${(isCoordinator || isJefe) ? navBtn('carnet', 'ti-id-badge', 'Mi carnet') : ''}
+          ${canCarnet ? '<div class="settings-section-label">Presentación</div>' + navBtn('carnet', 'ti-id-badge', 'Mi carnet') : ''}
           ${isAdmin ? '<div class="settings-section-label">Módulos</div>' + navBtn('modulos', 'ti-layout-grid-add', 'Módulos') + navBtn('tickets', 'ti-ticket', 'Tickets') + navBtn('hsq', 'ti-shield-half', 'HSQ / Alertas') : ''}
           <div class="settings-section-label">Apariencia</div>
           ${navBtn('apariencia', 'ti-palette', 'Apariencia')}
@@ -5897,6 +6197,9 @@ function toggleMode(forceDark) {
   function ensureDelayNovelty(id) {
     if (!String(id).startsWith('DELAY-')) return state.novelties.find(n => n.id === id);
     const avId = id.replace('DELAY-', '');
+    // Si ya se materializó antes esta misma malla, reutilizarla (evita duplicar el retraso)
+    const already = state.novelties.find(n => n.ref === avId && /retardo|retraso/i.test(`${n.type} ${n.subtype || ''}`));
+    if (already) return already;
     const item = state.availabilities.find(d => d.id === avId);
     if (!item) return null;
     const created = {
@@ -5948,7 +6251,25 @@ function toggleMode(forceDark) {
   }
 
   function openNoveltyCaseDetail(id) {
-    const item = state.novelties.find(n => n.id === id);
+    let item = state.novelties.find(n => n.id === id);
+    // Alerta "sin cierre" calculada desde la malla: materializarla al gestionarla
+    if (!item && String(id).startsWith('NOCLOSE-')) {
+      const avId = String(id).replace('NOCLOSE-', '');
+      item = state.novelties.find(n => n.ref === avId && /sin cierre/i.test(n.type || ''));
+      if (!item) {
+        const d = state.availabilities.find(x => x.id === avId);
+        if (d) {
+          item = {
+            id: uid('NOV'), type: 'SIN CIERRE', subtype: `Ingresó ${d.realStart}, sin salida`,
+            origin: 'Malla', ref: d.id, date: d.date, client: d.client, point: d.point,
+            cedula: d.cedula || (state.quickers.find(q => q.name === d.quicker)?.cedula || ''),
+            quicker: d.quicker, severity: 'Media', status: 'Reportada', gestionStatus: 'Pendiente',
+            note: `El mensajero no marcó la salida del turno del ${d.date}.`
+          };
+          state.novelties.unshift(item);
+        }
+      }
+    }
     if (!item) { toast('No se encontró la novedad'); return; }
     const ctx = noveltyContext(item);
     const notes = (item.gestionNotes || []).map(n => `<div class="detail-row"><span>${escapeHTML(n.time || '')}</span><span>${escapeHTML(n.text || '')}</span></div>`).join('');
@@ -6573,11 +6894,27 @@ function toggleMode(forceDark) {
     if (actionName === 'deleteHsqType') { deleteHsqType(id); return; }
     if (actionName === 'justifyDelay' || actionName === 'rejectDelay') {
       const item = ensureDelayNovelty(id);
-      if (item) {
-        item.delayStatus = actionName === 'justifyDelay' ? 'Justificado' : 'No justificado';
-        item.status = item.delayStatus;
-        log('Retraso', item.delayStatus, item.id);
-      }
+      if (!item) { toast('No se encontró el retraso'); return; }
+      const nuevoEstado = actionName === 'justifyDelay' ? 'Justificado' : 'No justificado';
+      const ctx = noveltyContext(item);
+      openModal(`Retraso · ${nuevoEstado}`, `${ctx.date || ''} · ${ctx.quicker || ''} · ${item.subtype || ''}`,
+        `<div class="form-grid">
+          <div class="form-field full"><label>Observación / justificación <span style="color:var(--bad)">*</span></label><textarea name="delayNote" required placeholder="Explica el motivo del retraso y la gestión realizada">${escapeHTML(item.delayNote || '')}</textarea></div>
+          <div class="form-field full"><label>Responsable</label><input name="gestionOwner" value="${escapeHTML(item.gestionOwner || currentUser().name || '')}"></div>
+        </div><div class="modal-foot"><button class="dev-btn" type="button" id="cancel-form">Cancelar</button><button class="dev-btn primary" type="submit"><i class="ti ti-check"></i> Marcar como ${nuevoEstado}</button></div>`,
+        event => {
+          event.preventDefault();
+          const data = Object.fromEntries(new FormData(event.currentTarget).entries());
+          if (!String(data.delayNote || '').trim()) { toast('Escribe la observación'); return; }
+          item.delayStatus = nuevoEstado;
+          item.status = nuevoEstado;
+          item.delayNote = data.delayNote;
+          item.gestionOwner = data.gestionOwner || '';
+          closeModal();
+          log('Retraso', nuevoEstado, item.id);
+          saveState(`Retraso marcado como ${nuevoEstado}`);
+        });
+      return;
     }
     if (actionName === 'rejectOvertime') { const m = ensureOvertimeReport(id); const rid = m ? m.id : id; openRejectForm(state.overtimeReports?.some(x => x.id === rid) ? 'overtimeReports' : 'novelties', rid, 'Horas extras', 'HorasExtra'); return; }
     if (actionName === 'approveOvertime') {
@@ -6589,7 +6926,44 @@ function toggleMode(forceDark) {
       const item = find('parkingReports') || find('novelties');
       if (item) { item.status = 'Aprobado'; log('Adicional', 'Aprobado', id); }
     }
-    if (actionName === 'deleteOvertime') { deleteSupport('overtimeReports', id, 'Horas extras'); return; }
+    if (actionName === 'deleteNovelty') {
+      if (!canDeleteSolicitudes()) { toast('Solo el administrador puede eliminar'); return; }
+      if (!confirm('¿Eliminar esta novedad definitivamente?')) return;
+      if (String(id).startsWith('NOCLOSE-')) {
+        state.prefs.dismissedNoClose = [...new Set([...(state.prefs.dismissedNoClose || []), String(id).replace('NOCLOSE-', '')])];
+        log('Novedades', 'Descartó alerta sin cierre', id);
+        saveState('Alerta eliminada');
+        return;
+      }
+      state.novelties = (state.novelties || []).filter(n => n.id !== id);
+      log('Novedades', 'Eliminó novedad', id);
+      saveState('Novedad eliminada');
+      return;
+    }
+    if (actionName === 'deleteDelay') {
+      if (!canDeleteSolicitudes()) { toast('Solo el administrador puede eliminar'); return; }
+      if (!confirm('¿Eliminar este retraso definitivamente?')) return;
+      const avRef = String(id).startsWith('DELAY-') ? String(id).replace('DELAY-', '') : (state.novelties.find(n => n.id === id)?.ref || '');
+      state.novelties = (state.novelties || []).filter(n => n.id !== id && !(avRef && n.ref === avRef && /retardo|retraso/i.test(`${n.type} ${n.subtype || ''}`)));
+      // Los retrasos calculados desde la malla se ocultan por referencia
+      if (avRef) { state.prefs.dismissedDelays = [...new Set([...(state.prefs.dismissedDelays || []), avRef])]; }
+      log('Retraso', 'Eliminó retraso', id);
+      saveState('Retraso eliminado');
+      return;
+    }
+    if (actionName === 'deleteOvertime') {
+      if (String(id).startsWith('OT-')) {
+        if (!canDeleteSolicitudes()) { toast('Solo el administrador puede eliminar'); return; }
+        if (!confirm('¿Eliminar esta hora extra definitivamente?')) return;
+        const avRef = String(id).replace('OT-', '');
+        state.overtimeReports = (state.overtimeReports || []).filter(h => h.ref !== avRef);
+        state.prefs.dismissedOvertime = [...new Set([...(state.prefs.dismissedOvertime || []), avRef])];
+        log('HorasExtra', 'Eliminó hora extra', id);
+        saveState('Hora extra eliminada');
+        return;
+      }
+      deleteSupport('overtimeReports', id, 'Horas extras'); return;
+    }
     if (actionName === 'deleteAdditional') { deleteSupport('parkingReports', id, 'Adicional'); return; }
     if (actionName === 'deleteMessenger') {
       const q = find('quickers');
@@ -8117,6 +8491,13 @@ function toggleMode(forceDark) {
     const hsqEv = event.target.closest('[data-hsq-evidence]');
     if (hsqEv) { openMediaViewer(hsqEv.dataset.hsqEvidence); return; }
 
+    // ── Mapa: eliminar punto importado del KML ──
+    const zpDel = event.target.closest('[data-mappoint-delete]');
+    if (zpDel) {
+      const p = (state.mapPoints || []).find(x => x.id === zpDel.dataset.mappointDelete);
+      if (p && confirm(`¿Eliminar el punto "${p.name}"?`)) { state.mapPoints = state.mapPoints.filter(x => x.id !== p.id); log('Mapa', 'Eliminó punto KML', p.name); saveState('Punto eliminado'); }
+      return;
+    }
     // ── Mapa: eliminar zona ──
     const zoneDel = event.target.closest('[data-zone-delete]');
     if (zoneDel) {
@@ -8252,14 +8633,20 @@ function toggleMode(forceDark) {
     if (addCol) addMallaColumn();
     const resetCols = event.target.closest('[data-reset-columns="mallas"]');
     if (resetCols) resetMallaColumns();
-    if (event.target.closest('[data-print-carnet]')) { window.print(); return; }
-    if (event.target.closest('[data-share-carnet]')) {
-      const info = window._carnetInfo || {};
-      const text = [info.name, info.role, info.projects, info.email, info.phone].filter(Boolean).join(' | ');
-      if (navigator.share) { navigator.share({ title: 'Mi carnet Quick Last Mile', text }); }
-      else { navigator.clipboard.writeText(text).then(() => toast('Info copiada al portapapeles')); }
+    // Mapa: clic en un mensajero de la lista lateral → centrar y abrir su marcador
+    const focusPerson = event.target.closest('[data-map-focus]');
+    if (focusPerson) {
+      const name = focusPerson.dataset.mapFocus;
+      const mk = mapPingMarkers[name];
+      if (mk && adminLeafletMap) {
+        adminLeafletMap.setView(mk.getLatLng(), Math.max(adminLeafletMap.getZoom(), 16), { animate: true });
+        mk.openPopup();
+      } else { toast(`${name} no tiene ubicación reportada hoy`); }
       return;
     }
+    if (event.target.closest('[data-print-carnet]')) { window.print(); return; }
+    if (event.target.closest('[data-save-carnet]')) { saveAdminCarnet(); return; }
+    if (event.target.closest('[data-download-carnet]')) { downloadAdminCarnet(readAdminCarnetForm()); return; }
     const lists = event.target.closest('[data-open-malla-lists]');
     if (lists) openMallaListsForm();
     const downloadTpl = event.target.closest('[data-download-malla-template]');
@@ -8424,6 +8811,38 @@ function toggleMode(forceDark) {
   });
 
   document.addEventListener('change', event => {
+    // Carnet: foto y logo (se guardan como dataURL dentro del carnet del usuario)
+    if (event.target.id === 'carnet-photo' || event.target.id === 'carnet-logo') {
+      const f = event.target.files && event.target.files[0];
+      if (!f) return;
+      const key = event.target.id === 'carnet-photo' ? 'photo' : 'logo';
+      const r = new FileReader();
+      r.onload = () => {
+        // Reducir la imagen para que el carnet quepa en el estado sincronizado
+        const im = new Image();
+        im.onload = () => {
+          const max = key === 'photo' ? 480 : 160;
+          const scale = Math.min(1, max / Math.max(im.width, im.height));
+          const cv = document.createElement('canvas');
+          cv.width = Math.round(im.width * scale); cv.height = Math.round(im.height * scale);
+          cv.getContext('2d').drawImage(im, 0, 0, cv.width, cv.height);
+          window._carnetData = { ...(window._carnetData || {}), [key]: cv.toDataURL('image/jpeg', .85) };
+          refreshAdminCarnetPreview();
+          toast(key === 'photo' ? 'Foto cargada; recuerda guardar' : 'Logo cargado; recuerda guardar');
+        };
+        im.onerror = () => toast('No se pudo leer la imagen');
+        im.src = String(r.result || '');
+      };
+      r.readAsDataURL(f);
+      return;
+    }
+    if (event.target.id === 'carnet-blood') { refreshAdminCarnetPreview(); return; }
+    if (event.target.matches('[data-pref-extra-photo]')) {
+      state.prefs.extraPhotoEnabled = event.target.checked;
+      log('Configuración', event.target.checked ? 'Activó foto adicional' : 'Inactivó foto adicional', 'App mensajero');
+      saveState(event.target.checked ? 'Foto adicional activada' : 'Foto adicional inactivada');
+      return;
+    }
     // ── HSQ: configuración de tipos ──
     const hcEn = event.target.closest('[data-hsq-cfg-enabled]');
     if (hcEn) { const t = (state.prefs.hsqTypes || []).find(x => x.key === hcEn.dataset.hsqCfgEnabled); if (t) { t.enabled = hcEn.checked; saveState('Tipo actualizado'); } return; }
@@ -8531,21 +8950,31 @@ function toggleMode(forceDark) {
       renderMapa();
       return;
     }
-    if (event.target.matches('[data-zone-file]')) {
+    if (event.target.matches('[data-zone-file]') || event.target.matches('[data-point-file]')) {
+      const wantPoints = event.target.matches('[data-point-file]');
       const file = event.target.files && event.target.files[0];
       if (!file) return;
       const name = file.name.toLowerCase();
-      const done = polys => { if (!polys.length) { toast('No encontré polígonos en el archivo'); return; } openZoneForm(polys); };
+      const done = txt => {
+        const { areas, points } = parseKmlPlacemarks(txt);
+        if (wantPoints) {
+          if (!points.length) { toast('No encontré ubicaciones (puntos) en el archivo'); return; }
+          openKmlPointsForm(points);
+        } else {
+          if (!areas.length) { toast('No encontré zonas (polígonos) en el archivo'); return; }
+          openZoneForm(areas);
+        }
+      };
       if (name.endsWith('.kmz')) {
         if (!window.JSZip) { toast('No cargó la librería para KMZ'); return; }
         JSZip.loadAsync(file).then(zip => {
           const kmlName = Object.keys(zip.files).find(n => /\.kml$/i.test(n));
           if (!kmlName) { toast('El KMZ no contiene KML'); return; }
-          return zip.files[kmlName].async('string').then(txt => done(parseKmlText(txt)));
+          return zip.files[kmlName].async('string').then(done);
         }).catch(() => toast('No se pudo leer el KMZ'));
       } else {
         const r = new FileReader();
-        r.onload = () => done(parseKmlText(String(r.result || '')));
+        r.onload = () => done(String(r.result || ''));
         r.readAsText(file);
       }
       event.target.value = '';
@@ -8760,6 +9189,17 @@ function toggleMode(forceDark) {
     });
   });
   document.addEventListener('input', event => {
+    // Carnet: al escribir la cédula se autocompletan nombre, cargo y ciudad desde la matriz
+    if (event.target.id === 'carnet-cedula') {
+      const a = findAssetByCedula(event.target.value.trim());
+      if (a) {
+        const set = (id, v) => { const el = document.getElementById(id); if (el && v && !el.value.trim()) el.value = v; };
+        set('carnet-name', a.name); set('carnet-cargo', a.cargo); set('carnet-city', a.city);
+      }
+      refreshAdminCarnetPreview();
+      return;
+    }
+    if (String(event.target.id || '').startsWith('carnet-')) { refreshAdminCarnetPreview(); return; }
     if (event.target.matches('[data-record-search]')) {
       state.prefs.recordSearch = event.target.value;
       openMallaRecords(document.querySelector('.malla-day-btn.on')?.dataset.recordDate || '');
