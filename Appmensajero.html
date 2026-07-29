@@ -11,6 +11,8 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-storage-compat.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js"></script>
+  <!-- Detección de rostros para validar la foto de marcación (si no carga, se usa la validación básica) -->
+  <script defer src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.13/dist/face-api.js"></script>
   <script src="quick_firebase_config.js"></script>
   <style>
     :root{--q:#F5C518;--bg:#070707;--card:#15130f;--line:rgba(255,255,255,.12);--text:#fff;--muted:rgba(255,255,255,.62);--ok:#22C55E;--bad:#EF4444;--warn:#F59E0B}
@@ -321,23 +323,44 @@
     // ───── Validación de foto tipo perfil: debe verse UNA sola persona ─────
     // Usa el detector de rostros del navegador cuando existe; si no, aplica una
     // verificación básica de imagen (nitidez/luz/tono de piel) para descartar fotos vacías.
+    const FACE_MODELS='https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.13/model';
+    let faceReady=null;
+    function loadFaceModels(){
+      if(faceReady)return faceReady;
+      if(!window.faceapi){faceReady=Promise.reject();return faceReady}
+      faceReady=faceapi.nets.tinyFaceDetector.loadFromUri(FACE_MODELS).then(()=>true);
+      return faceReady;
+    }
+    // Precargar los modelos apenas abra la app para que la marcación no espere
+    setTimeout(()=>{try{loadFaceModels().catch(()=>{})}catch(e){}},2500);
+    function mensajeRostros(n){
+      if(n===0)return'No se detectó ninguna persona en la foto. Debe ser tipo perfil, con tu rostro visible.';
+      return `Se detectaron ${n} personas en la foto. Debe ser tipo perfil, solo tú.`;
+    }
     function validarFotoPerfil(dataUrl,cb){
       const img=new Image();
       img.onerror=()=>cb({ok:false,msg:'No se pudo leer la foto. Intenta de nuevo.'});
       img.onload=()=>{
         const finishHeur=()=>cb(heuristicaFoto(img));
-        if(window.FaceDetector){
+        const tryNativo=()=>{
+          if(!window.FaceDetector){finishHeur();return}
           try{
             new FaceDetector({fastMode:false,maxDetectedFaces:5}).detect(img).then(faces=>{
               const n=(faces||[]).length;
-              if(n===1){cb({ok:true});return}
-              if(n===0){cb({ok:false,msg:'No se detectó ninguna persona en la foto. Debe ser tipo perfil, con tu rostro visible.'});return}
-              cb({ok:false,msg:`Se detectaron ${n} personas. La foto debe ser tipo perfil, solo tú.`});
+              cb(n===1?{ok:true}:{ok:false,msg:mensajeRostros(n)});
             }).catch(finishHeur);
-            return;
-          }catch(e){}
-        }
-        finishHeur();
+          }catch(e){finishHeur()}
+        };
+        // 1) face-api.js (funciona en cualquier navegador); 2) detector nativo; 3) validación básica
+        try{
+          loadFaceModels().then(()=>{
+            const opts=new faceapi.TinyFaceDetectorOptions({inputSize:416,scoreThreshold:.45});
+            return faceapi.detectAllFaces(img,opts);
+          }).then(faces=>{
+            const n=(faces||[]).length;
+            cb(n===1?{ok:true}:{ok:false,msg:mensajeRostros(n)});
+          }).catch(tryNativo);
+        }catch(e){tryNativo()}
       };
       img.src=dataUrl;
     }
