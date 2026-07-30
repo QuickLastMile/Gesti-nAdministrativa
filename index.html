@@ -4481,8 +4481,7 @@ function toggleMode(forceDark) {
   function novFilter(key) {
     const perTab = (state.prefs.novedadesFilters || {})[novTab()] || {};
     if (perTab[key] !== undefined) return perTab[key];
-    const legacy = state.prefs[`novedadesFilter${key}`];
-    if (legacy !== undefined && legacy !== null && legacy !== '') return legacy;
+    // Sin herencia entre pestañas: cada una arranca con su propio valor por defecto
     return key === 'Date' ? new Date().toISOString().slice(0, 10) : NOV_FILTER_DEFAULTS[key];
   }
   function setNovFilter(key, value) {
@@ -4598,12 +4597,17 @@ function toggleMode(forceDark) {
     return [...parking, ...fromNovelties].filter(n => passesNovedadesDateFilter(n.date));
   }
 
+  // Filas de la pestaña activa, con su propio filtro de estado aplicado.
+  // La exportación siempre coincide con lo que se ve en pantalla.
   function novedadesCurrentRows() {
     const tab = state.prefs.novedadesTab || 'inasistencias';
-    if (tab === 'retrasos') return getDelayRows();
-    if (tab === 'horas') return getOvertimeRows();
-    if (tab === 'adicionales') return getAdditionalRows();
-    return getGeneralNoveltyRows();
+    const est = novFilter('Gestion');
+    const pasa = v => est === 'todos' || String(v || 'Pendiente').toLowerCase().startsWith(String(est).toLowerCase());
+    if (tab === 'retrasos') return getDelayRows().filter(n => pasa(n.delayStatus || 'Pendiente'));
+    if (tab === 'horas') return getOvertimeRows().filter(n => pasa(n.status || 'Pendiente'));
+    if (tab === 'adicionales') return getAdditionalRows().filter(n => pasa(n.status || 'Pendiente'));
+    const tipo = novFilter('Tipo');
+    return getGeneralNoveltyRows().filter(n => (tipo === 'todos' || (n.type || '').toLowerCase() === String(tipo).toLowerCase()) && pasa(n.gestionStatus || 'Pendiente'));
   }
 
   function avgGestionHours(items) {
@@ -4705,45 +4709,103 @@ function toggleMode(forceDark) {
       ['horas', 'Horas extras'],
       ['adicionales', 'Adicionales']
     ];
-    const allGeneral = getGeneralNoveltyRows();
-    const delays = getDelayRows();
-    const hours = getOvertimeRows();
-    const adds = getAdditionalRows();
-    const allRows = [...allGeneral, ...delays, ...hours, ...adds];
-    const pending = allRows.filter(isPendingNovelty).length;
-    const owners = new Set(allRows.map(n => n.gestionOwner || n.owner).filter(Boolean)).size || 1;
-    const topQuickers = topNoveltyQuickers(allRows);
-    const dashboard = `${moduleKpiGrid([
-      { label: 'Pendientes', value: pending, note: '<i class="ti ti-alert-circle"></i> Requieren gestión', icon: 'ti-alert-circle', yellow: true },
-      { label: 'Tiempo gestión prom.', value: avgGestionHours(allRows), note: '<i class="ti ti-clock"></i> Promedio operativo', icon: 'ti-clock-hour-4', className: 'grad-orange' },
-      { label: 'Adicionales por aprobar', value: adds.filter(a => /pendiente|reportada/i.test(a.status || '')).length, note: '<i class="ti ti-receipt"></i> Desde app mensajero', icon: 'ti-receipt', className: 'grad-purple' },
-      { label: 'Responsables activos', value: owners, note: '<i class="ti ti-users"></i> Gestión asignada', icon: 'ti-users', className: 'grad-teal' }
-    ])}
+    // Cada pestaña es independiente: solo se calculan sus propias filas, KPIs e indicadores.
+    // Ninguna pestaña mezcla datos, filtros ni conteos de las otras.
+    const allGeneral = active === 'inasistencias' ? getGeneralNoveltyRows() : [];
+    const delays = active === 'retrasos' ? getDelayRows() : [];
+    const hours = active === 'horas' ? getOvertimeRows() : [];
+    const adds = active === 'adicionales' ? getAdditionalRows() : [];
+    const tabRows = active === 'retrasos' ? delays : active === 'horas' ? hours : active === 'adicionales' ? adds : allGeneral;
+    const topQuickers = topNoveltyQuickers(tabRows);
+    const kpisPorPestana = () => {
+      if (active === 'retrasos') {
+        const pend = delays.filter(n => /pendiente/i.test(n.delayStatus || 'Pendiente')).length;
+        const just = delays.filter(n => /^justificado/i.test(n.delayStatus || '')).length;
+        const noJust = delays.filter(n => /no justificado/i.test(n.delayStatus || '')).length;
+        const totalMin = delays.reduce((a, n) => a + (parseInt(String(n.subtype || '').replace(/\D/g, ''), 10) || 0), 0);
+        return [
+          { label: 'Retrasos del periodo', value: delays.length, note: '<i class="ti ti-clock-exclamation"></i> Ingresos fuera de hora', icon: 'ti-clock-exclamation', yellow: true },
+          { label: 'Por justificar', value: pend, note: '<i class="ti ti-alert-circle"></i> Requieren gestión', icon: 'ti-alert-circle', className: 'grad-orange' },
+          { label: 'Justificados', value: just, note: `<i class="ti ti-circle-check"></i> ${noJust} no justificados`, icon: 'ti-circle-check', className: 'grad-teal' },
+          { label: 'Tiempo total de retraso', value: `${Math.floor(totalMin / 60)}h ${totalMin % 60}m`, note: '<i class="ti ti-hourglass"></i> Suma del periodo', icon: 'ti-hourglass', className: 'grad-purple' }
+        ];
+      }
+      if (active === 'horas') {
+        const num = v => Number(String(v || 0).replace(',', '.')) || 0;
+        const tot = hours.reduce((a, n) => a + num(n.hours), 0);
+        const apr = hours.filter(n => /aprobad/i.test(n.status || ''));
+        const pend = hours.filter(n => /pendiente|reportada/i.test(n.status || 'Pendiente'));
+        const rech = hours.filter(n => /rechaz/i.test(n.status || ''));
+        return [
+          { label: 'Horas extras del periodo', value: tot.toFixed(2), note: '<i class="ti ti-clock-plus"></i> Total de horas', icon: 'ti-clock-plus', yellow: true },
+          { label: 'Por aprobar', value: pend.length, note: `<i class="ti ti-alert-circle"></i> ${pend.reduce((a, n) => a + num(n.hours), 0).toFixed(2)} h pendientes`, icon: 'ti-alert-circle', className: 'grad-orange' },
+          { label: 'Aprobadas', value: apr.length, note: `<i class="ti ti-circle-check"></i> ${apr.reduce((a, n) => a + num(n.hours), 0).toFixed(2)} h a nómina`, icon: 'ti-circle-check', className: 'grad-teal' },
+          { label: 'Rechazadas', value: rech.length, note: '<i class="ti ti-circle-x"></i> No van a nómina', icon: 'ti-circle-x', className: 'grad-purple' }
+        ];
+      }
+      if (active === 'adicionales') {
+        const num = v => Number(String(v || 0).replace(/[^\d.-]/g, '')) || 0;
+        const pend = adds.filter(a => /pendiente|reportada/i.test(a.status || ''));
+        const apr = adds.filter(a => /aprobad/i.test(a.status || ''));
+        const money = n => `$${Math.round(n).toLocaleString('es-CO')}`;
+        return [
+          { label: 'Adicionales del periodo', value: adds.length, note: `<i class="ti ti-receipt"></i> ${money(adds.reduce((a, x) => a + num(x.amount), 0))} reportados`, icon: 'ti-receipt', yellow: true },
+          { label: 'Por aprobar', value: pend.length, note: `<i class="ti ti-alert-circle"></i> ${money(pend.reduce((a, x) => a + num(x.amount), 0))}`, icon: 'ti-alert-circle', className: 'grad-orange' },
+          { label: 'Aprobados', value: apr.length, note: `<i class="ti ti-circle-check"></i> ${money(apr.reduce((a, x) => a + num(x.amount), 0))}`, icon: 'ti-circle-check', className: 'grad-teal' },
+          { label: 'Responsables activos', value: new Set(adds.map(n => n.gestionOwner || n.owner).filter(Boolean)).size, note: '<i class="ti ti-users"></i> Gestión asignada', icon: 'ti-users', className: 'grad-teal' }
+        ];
+      }
+      const pend = allGeneral.filter(isPendingNovelty).length;
+      const cerradas = allGeneral.filter(n => /cerrada|finaliz/i.test(n.gestionStatus || '')).length;
+      const sinCierre = allGeneral.filter(n => /sin cierre/i.test(n.type || '')).length;
+      return [
+        { label: 'Novedades del periodo', value: allGeneral.length, note: '<i class="ti ti-alert-triangle"></i> Inasistencias y otras', icon: 'ti-alert-triangle', yellow: true },
+        { label: 'Pendientes', value: pend, note: '<i class="ti ti-alert-circle"></i> Requieren gestión', icon: 'ti-alert-circle', className: 'grad-orange' },
+        { label: 'Cerradas', value: cerradas, note: '<i class="ti ti-circle-check"></i> Gestión finalizada', icon: 'ti-circle-check', className: 'grad-teal' },
+        { label: 'Turnos sin cierre', value: sinCierre, note: '<i class="ti ti-clock-x"></i> No marcaron salida', icon: 'ti-clock-x', className: 'grad-purple' }
+      ];
+    };
+    const tituloTop = active === 'retrasos' ? 'Mensajeros con más retrasos'
+      : active === 'horas' ? 'Mensajeros con más horas extras'
+      : active === 'adicionales' ? 'Mensajeros con más adicionales'
+      : 'Mensajeros con más novedades';
+    const dashboard = `${moduleKpiGrid(kpisPorPestana())}
     <div class="nov-filterbar" style="margin-top:-4px">
-      <span class="fp-sub" style="font-weight:900;text-transform:uppercase;letter-spacing:.5px">Mensajeros con más novedades</span>
-      ${topQuickers.length ? topQuickers.map(([name, count]) => `<span class="status-pill st-warn">${escapeHTML(name)} · ${count}</span>`).join('') : '<span class="fp-sub">Sin novedades registradas desde malla.</span>'}
+      <span class="fp-sub" style="font-weight:900;text-transform:uppercase;letter-spacing:.5px">${tituloTop}</span>
+      ${topQuickers.length ? topQuickers.map(([name, count]) => `<span class="status-pill st-warn">${escapeHTML(name)} · ${count}</span>`).join('') : '<span class="fp-sub">Sin registros en esta pestaña para el filtro actual.</span>'}
     </div>`;
-    const tiposFiltro = ['todos', 'DESVINCULACIÓN', 'INASISTENCIA', 'ACCIDENTE', 'PROCESOS', 'DESCUENTO', 'OTRO SÍ', 'Incapacidad', 'Contratación', 'Disciplinario', 'Seguridad', 'Retardo'];
-    const gestionFiltro = ['todos', 'Pendiente', 'En proceso', 'Cerrada', 'Escalada'];
+    // Filtros propios de cada pestaña (los de una no aparecen ni afectan a las otras)
+    const tiposFiltro = ['todos', 'DESVINCULACIÓN', 'INASISTENCIA', 'ACCIDENTE', 'PROCESOS', 'DESCUENTO', 'OTRO SÍ', 'Incapacidad', 'Contratación', 'Disciplinario', 'Seguridad', 'SIN CIERRE'];
+    const estadosPorPestana = {
+      inasistencias: ['todos', 'Pendiente', 'En proceso', 'Cerrada', 'Escalada'],
+      retrasos: ['todos', 'Pendiente', 'Justificado', 'No justificado'],
+      horas: ['todos', 'Pendiente', 'Aprobado', 'Rechazado'],
+      adicionales: ['todos', 'Pendiente', 'Aprobado', 'Rechazado']
+    };
+    const estadoOpts = estadosPorPestana[active] || estadosPorPestana.inasistencias;
+    const etiquetaEstado = active === 'retrasos' ? 'Toda justificación' : active === 'inasistencias' ? 'Toda gestión' : 'Todo estado';
     const filterbar = `<div class="nov-filterbar">
       <select data-novedades-filter-mode>
         ${['dia','mes','ano','todo'].map(mode => `<option value="${mode}" ${novFilter('Mode') === mode ? 'selected' : ''}>${mode === 'dia' ? 'Día' : mode === 'mes' ? 'Mes' : mode === 'ano' ? 'Año' : 'Todo'}</option>`).join('')}
       </select>
       <input type="date" data-novedades-filter-date value="${escapeHTML(novFilter('Date') || new Date().toISOString().slice(0, 10))}">
-      <select data-novedades-filter-tipo>
+      ${active === 'inasistencias' ? `<select data-novedades-filter-tipo>
         ${tiposFiltro.map(t => `<option value="${t}" ${novFilter('Tipo') === t ? 'selected' : ''}>${t === 'todos' ? 'Todos los tipos' : t}</option>`).join('')}
-      </select>
+      </select>` : ''}
       <select data-novedades-filter-gestion>
-        ${gestionFiltro.map(g => `<option value="${g}" ${novFilter('Gestion') === g ? 'selected' : ''}>${g === 'todos' ? 'Toda gestión' : g}</option>`).join('')}
+        ${estadoOpts.map(g => `<option value="${g}" ${novFilter('Gestion') === g ? 'selected' : ''}>${g === 'todos' ? etiquetaEstado : g}</option>`).join('')}
       </select>
       <button class="dev-btn" data-export-current-novedades><i class="ti ti-file-spreadsheet"></i> Exportar Excel</button>
     </div>`;
+    // Filtro de estado aplicado dentro de la pestaña activa
+    const filtroEstado = novFilter('Gestion');
+    const pasaEstado = valor => filtroEstado === 'todos' || String(valor || 'Pendiente').toLowerCase().startsWith(String(filtroEstado).toLowerCase());
     const tabbar = `<div class="module-tabs">${tabs.map(([key, label]) => `<button class="module-tab ${active === key ? 'on' : ''}" data-novedades-tab="${key}">${label}</button>`).join('')}</div>`;
     let body = '';
     if (active === 'retrasos') {
       const user = currentUser();
       const showClient = user.profile === 'Administrador' || !user.profile || user.profile === 'Gerencia';
-      const rows = delays.map(n => row([
+      const rows = delays.filter(n => pasaEstado(n.delayStatus || 'Pendiente')).map(n => row([
         pill(n.type || 'Retraso'),
         pill(n.delayStatus || 'Pendiente'),
         ...(showClient ? [escapeHTML(n.client || '')] : []),
@@ -4753,21 +4815,24 @@ function toggleMode(forceDark) {
         escapeHTML(n.observation || n.note || ''),
         `<div class="row-actions">${iconAction('Gestionar retraso', 'viewDelay', n.id, 'ti-eye')}${iconAction('Justificado', 'justifyDelay', n.id, 'ti-circle-check')}${iconAction('No justificado', 'rejectDelay', n.id, 'ti-circle-x')}${canDeleteSolicitudes() ? iconAction('Eliminar', 'deleteDelay', n.id, 'ti-trash') : ''}</div>`
       ]));
-      body = table(['Tipo', 'Estado', ...(showClient ? ['Cliente'] : []), 'Fecha', 'Nombre', 'Cédula', 'Observación', 'Acciones'], rows);
+      body = (rows.length ? '' : `<div class="dropzone" style="margin:10px 0;text-align:center"><strong>Sin retrasos</strong><span class="fp-sub">No hay ingresos fuera de hora para el filtro seleccionado.</span></div>`)
+        + table(['Tipo', 'Estado', ...(showClient ? ['Cliente'] : []), 'Fecha', 'Nombre', 'Cédula', 'Observación', 'Acciones'], rows);
     } else if (active === 'horas') {
-      const rows = hours.map(n => row([
+      const rows = hours.filter(n => pasaEstado(n.status || 'Pendiente')).map(n => row([
         pill(n.status || 'Pendiente'), escapeHTML(n.date || ''), escapeHTML(n.quicker || n.name || ''), escapeHTML(n.cedula || ''), escapeHTML(n.client || ''),
         `<strong>${escapeHTML(String(n.hours || n.amount || ''))}${n.hours ? ' h' : ''}</strong>${n.subtype ? `<br><span class="fp-sub">${escapeHTML(n.subtype)}</span>` : ''}`,
         escapeHTML(n.justification || n.note || ''),
         `<div class="row-actions">${iconAction('Ver detalle', 'viewOvertime', n.id, 'ti-eye')}${iconAction('Aprobar', 'approveOvertime', n.id, 'ti-circle-check')}${iconAction('Rechazar', 'rejectOvertime', n.id, 'ti-circle-x')}${canDeleteSolicitudes() ? iconAction('Eliminar', 'deleteOvertime', n.id, 'ti-trash') : ''}</div>`
       ]));
-      body = table(['Estado', 'Fecha', 'Nombre', 'Cédula', 'Cliente', 'Horas', 'Justificación', 'Acciones'], rows);
+      body = (rows.length ? '' : `<div class="dropzone" style="margin:10px 0;text-align:center"><strong>Sin horas extras</strong><span class="fp-sub">No hay salidas después del horario programado para el filtro seleccionado.</span></div>`)
+        + table(['Estado', 'Fecha', 'Nombre', 'Cédula', 'Cliente', 'Horas', 'Justificación', 'Acciones'], rows);
     } else if (active === 'adicionales') {
-      const rows = adds.map(n => row([
+      const rows = adds.filter(n => pasaEstado(n.status || 'Pendiente')).map(n => row([
         pill(n.type || 'Adicional'), pill(n.status || 'Pendiente'), escapeHTML(n.date || ''), escapeHTML(n.quicker || ''), escapeHTML(n.cedula || ''), escapeHTML(n.client || ''), escapeHTML(n.point || ''), escapeHTML(n.amount || ''),
         `<div class="row-actions">${iconAction('Ver soporte', 'viewAdditional', n.id, 'ti-eye')}${iconAction('Aprobar', 'approveAdditional', n.id, 'ti-circle-check')}${iconAction('Rechazar', 'rejectAdditional', n.id, 'ti-circle-x')}${canDeleteSolicitudes() ? iconAction('Eliminar', 'deleteAdditional', n.id, 'ti-trash') : ''}</div>`
       ]));
-      body = table(['Tipo', 'Estado', 'Fecha', 'Nombre', 'Cédula', 'Cliente', 'Punto', 'Valor', 'Acciones'], rows);
+      body = (rows.length ? '' : `<div class="dropzone" style="margin:10px 0;text-align:center"><strong>Sin adicionales</strong><span class="fp-sub">No hay adicionales reportados para el filtro seleccionado.</span></div>`)
+        + table(['Tipo', 'Estado', 'Fecha', 'Nombre', 'Cédula', 'Cliente', 'Punto', 'Valor', 'Acciones'], rows);
     } else {
       const filterTipo = novFilter('Tipo');
       const filterGestion = novFilter('Gestion');
