@@ -2225,6 +2225,20 @@ function toggleMode(forceDark) {
       custom: d.custom || {},
       ...d
     }));
+    // Reparar ids repetidos de malla (bug histórico del generador de ids): dos turnos con el
+    // mismo id hacían que la marcación de uno apareciera clonada en el otro.
+    // El id nuevo es determinista para que todos los equipos calculen exactamente el mismo.
+    const vistos = new Set();
+    next.availabilities.forEach((d, idx) => {
+      if (d.id && !vistos.has(d.id)) { vistos.add(d.id); return; }
+      const base = `${d.date || ''}|${d.quicker || ''}|${d.point || ''}|${d.plannedStart || ''}|${idx}`;
+      let h = 0;
+      for (let i = 0; i < base.length; i++) { h = (h * 31 + base.charCodeAt(i)) | 0; }
+      let nuevo = `DIS-FIX${Math.abs(h).toString(36).toUpperCase()}`;
+      while (vistos.has(nuevo)) nuevo += 'X';
+      vistos.add(nuevo);
+      d.id = nuevo;
+    });
     return next;
   }
 
@@ -2391,6 +2405,10 @@ function toggleMode(forceDark) {
     (state.availabilities || []).forEach(d => {
       const m = marcacionesCache['MARC-' + d.id];
       if (!m) return;
+      // Seguridad: una marcación solo se aplica al turno de SU misma fecha y mensajero.
+      // Evita que una marcación de otro día se copie a la malla de hoy.
+      if (m.date && d.date && m.date !== d.date) return;
+      if (m.quicker && d.quicker && m.quicker !== d.quicker) return;
       ['realStart', 'realEnd', 'lunchStart', 'lunchEnd'].forEach(k => { if (m[k] && d[k] !== m[k]) { d[k] = m[k]; changed = true; } });
       if (m.status && (m.realStart || m.realEnd) && d.status !== m.status && !/finaliz/i.test(d.status || '')) { d.status = m.status; changed = true; }
       // Reconstruir evidencias de marcación si el estado principal las perdió
@@ -2602,8 +2620,16 @@ function toggleMode(forceDark) {
     el.className = cloudStatus.includes('Firebase en vivo') || cloudStatus.includes('sincronizado') ? 'status-pill st-ok' : cloudStatus.includes('error') || cloudStatus.includes('pendiente') ? 'status-pill st-bad' : 'status-pill st-warn';
   }
 
+  // Id único: milisegundos + contador incremental + aleatorio largo.
+  // (Antes usaba segundos y solo 2 dígitos aleatorios, lo que provocaba ids repetidos
+  //  al crear muchos registros a la vez y mezclaba marcaciones entre días.)
+  let uidSeq = 0;
   function uid(prefix) {
-    return `${prefix}-${Math.floor(Date.now() / 1000).toString(36).toUpperCase()}${Math.floor(Math.random() * 90 + 10)}`;
+    uidSeq = (uidSeq + 1) % 1000000;
+    const t = Date.now().toString(36).toUpperCase();
+    const s = uidSeq.toString(36).toUpperCase().padStart(4, '0');
+    const r = Math.random().toString(36).slice(2, 8).toUpperCase();
+    return `${prefix}-${t}${s}${r}`;
   }
 
   function todayTime() {
@@ -7855,7 +7881,14 @@ function toggleMode(forceDark) {
       const end = new Date(`${data.endDate}T00:00:00`);
       for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
         const date = d.toISOString().slice(0, 10);
-        source.forEach(item => state.availabilities.unshift({ ...item, id: uid('DIS'), date, realStart: '', realEnd: '', evidencePhoto: '', status: item.quicker ? 'Programado' : 'Pendiente asignación', custom: { ...(item.custom || {}) } }));
+        // Una réplica nunca hereda marcaciones: se copia solo la programación del turno
+        source.forEach(item => state.availabilities.unshift({
+          ...item, id: uid('DIS'), date,
+          realStart: '', realEnd: '', lunchStart: '', lunchEnd: '',
+          evidencePhoto: '', approval: 'Pendiente', noveltyType: '', observations: '',
+          status: item.quicker ? 'Programado' : 'Pendiente asignación',
+          custom: { ...(item.custom || {}) }
+        }));
       }
       closeModal();
       log('Malla', 'Replicó malla masiva', `${data.startDate} a ${data.endDate}`);

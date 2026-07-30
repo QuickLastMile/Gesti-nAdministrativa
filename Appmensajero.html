@@ -207,11 +207,13 @@
       return s;}
     function initCloud(){try{const cfg=window.QUICK_FIREBASE_CONFIG;if(!cfg?.enabled||!window.firebase)return;if(!firebase.apps.length)firebase.initializeApp(cfg.firebaseConfig);try{if(firebase.storage)storage=firebase.storage()}catch{}cloudRef=firebase.firestore().collection(cfg.collection||'quick_lastmile').doc(cfg.documentId||'platform_state');cloudRef.onSnapshot(s=>{if(s.metadata?.fromCache&&!cloudHydrated)return;if(!s.exists){cloudHydrated=true;save();return}if(s.metadata?.hasPendingWrites)return;const remote=s.data()?.state;if(!remote)return;const keep=session;
       // Conservar marcaciones locales que el estado remoto aún no tiene (evita que un snapshot viejo las borre)
-      const myMarks={};(state.availabilities||[]).forEach(d=>{if(d.realStart||d.realEnd||d.lunchStart||d.lunchEnd)myMarks[d.id]={realStart:d.realStart,realEnd:d.realEnd,lunchStart:d.lunchStart,lunchEnd:d.lunchEnd,status:d.status}});
+      const myMarks={};(state.availabilities||[]).forEach(d=>{if(d.realStart||d.realEnd||d.lunchStart||d.lunchEnd)myMarks[d.id]={date:d.date,quicker:d.quicker,realStart:d.realStart,realEnd:d.realEnd,lunchStart:d.lunchStart,lunchEnd:d.lunchEnd,status:d.status}});
       state={...fallback,...remote};
-      (state.availabilities||[]).forEach(d=>{const m=myMarks[d.id];if(!m)return;['realStart','realEnd','lunchStart','lunchEnd'].forEach(k=>{if(m[k]&&!d[k])d[k]=m[k]});if(m.realStart&&(!d.status||d.status==='Creado'))d.status=m.status||d.status});
+      // Solo se reponen marcaciones al turno de su MISMA fecha y mensajero (nunca clonar entre días)
+      (state.availabilities||[]).forEach(d=>{const m=myMarks[d.id];if(!m)return;if(m.date&&d.date&&m.date!==d.date)return;if(m.quicker&&d.quicker&&m.quicker!==d.quicker)return;['realStart','realEnd','lunchStart','lunchEnd'].forEach(k=>{if(m[k]&&!d[k])d[k]=m[k]});if(m.realStart&&(!d.status||d.status==='Creado'))d.status=m.status||d.status});
       localStorage.setItem(KEY,JSON.stringify(state));session=keep;cloudHydrated=true;if(session)renderHome(false)})}catch{}}
-    function uid(p){return `${p}-${Date.now().toString(36).toUpperCase()}${Math.floor(Math.random()*90+10)}`}
+    let uidSeq=0;
+    function uid(p){uidSeq=(uidSeq+1)%1000000;return `${p}-${Date.now().toString(36).toUpperCase()}${uidSeq.toString(36).toUpperCase().padStart(4,'0')}${Math.random().toString(36).slice(2,8).toUpperCase()}`}
     let toastTimer=null;function toast(msg,cls,ms){const t=document.getElementById('toast');t.textContent=msg;t.className='toast on'+(cls?' '+cls:'');clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.classList.remove('on'),ms||1900)}
     function today(){return new Date().toISOString().slice(0,10)}
     function locate(cb){if(!navigator.geolocation){cb(null);return}navigator.geolocation.getCurrentPosition(pos=>{lastGps={lat:pos.coords.latitude,lng:pos.coords.longitude,time:new Date().toLocaleString('es-CO')};cb(lastGps)},()=>cb(lastGps),{enableHighAccuracy:true,timeout:9000})}
