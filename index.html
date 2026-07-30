@@ -2225,6 +2225,16 @@ function toggleMode(forceDark) {
       custom: d.custom || {},
       ...d
     }));
+    // Reparar horarios cargados en un solo campo ("09:00 A 18:00" dentro de plannedStart),
+    // que impedían calcular retrasos y horas extras.
+    next.availabilities.forEach(d => {
+      const p = shiftPlanned(d);
+      if (p.start && p.end && (d.plannedStart !== p.start || d.plannedEnd !== p.end)) {
+        d.plannedStart = p.start;
+        d.plannedEnd = p.end;
+        d.schedule = `${p.start} - ${p.end}`;
+      }
+    });
     // Reparar ids repetidos de malla (bug histórico del generador de ids): dos turnos con el
     // mismo id hacían que la marcación de uno apareciera clonada en el otro.
     // El id nuevo es determinista para que todos los equipos calculen exactamente el mismo.
@@ -2371,7 +2381,7 @@ function toggleMode(forceDark) {
         parkingReports: source.parkingReports,
         overtimeReports: source.overtimeReports,
         availabilities: source.availabilities,
-        prefs: prefsPick(['novedadesTab', 'novedadesFilterMode', 'novedadesFilterDate', 'novedadesFilterTipo', 'novedadesFilterGestion'])
+        prefs: prefsPick(['novedadesTab', 'novedadesFilters', 'dismissedDelays', 'dismissedOvertime', 'dismissedNoClose'])
       },
       tickets: { tickets: source.tickets, users: source.users },
       quickers: { quickers: source.quickers, users: source.users, clients: source.clients },
@@ -3249,8 +3259,9 @@ function toggleMode(forceDark) {
       .slice(0, 30);
     const evsFor = avId => (state.evidences || []).filter(e => e.availability === avId && /inicio|fin|turno|almuerzo/i.test(e.stage || ''));
     const bodyRows = shifts.map(d => {
-      const delay = d.realStart && d.plannedStart ? minutesBetween(d.plannedStart, d.realStart) : 0;
-      const extra = d.realEnd && d.plannedEnd ? minutesBetween(d.plannedEnd, d.realEnd) : 0;
+      const pl = shiftPlanned(d);
+      const delay = d.realStart && pl.start ? minutesBetween(pl.start, d.realStart) : 0;
+      const extra = d.realEnd && pl.end ? minutesBetween(pl.end, d.realEnd) : 0;
       const alerts = [
         delay > 0 ? `<span class="b b-red">Retraso ${delay} min</span>` : (d.realStart ? '<span class="b b-green">Puntual</span>' : ''),
         extra > 0 ? `<span class="b b-yellow">Extras ${Math.floor(extra / 60)}h ${extra % 60}m</span>` : ''
@@ -3260,7 +3271,7 @@ function toggleMode(forceDark) {
         <span class="fp-sub" style="flex:1;min-width:160px">${escapeHTML(e.address || 'Sin dirección')}</span>
         ${hasMedia(e) ? `<img class="qdoc-img" style="width:100%;max-width:320px;border-radius:10px;border:1px solid var(--border)" ${mediaAttr(e)} alt="Evidencia">` : '<span class="fp-sub">Sin foto</span>'}
       </div>`).join('');
-      const detail = `<div class="fp-sub" style="margin-bottom:8px">Turno programado: ${escapeHTML(d.plannedStart || '—')} - ${escapeHTML(d.plannedEnd || '—')} · Punto: ${escapeHTML(d.point || '—')} ${alerts}</div>
+      const detail = `<div class="fp-sub" style="margin-bottom:8px">Turno programado: ${escapeHTML(pl.start || '—')} - ${escapeHTML(pl.end || '—')} · Punto: ${escapeHTML(d.point || '—')} ${alerts}</div>
         ${marks || '<div class="fp-sub">Sin evidencias de marcación para este turno.</div>'}`;
       const canDel = canDeleteSolicitudes();
       return `<tr class="ticket-row" data-marc-row="${escapeHTML(d.id)}" style="cursor:pointer">
@@ -3268,7 +3279,7 @@ function toggleMode(forceDark) {
         <td>${escapeHTML(d.client || '—')}</td>
         <td>${escapeHTML(d.point || '—')}</td>
         <td>${escapeHTML(d.quicker || q.name || '')}</td>
-        <td>${escapeHTML(d.plannedStart || '—')} - ${escapeHTML(d.plannedEnd || '—')}</td>
+        <td>${escapeHTML(pl.start || '—')} - ${escapeHTML(pl.end || '—')}</td>
         <td><strong>${escapeHTML(d.realStart || '—')}</strong></td>
         <td><strong>${escapeHTML(d.realEnd || '—')}</strong></td>
         <td>${escapeHTML(d.lunchStart || '—')}</td>
@@ -3438,21 +3449,51 @@ function toggleMode(forceDark) {
   }
 
   function computeIngress(d) {
+    const inicio = shiftPlanned(d).start;
     if (d.realStart) {
-      const diff = minutesBetween(d.plannedStart, d.realStart);
+      const diff = minutesBetween(inicio, d.realStart);
       if (diff <= 0) return { status: 'En turno', note: 'Ingreso puntual' };
       if (diff <= state.prefs.ingressGraceMinutes) return { status: 'En turno', note: `${diff} minutos tarde` };
-      return { status: 'En turno', note: 'Ingreso fuera de tiempo' };
+      return { status: 'En turno', note: `Ingreso fuera de tiempo (${diff} min)` };
     }
-    const start = new Date(`${d.date}T${d.plannedStart || '00:00'}:00`);
+    const start = new Date(`${d.date}T${inicio || '00:00'}:00`);
     const limit = new Date(start.getTime() + Number(state.prefs.ingressGraceMinutes || 30) * 60000);
     if (new Date() <= limit) return { status: 'Pendiente', note: 'Dentro del tiempo permitido' };
     return { status: 'Sin ingreso', note: 'Sin ingreso' };
   }
 
+  // Extrae la primera hora HH:MM de un texto ("09:00 A 18:00" → "09:00"). Admite 9:00 y 09.00.
+  function firstTime(text) {
+    const m = String(text || '').match(/(\d{1,2})[:.](\d{2})/);
+    return m ? `${String(m[1]).padStart(2, '0')}:${m[2]}` : '';
+  }
+  // Separa un horario escrito de cualquier forma: "09:00 - 18:00", "09:00 A 18:00",
+  // "09:00 a 18:00", "9:00 hasta 18:00". Devuelve ['09:00','18:00'].
+  function parseScheduleRange(text) {
+    const all = String(text || '').match(/\d{1,2}[:.]\d{2}/g) || [];
+    const norm = all.map(t => { const [h, m] = t.split(/[:.]/); return `${String(h).padStart(2, '0')}:${m}`; });
+    return [norm[0] || '', norm[1] || ''];
+  }
+  // Horario programado real de un turno, tolerando datos mal cargados
+  // (por ejemplo el rango completo guardado dentro de plannedStart).
+  function shiftPlanned(d) {
+    let start = firstTime(d.plannedStart);
+    let end = firstTime(d.plannedEnd);
+    if (!end) {
+      const [s2, e2] = parseScheduleRange(`${d.plannedStart || ''} ${d.plannedEnd || ''}`);
+      if (e2) { start = start || s2; end = e2; }
+    }
+    if (!end) {
+      const [s3, e3] = parseScheduleRange(d.schedule);
+      if (e3) { start = start || s3; end = e3; }
+    }
+    return { start, end };
+  }
   function minutesBetween(start, end) {
-    const [sh, sm] = String(start || '00:00').split(':').map(Number);
-    const [eh, em] = String(end || '00:00').split(':').map(Number);
+    const s = firstTime(start), e = firstTime(end);
+    if (!s || !e) return 0;
+    const [sh, sm] = s.split(':').map(Number);
+    const [eh, em] = e.split(':').map(Number);
     return Math.round(((eh * 60 + em) - (sh * 60 + sm)));
   }
 
@@ -4433,10 +4474,26 @@ function toggleMode(forceDark) {
     };
   }
 
+  // Los filtros de Novedades son independientes por pestaña: cambiar el filtro de
+  // "Horas extras" no debe alterar el de "Retrasos" ni el de las demás.
+  function novTab() { return state.prefs.novedadesTab || 'inasistencias'; }
+  const NOV_FILTER_DEFAULTS = { Mode: 'todo', Date: '', Tipo: 'todos', Gestion: 'todos' };
+  function novFilter(key) {
+    const perTab = (state.prefs.novedadesFilters || {})[novTab()] || {};
+    if (perTab[key] !== undefined) return perTab[key];
+    const legacy = state.prefs[`novedadesFilter${key}`];
+    if (legacy !== undefined && legacy !== null && legacy !== '') return legacy;
+    return key === 'Date' ? new Date().toISOString().slice(0, 10) : NOV_FILTER_DEFAULTS[key];
+  }
+  function setNovFilter(key, value) {
+    state.prefs.novedadesFilters = state.prefs.novedadesFilters || {};
+    const t = novTab();
+    state.prefs.novedadesFilters[t] = { ...(state.prefs.novedadesFilters[t] || {}), [key]: value };
+  }
   function passesNovedadesDateFilter(dateValue) {
-    const mode = state.prefs.novedadesFilterMode || 'todo';
+    const mode = novFilter('Mode');
     if (mode === 'todo') return true;
-    const base = state.prefs.novedadesFilterDate || new Date().toISOString().slice(0, 10);
+    const base = novFilter('Date') || new Date().toISOString().slice(0, 10);
     const date = String(dateValue || '').slice(0, 10);
     if (!date) return true;
     if (mode === 'dia') return date === base;
@@ -4472,11 +4529,11 @@ function toggleMode(forceDark) {
     const storedRefs = new Set(stored.map(n => n.ref));
     const dismissed = new Set(state.prefs.dismissedDelays || []);
     const computed = state.availabilities
-      .filter(d => d.realStart && minutesBetween(d.plannedStart, d.realStart) > 0 && !storedRefs.has(d.id) && !dismissed.has(d.id))
+      .filter(d => d.realStart && shiftPlanned(d).start && minutesBetween(shiftPlanned(d).start, d.realStart) > 0 && !storedRefs.has(d.id) && !dismissed.has(d.id))
       .map(d => ({
         id: `DELAY-${d.id}`,
         type: 'Retraso',
-        subtype: `${minutesBetween(d.plannedStart, d.realStart)} min`,
+        subtype: `${minutesBetween(shiftPlanned(d).start, d.realStart)} min`,
         ref: d.id,
         date: d.date,
         client: d.client,
@@ -4498,13 +4555,14 @@ function toggleMode(forceDark) {
     const storedRefs = new Set([...saved, ...fromNovelties].map(n => n.ref).filter(Boolean));
     const dismissedOt = new Set(state.prefs.dismissedOvertime || []);
     const computed = (state.availabilities || [])
-      .filter(d => d.realEnd && d.plannedEnd && minutesBetween(d.plannedEnd, d.realEnd) > 0 && !storedRefs.has(d.id) && !dismissedOt.has(d.id))
+      .filter(d => d.realEnd && shiftPlanned(d).end && minutesBetween(shiftPlanned(d).end, d.realEnd) > 0 && !storedRefs.has(d.id) && !dismissedOt.has(d.id))
       .map(d => {
-        const mins = minutesBetween(d.plannedEnd, d.realEnd);
+        const fin = shiftPlanned(d).end;
+        const mins = minutesBetween(fin, d.realEnd);
         return {
           id: `OT-${d.id}`,
           type: 'Hora extra',
-          subtype: `${mins} min`,
+          subtype: `${Math.floor(mins / 60)}h ${mins % 60}m`,
           ref: d.id,
           date: d.date,
           client: d.client,
@@ -4512,7 +4570,7 @@ function toggleMode(forceDark) {
           cedula: d.cedula || (state.quickers.find(q => q.name === d.quicker)?.cedula || ''),
           quicker: d.quicker,
           hours: (mins / 60).toFixed(2),
-          justification: `Salida real ${d.realEnd} vs programada ${d.plannedEnd} (marcación en malla)`,
+          justification: `Salida real ${d.realEnd} vs programada ${fin} · ${Math.floor(mins / 60)}h ${mins % 60}m de extra (marcación en malla)`,
           status: 'Pendiente',
           source: 'malla'
         };
@@ -4669,14 +4727,14 @@ function toggleMode(forceDark) {
     const gestionFiltro = ['todos', 'Pendiente', 'En proceso', 'Cerrada', 'Escalada'];
     const filterbar = `<div class="nov-filterbar">
       <select data-novedades-filter-mode>
-        ${['dia','mes','ano','todo'].map(mode => `<option value="${mode}" ${state.prefs.novedadesFilterMode === mode ? 'selected' : ''}>${mode === 'dia' ? 'Día' : mode === 'mes' ? 'Mes' : mode === 'ano' ? 'Año' : 'Todo'}</option>`).join('')}
+        ${['dia','mes','ano','todo'].map(mode => `<option value="${mode}" ${novFilter('Mode') === mode ? 'selected' : ''}>${mode === 'dia' ? 'Día' : mode === 'mes' ? 'Mes' : mode === 'ano' ? 'Año' : 'Todo'}</option>`).join('')}
       </select>
-      <input type="date" data-novedades-filter-date value="${escapeHTML(state.prefs.novedadesFilterDate || new Date().toISOString().slice(0, 10))}">
+      <input type="date" data-novedades-filter-date value="${escapeHTML(novFilter('Date') || new Date().toISOString().slice(0, 10))}">
       <select data-novedades-filter-tipo>
-        ${tiposFiltro.map(t => `<option value="${t}" ${(state.prefs.novedadesFilterTipo || 'todos') === t ? 'selected' : ''}>${t === 'todos' ? 'Todos los tipos' : t}</option>`).join('')}
+        ${tiposFiltro.map(t => `<option value="${t}" ${novFilter('Tipo') === t ? 'selected' : ''}>${t === 'todos' ? 'Todos los tipos' : t}</option>`).join('')}
       </select>
       <select data-novedades-filter-gestion>
-        ${gestionFiltro.map(g => `<option value="${g}" ${(state.prefs.novedadesFilterGestion || 'todos') === g ? 'selected' : ''}>${g === 'todos' ? 'Toda gestión' : g}</option>`).join('')}
+        ${gestionFiltro.map(g => `<option value="${g}" ${novFilter('Gestion') === g ? 'selected' : ''}>${g === 'todos' ? 'Toda gestión' : g}</option>`).join('')}
       </select>
       <button class="dev-btn" data-export-current-novedades><i class="ti ti-file-spreadsheet"></i> Exportar Excel</button>
     </div>`;
@@ -4698,7 +4756,9 @@ function toggleMode(forceDark) {
       body = table(['Tipo', 'Estado', ...(showClient ? ['Cliente'] : []), 'Fecha', 'Nombre', 'Cédula', 'Observación', 'Acciones'], rows);
     } else if (active === 'horas') {
       const rows = hours.map(n => row([
-        pill(n.status || 'Pendiente'), escapeHTML(n.date || ''), escapeHTML(n.quicker || n.name || ''), escapeHTML(n.cedula || ''), escapeHTML(n.client || ''), escapeHTML(n.hours || n.amount || ''), escapeHTML(n.justification || n.note || ''),
+        pill(n.status || 'Pendiente'), escapeHTML(n.date || ''), escapeHTML(n.quicker || n.name || ''), escapeHTML(n.cedula || ''), escapeHTML(n.client || ''),
+        `<strong>${escapeHTML(String(n.hours || n.amount || ''))}${n.hours ? ' h' : ''}</strong>${n.subtype ? `<br><span class="fp-sub">${escapeHTML(n.subtype)}</span>` : ''}`,
+        escapeHTML(n.justification || n.note || ''),
         `<div class="row-actions">${iconAction('Ver detalle', 'viewOvertime', n.id, 'ti-eye')}${iconAction('Aprobar', 'approveOvertime', n.id, 'ti-circle-check')}${iconAction('Rechazar', 'rejectOvertime', n.id, 'ti-circle-x')}${canDeleteSolicitudes() ? iconAction('Eliminar', 'deleteOvertime', n.id, 'ti-trash') : ''}</div>`
       ]));
       body = table(['Estado', 'Fecha', 'Nombre', 'Cédula', 'Cliente', 'Horas', 'Justificación', 'Acciones'], rows);
@@ -4709,8 +4769,8 @@ function toggleMode(forceDark) {
       ]));
       body = table(['Tipo', 'Estado', 'Fecha', 'Nombre', 'Cédula', 'Cliente', 'Punto', 'Valor', 'Acciones'], rows);
     } else {
-      const filterTipo = state.prefs.novedadesFilterTipo || 'todos';
-      const filterGestion = state.prefs.novedadesFilterGestion || 'todos';
+      const filterTipo = novFilter('Tipo');
+      const filterGestion = novFilter('Gestion');
       const filtered = allGeneral.filter(n => {
         const tipoOk = filterTipo === 'todos' || (n.type || '').toLowerCase() === filterTipo.toLowerCase();
         const gestionOk = filterGestion === 'todos' || (n.gestionStatus || 'Pendiente').toLowerCase() === filterGestion.toLowerCase();
@@ -6328,7 +6388,7 @@ function toggleMode(forceDark) {
     if (existing) return existing;
     const item = state.availabilities.find(d => d.id === avId);
     if (!item) return null;
-    const mins = minutesBetween(item.plannedEnd, item.realEnd);
+    const mins = minutesBetween(shiftPlanned(item).end, item.realEnd);
     const created = {
       id: uid('OTR'),
       type: 'Hora extra',
@@ -7602,7 +7662,8 @@ function toggleMode(forceDark) {
       return found ? row[found] : '';
     };
     const planned = String(get('Horario', 'HORARIO', 'schedule') || '');
-    const [start = '', end = ''] = planned.split('-').map(v => v.trim());
+    // Admite "09:00 - 18:00", "09:00 A 18:00", "9:00 a 18:00", etc.
+    const [start = '', end = ''] = parseScheduleRange(planned);
     const contractType = get('Tipo de contrato', 'TIPO DE CONTRATO', 'contractType') || 'Fijo';
     const item = {
       id: uid('DIS'),
@@ -9153,19 +9214,19 @@ function toggleMode(forceDark) {
       saveState('Filtro de zona aplicado');
     }
     if (event.target.matches('[data-novedades-filter-mode]')) {
-      state.prefs.novedadesFilterMode = event.target.value;
+      setNovFilter('Mode', event.target.value);
       saveState('Filtro actualizado');
     }
     if (event.target.matches('[data-novedades-filter-date]')) {
-      state.prefs.novedadesFilterDate = event.target.value || new Date().toISOString().slice(0, 10);
+      setNovFilter('Date', event.target.value || new Date().toISOString().slice(0, 10));
       saveState('Fecha de filtro actualizada');
     }
     if (event.target.matches('[data-novedades-filter-tipo]')) {
-      state.prefs.novedadesFilterTipo = event.target.value;
+      setNovFilter('Tipo', event.target.value);
       saveState('Filtro de tipo actualizado');
     }
     if (event.target.matches('[data-novedades-filter-gestion]')) {
-      state.prefs.novedadesFilterGestion = event.target.value;
+      setNovFilter('Gestion', event.target.value);
       saveState('Filtro de gestión actualizado');
     }
     if (event.target.matches('[data-malla-view-date]')) {
