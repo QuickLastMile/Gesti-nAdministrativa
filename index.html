@@ -4876,6 +4876,13 @@ function toggleMode(forceDark) {
     const nums = (state.quickers || []).map(q => { const m = String(q.id || '').match(/(\d+)\s*$/); return m ? Number(m[1]) : 0; });
     return `Q-${String((nums.length ? Math.max(...nums) : 0) + 1).padStart(3, '0')}`;
   }
+  function quickerDisplayCode(q) {
+    const code = String(q?.codigo || '').trim();
+    if (/^Q-[A-Z0-9]{3,8}$/i.test(code)) return code.toUpperCase();
+    const cedula = String(q?.cedula || '').replace(/\D/g, '');
+    if (cedula) return `Q-${cedula.slice(-6).padStart(6, '0')}`;
+    return `Q-${String(q?.id || '').replace(/-/g, '').slice(0, 6).toUpperCase()}`;
+  }
   function daysToExpiry(date) { if (!date) return null; return Math.ceil((new Date(date) - new Date()) / 86400000); }
   function quickerDocState(q) {
     const docs = q.documents || {};
@@ -4928,7 +4935,7 @@ function toggleMode(forceDark) {
       const ds = quickerDocState(q);
       const active = (q.status || 'Activo') === 'Activo';
       return row([
-        escapeHTML(q.id), escapeHTML(q.name), escapeHTML(q.client || '—'), escapeHTML(q.coordinator || q.point || '—'),
+        escapeHTML(quickerDisplayCode(q)), escapeHTML(q.name), escapeHTML(q.client || '—'), escapeHTML(q.coordinator || q.point || '—'),
         `<span class="b ${ds.cls}">${ds.label}</span>`,
         quickerStatusBadge(q.status),
         `<div class="row-actions">${iconAction('Historial de marcaciones', 'quickerMarcaciones', q.id, 'ti-clock-hour-4')}${iconAction('Carnet', 'quickerCarnet', q.id, 'ti-id-badge-2')}${iconAction('Documentación', 'quickerDocs', q.id, 'ti-files')}${iconAction(active ? 'Inactivar' : 'Activar', active ? 'quickerDeactivate' : 'quickerActivate', q.id, active ? 'ti-user-off' : 'ti-user-check')}${iconAction('Editar', 'editMessenger', q.id, 'ti-pencil')}</div>`
@@ -4937,7 +4944,7 @@ function toggleMode(forceDark) {
 
     panel('quickers', 'Quickers', 'Hoja base de mensajeros: datos, operación, documentación y estado.',
       `<button class="dev-btn primary" data-open="messengerUser"><i class="ti ti-user-plus"></i> Registrar Quicker</button><button class="dev-btn" data-open-messenger-qr><i class="ti ti-qrcode"></i> Compartir app</button><button class="dev-btn" data-export="quickers"><i class="ti ti-download"></i> Exportar</button>`,
-      `${kpisHTML}${filtersHTML}${rows.length ? table(['ID', 'Nombre', 'Operación', 'Coordinador', 'Documentos', 'Estado', 'Acciones'], rows) : '<div class="dropzone" style="text-align:center"><strong>No hay quickers</strong><span class="fp-sub">Registra un mensajero o ajusta los filtros.</span></div>'}`
+      `${kpisHTML}${filtersHTML}${rows.length ? table(['Código', 'Nombre', 'Operación', 'Coordinador', 'Documentos', 'Estado', 'Acciones'], rows) : '<div class="dropzone" style="text-align:center"><strong>No hay quickers</strong><span class="fp-sub">Registra un mensajero o ajusta los filtros.</span></div>'}`
     );
   }
 
@@ -9917,7 +9924,7 @@ function toggleMode(forceDark) {
     },
     quickers: {
       tabla: 'quickers', lista: () => state.quickers,
-      fila: q => ({ codigo: nulo(q.codigo || q.id), cedula: q.cedula, nombre: q.name,
+      fila: q => ({ codigo: quickerDisplayCode(q), cedula: q.cedula, nombre: q.name,
                     telefono: nulo(q.phone), email: nulo(q.email), ciudad: nulo(q.city),
                     cliente: nulo(q.client), punto: nulo(q.point), puntos: q.points || [],
                     placa: nulo(q.plate), cargo: nulo(q.cargo), fecha_ingreso: nulo(q.dateIngress),

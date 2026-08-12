@@ -75,7 +75,7 @@ Deno.serve(async (request) => {
     }
 
     const quicker = {
-      usuario_id: authId, codigo: cedula, cedula, nombre: name,
+      usuario_id: authId, codigo: `Q-${cedula.replace(/\D/g, '').slice(-6).padStart(6, '0')}`, cedula, nombre: name,
       telefono: body.telefono || null, email, ciudad: body.ciudad || null,
       cliente: body.cliente || null, punto: body.punto || null, puntos: body.puntos || [],
       placa: body.placa || null, cargo: body.cargo || 'Quicker mensajero',
