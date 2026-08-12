@@ -9668,6 +9668,175 @@ function toggleMode(forceDark) {
     try { await supa()?.auth.signOut(); } catch (e) {}
   }
 
+  // ════════════════════ LECTURA DE DATOS DESDE SUPABASE ════════════════════
+  // Traduce las tablas de Supabase al objeto "state" que ya usa toda la
+  // interfaz. Así se cambia la base de datos sin reescribir las pantallas.
+
+  const hhmm = v => (v ? String(v).slice(0, 5) : '');
+
+  function mallaDesdeFila(f) {
+    return {
+      id: f.id, date: f.fecha, client: f.cliente, point: f.punto || '', city: f.ciudad || '',
+      quickerId: f.quicker_id, quicker: f.quicker || '', cedula: f.cedula || '',
+      plannedStart: hhmm(f.hora_inicio), plannedEnd: hhmm(f.hora_fin),
+      schedule: `${hhmm(f.hora_inicio)} - ${hhmm(f.hora_fin)}`,
+      realStart: hhmm(f.real_inicio), realEnd: hhmm(f.real_fin),
+      lunchStart: hhmm(f.almuerzo_inicio), lunchEnd: hhmm(f.almuerzo_fin),
+      status: f.estado || 'Programado',
+      contractType: f.tipo_contrato || 'Fijo', managementType: f.tipo_gestion || 'Fijo',
+      quickGoId: f.quick_go_id || '', quickGoStatus: f.quick_go_estado || '',
+      observations: f.observaciones || '', noveltyType: f.novedad_tipo || '',
+      approval: f.aprobacion || 'Pendiente',
+      evidencePhoto: '', custom: f.extra || {}
+    };
+  }
+
+  function quickerDesdeFila(f) {
+    return {
+      id: f.id, codigo: f.codigo, cedula: f.cedula, name: f.nombre,
+      phone: f.telefono || '', email: f.email || '', city: f.ciudad || '',
+      client: f.cliente || '', point: f.punto || '', points: f.puntos || [],
+      plate: f.placa || '', cargo: f.cargo || '', dateIngress: f.fecha_ingreso || '',
+      status: f.estado || 'Activo',
+      paymentEnabled: f.pagos_habilitados ? 'Si' : 'No',
+      paymentTypes: f.tipos_pago || [],
+      documents: f.documentos || {}, usuarioId: f.usuario_id
+    };
+  }
+
+  function usuarioDesdeFila(f) {
+    return {
+      id: f.id, name: f.nombre, username: f.usuario, email: f.usuario,
+      profile: f.perfil, client: f.cliente || '', scope: f.cliente || 'Global',
+      projects: f.clientes || [], phone: f.telefono || '', cedula: f.cedula || '',
+      avatarUrl: f.avatar_url || '', carnet: f.carnet || {},
+      status: f.activo ? 'Activo' : 'Inactivo'
+    };
+  }
+
+  // Carga todo el estado desde Supabase. Cada consulta va en paralelo y una
+  // que falle no tumba las demás: se reporta y el resto sigue disponible.
+  async function cargarDesdeSupabase() {
+    const c = supa();
+    if (!c) return { ok: false, fallas: ['sin conexión'] };
+
+    const pedir = (tabla, opciones = {}) => {
+      let q = c.from(tabla).select(opciones.select || '*');
+      if (opciones.orden) q = q.order(opciones.orden.campo, { ascending: !!opciones.orden.asc });
+      if (opciones.limite) q = q.limit(opciones.limite);
+      return q.then(r => ({ tabla, datos: r.data || [], error: r.error }));
+    };
+
+    const consultas = [
+      pedir('clientes'), pedir('puntos'), pedir('quickers'), pedir('perfiles'),
+      pedir('mallas', { orden: { campo: 'fecha', asc: false }, limite: 4000 }),
+      pedir('evidencias', { orden: { campo: 'registrado_en', asc: false }, limite: 1500 }),
+      pedir('novedades', { orden: { campo: 'fecha', asc: false }, limite: 2000 }),
+      pedir('adicionales', { orden: { campo: 'fecha', asc: false }, limite: 2000 }),
+      pedir('gestion_horas_extras'), pedir('gestion_retrasos'),
+      pedir('zonas_mapa'), pedir('puntos_mapa'),
+      pedir('v_ubicaciones_hoy'), pedir('notificaciones', { limite: 300 }),
+      pedir('tickets', { orden: { campo: 'creado_en', asc: false }, limite: 800 }),
+      pedir('hsq_publicaciones', { orden: { campo: 'creado_en', asc: false }, limite: 300 }),
+      pedir('configuracion')
+    ];
+
+    const res = {};
+    const fallas = [];
+    (await Promise.all(consultas)).forEach(r => {
+      if (r.error) fallas.push(`${r.tabla}: ${r.error.message}`);
+      res[r.tabla] = r.datos;
+    });
+
+    // ── Operaciones con sus puntos anidados, como espera la interfaz ──
+    const puntosPorCliente = {};
+    (res.puntos || []).forEach(p => {
+      (puntosPorCliente[p.cliente] = puntosPorCliente[p.cliente] || [])
+        .push({ name: p.nombre, address: p.direccion || '', city: p.ciudad || '', lat: p.lat, lng: p.lng });
+    });
+    state.clients = (res.clientes || []).map(c2 => ({
+      id: c2.id, name: c2.nombre, idProyecto: c2.id_proyecto || '',
+      lunch: c2.almuerzo ? 'Si' : 'No', lat: c2.lat, lng: c2.lng,
+      paymentTypes: c2.tipos_pago || [], points: puntosPorCliente[c2.nombre] || []
+    }));
+
+    state.quickers      = (res.quickers || []).map(quickerDesdeFila);
+    state.users         = (res.perfiles || []).map(usuarioDesdeFila);
+    state.availabilities= (res.mallas || []).map(mallaDesdeFila);
+
+    state.evidences = (res.evidencias || []).map(e => ({
+      id: e.id, availability: e.malla_id, quicker: e.quicker || '', stage: e.etapa || '',
+      type: e.tipo || 'Foto/GPS', status: 'Cargada', url: e.foto_url || '',
+      address: e.direccion || '', gps: (e.lat && e.lng) ? `${e.lat}, ${e.lng}` : '',
+      time: e.registrado_en || ''
+    }));
+
+    state.novelties = (res.novedades || []).map(n => ({
+      id: n.id, type: n.tipo, subtype: n.subtipo || '', origin: n.origen || '',
+      ref: n.malla_id || '', date: n.fecha, client: n.cliente || '', point: n.punto || '',
+      quicker: n.quicker || '', cedula: n.cedula || '', oasisId: n.oasis_id || '',
+      severity: n.severidad || 'Media', gestionStatus: n.estado_gestion || 'Pendiente',
+      status: n.estado_gestion || 'Pendiente', gestionOwner: n.responsable || '',
+      note: n.nota || '', formData: n.datos || {}
+    }));
+
+    state.parkingReports = (res.adicionales || []).map(a => ({
+      id: a.id, availability: a.malla_id || '', type: a.tipo, date: a.fecha,
+      client: a.cliente || '', point: a.punto || '', quicker: a.quicker || '',
+      cedula: a.cedula || '', amount: a.valor, note: a.nota || '',
+      url: a.soporte_url || '', address: a.direccion || '', status: a.estado
+    }));
+
+    // Horas extras: la vista las calcula, aquí solo se traducen
+    const extras = await c.from('v_horas_extras').select('*').order('fecha', { ascending: false }).limit(2000);
+    if (extras.error) fallas.push(`v_horas_extras: ${extras.error.message}`);
+    state.overtimeReports = (extras.data || []).map(h => ({
+      id: h.malla_id, ref: h.malla_id, type: 'Hora extra', date: h.fecha,
+      client: h.cliente || '', point: h.punto || '', quicker: h.quicker || '',
+      cedula: h.cedula || '', hours: h.horas, minutos: h.minutos,
+      subtype: `${Math.floor(h.minutos / 60)}h ${h.minutos % 60}m`,
+      justification: h.justificacion || `Salida real ${hhmm(h.real_fin)} vs programada ${hhmm(h.fin_programado)}`,
+      status: h.estado || 'Pendiente', source: 'supabase'
+    }));
+
+    state.mapZones = (res.zonas_mapa || []).map(z => ({
+      id: z.id, name: z.nombre, operation: z.cliente || '', coordinator: z.coordinador || '',
+      color: z.color, polygons: z.poligonos || []
+    }));
+    state.mapPoints = (res.puntos_mapa || []).map(p => ({
+      id: p.id, operation: p.cliente || '', name: p.nombre,
+      address: p.direccion || '', lat: p.lat, lng: p.lng
+    }));
+    state.locationPings = (res['v_ubicaciones_hoy'] || []).map(u => ({
+      quicker: u.quicker || '', client: u.cliente || '', point: u.punto || '',
+      lat: u.lat, lng: u.lng, time: u.registrado_en, day: new Date().toISOString().slice(0, 10)
+    }));
+    state.notifications = (res.notificaciones || []).map(n => ({
+      id: n.id, to: state.session?.name || '', text: n.texto,
+      read: n.leida, at: n.creado_en, ticketId: n.referencia || null
+    }));
+    state.tickets = (res.tickets || []).map(t => ({
+      id: t.id, title: t.titulo, type: t.tipo, description: t.descripcion || '',
+      priority: t.prioridad, client: t.cliente || '', assignees: t.responsables || [],
+      gestion: t.gestion || {}, evidence: t.adjuntos || [], comments: t.comentarios || [],
+      history: t.historial || [], createdByName: t.creado_por_nombre || '',
+      createdAt: t.creado_en, dueDate: t.vence_el || ''
+    }));
+    state.hsqPublications = (res.hsq_publicaciones || []).map(p => ({
+      id: p.id, kind: p.clase, title: p.titulo || '', body: p.cuerpo || '',
+      link: p.enlace || '', urgency: p.urgencia || '', projects: p.clientes || [],
+      allow: p.permite || {}, createdAt: p.creado_en, createdByName: p.creado_por_nombre || '',
+      acks: {}
+    }));
+
+    // Preferencias guardadas en la tabla de configuración
+    (res.configuracion || []).forEach(fila => {
+      if (fila.clave === 'prefs' && fila.valor) state.prefs = { ...state.prefs, ...fila.valor };
+    });
+
+    return { ok: fallas.length === 0, fallas };
+  }
+
   // El aviso va dentro de la tarjeta: la pantalla de ingreso se dibuja
   // por encima del toast, así que un toast aquí no se vería.
   function errorIngreso(mensaje) {
@@ -9707,8 +9876,18 @@ function toggleMode(forceDark) {
     errorIngreso('');
     state.session = r.sesion;
     document.getElementById('login-pass').value = '';
+
+    if (boton) { boton.disabled = true; boton.innerHTML = 'Cargando datos...'; }
+    const carga = await cargarDesdeSupabase().catch(e => ({ ok: false, fallas: [e.message] }));
+    if (boton) { boton.disabled = false; boton.innerHTML = textoOriginal; }
+
     applySession();
+    renderCurrentModule();
     toast(`Bienvenido ${r.sesion.name}`);
+    if (!carga.ok) {
+      console.warn('Tablas que no cargaron:', carga.fallas);
+      toast(`Algunos datos no cargaron (${carga.fallas.length}). Revisa la consola.`);
+    }
   });
 
   // Menú de usuario / cerrar sesión
@@ -9744,7 +9923,15 @@ function toggleMode(forceDark) {
   // El ingreso ahora lo valida Supabase: no se restaura ninguna sesión local.
   state.session = null;
   applySession();
-  restaurarSesionSupabase().then(ok => { if (ok) applySession(); }).catch(() => {});
+  restaurarSesionSupabase()
+    .then(async ok => {
+      if (!ok) return;
+      applySession();
+      const carga = await cargarDesdeSupabase().catch(e => ({ ok: false, fallas: [e.message] }));
+      renderCurrentModule();
+      if (!carga.ok) console.warn('Tablas que no cargaron:', carga.fallas);
+    })
+    .catch(() => {});
   // Restaurar sidebar colapsado
   if (localStorage.getItem('quick_sidebar_collapsed') === '1') {
     const sb = document.getElementById('sidebar');
