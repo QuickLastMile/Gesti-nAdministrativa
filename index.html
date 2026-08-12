@@ -11,13 +11,9 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-storage-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.47.10/dist/umd/supabase.js"></script>
-<script src="quick_firebase_config.js"></script>
 <script src="quick_supabase_config.js"></script>
 <style>
   /* ───── RESET & BASE ───── */
@@ -1815,7 +1811,7 @@
         <div class="card">
           <div class="card-head"><div class="card-title">Infraestructura GCP</div><div class="card-sub">Piloto: 2 clientes · 20 coordinadores · 200 Quickers</div></div>
           <div class="bar-list">
-            <div class="bar-row"><span class="bar-lbl">Frontend</span><div style="flex:1;font-size:11px;color:var(--text-2)">Firebase Hosting / Cloud Run + CDN — Portal admin, portal cliente, PWA Quicker</div></div>
+            <div class="bar-row"><span class="bar-lbl">Frontend</span><div style="flex:1;font-size:11px;color:var(--text-2)">Aplicación web + Supabase — Portal admin, portal cliente, PWA Quicker</div></div>
             <div class="bar-row"><span class="bar-lbl">Backend/API</span><div style="flex:1;font-size:11px;color:var(--text-2)">Cloud Run — API containerizada, escalable por ambiente</div></div>
             <div class="bar-row"><span class="bar-lbl">Base de datos</span><div style="flex:1;font-size:11px;color:var(--text-2)">Cloud SQL PostgreSQL + PostGIS — 2 vCPU, 8GB RAM, 100-200GB SSD</div></div>
             <div class="bar-row"><span class="bar-lbl">Tiempo real</span><div style="flex:1;font-size:11px;color:var(--text-2)">Memorystore Redis + WebSockets — Estado operativo, sesiones, tableros en vivo</div></div>
@@ -1982,7 +1978,6 @@ function toggleMode(forceDark) {
 /* ───── MVP LOCAL: DATA, CRUD, STATE & EXPORTS ───── */
 (() => {
   const STORAGE_KEY = 'quick_lastmile_mvp_state_v1';
-  const FIREBASE_SETTINGS = window.QUICK_FIREBASE_CONFIG || {};
   const DEFAULT_HSQ_TYPES = [
     { key: 'capacitacion', label: 'Capacitación', icon: 'ti-school', fields: ['cover', 'body', 'link', 'projects'], evidence: true, comment: true, error: true, enabled: true },
     { key: 'comparendo', label: 'Alerta de comparendo', icon: 'ti-traffic-cone', fields: ['projects', 'quicker', 'body', 'valor', 'infraction', 'dateImposicion', 'urgency', 'doc'], evidence: true, comment: true, error: false, enabled: true },
@@ -1998,7 +1993,7 @@ function toggleMode(forceDark) {
   let cloudHydrated = false;
   let lastRemoteStateHash = '';
   let cloudSaveTimer = null;
-  let cloudStatus = FIREBASE_SETTINGS.enabled ? 'Conectando Firebase...' : 'Modo local';
+  let cloudStatus = 'Conectando Supabase...';
   let adminLeafletMap = null;
   let adminMapView = null;
   let adminOverlayLayer = null;
@@ -2274,7 +2269,6 @@ function toggleMode(forceDark) {
       updateNotifDot();
     }
     if (!applyingRemoteState && options.syncCloud !== false) {
-      scheduleCloudSave();
       // Envía a Supabase únicamente las filas que cambiaron
       if (typeof programarSync === 'function') programarSync();
     }
@@ -3261,15 +3255,6 @@ function toggleMode(forceDark) {
     if (kind === 'realStart') { d.status = 'Programado'; d.evidencePhoto = ''; }
     else if (d.realStart) d.status = 'En turno';
     state.evidences = (state.evidences || []).filter(e => !(e.availability === availabilityId && stageRe.test(e.stage || '')));
-    // Borrar del documento protegido en la nube
-    const docId = 'MARC-' + availabilityId;
-    if (marcacionesCache[docId]) {
-      const m = { ...marcacionesCache[docId] };
-      m[kind] = '';
-      if (m.evidences) { Object.keys(m.evidences).forEach(k => { if (stageRe.test(m.evidences[k]?.stage || k.replace(/_/g, ' '))) delete m.evidences[k]; }); }
-      marcacionesCache[docId] = m;
-      if (cloudDb) cloudDb.collection('quick_media').doc(docId).set(m).catch(() => {});
-    }
     log('Marcación', `Eliminó marcación de ${label}`, `${d.quicker} · ${d.date}`);
     saveState(`Marcación de ${label} eliminada`);
     if (quickerId) openQuickerMarcaciones(quickerId);
@@ -5561,55 +5546,45 @@ function toggleMode(forceDark) {
     });
   }
 
-  // La matriz de activos se guarda en su propio documento (evita el límite de 1MB del estado principal)
-  function saveMatrixCloud() {
-    if (!cloudDb) { toast('Sin conexión a Firebase — la matriz quedó solo en este equipo'); return; }
-    try {
-      // Guardar solo campos normalizados (sin "raw") para evitar valores que Firestore rechace
-      const rows = (state.assetMatrix || []).map(({ raw, ...r }) => {
-        // Convertir cualquier valor no primitivo a string para garantizar compatibilidad
-        const clean = {};
-        Object.entries(r).forEach(([k, v]) => {
-          if (v === undefined || v === null) clean[k] = '';
-          else if (typeof v === 'object') clean[k] = JSON.stringify(v);
-          else clean[k] = v;
-        });
-        return clean;
-      });
-      const size = JSON.stringify(rows).length;
-      if (size > 950000) { toast('Matriz muy grande para la nube (' + Math.round(size/1000) + 'KB). Intenta reducir columnas.'); return; }
-      cloudDb.collection('quick_matrix').doc('data')
-        .set({ rows, at: Date.now(), by: state.session?.name || '' })
-        .then(() => toast('✓ Matriz sincronizada con la nube (' + rows.length + ' colaboradores)'))
-        .catch(err => { toast('⚠ Error al subir la matriz: ' + err.message); console.error('saveMatrixCloud:', err); });
-    } catch (e) { toast('Error preparando la matriz: ' + e.message); }
+  // La matriz de activos se guarda como JSON en Supabase.
+  async function saveMatrixCloud() {
+    const c = supa();
+    if (!c) { toast('Sin conexión a Supabase — la matriz quedó solo en este equipo'); return; }
+    const rows = (state.assetMatrix || []).map(({ raw, ...r }) => ({ ...r }));
+    const { error } = await c.from('matriz_activos').upsert({ clave: 'principal', filas: rows, actualizado_en: new Date().toISOString() }, { onConflict: 'clave' });
+    if (error) { toast('Error al subir la matriz: ' + error.message); return; }
+    toast('✓ Matriz sincronizada con Supabase (' + rows.length + ' colaboradores)');
   }
-  function loadMatrixCloud() {
-    if (!cloudDb) return;
-    cloudDb.collection('quick_matrix').doc('data').onSnapshot(snap => {
-      if (!snap.exists) return;
-      const rows = snap.data()?.rows;
-      if (Array.isArray(rows) && rows.length) {
-        // Restaurar campo raw vacío para compatibilidad con exportación
-        const normalized = rows.map(r => ({ ...r, raw: r.raw ? r.raw : {} }));
-        matrixCache = normalized;
-        state.assetMatrix = normalized;
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-        if (activeModule === 'matriz') renderMatriz();
-      }
-    }, err => console.warn('loadMatrixCloud error:', err.message));
+  async function loadMatrixCloud() {
+    const c = supa();
+    if (!c) return;
+    const { data, error } = await c.from('matriz_activos').select('filas').eq('clave', 'principal').maybeSingle();
+    if (error || !Array.isArray(data?.filas)) return;
+    const normalized = data.filas.map(r => ({ ...r, raw: r.raw || {} }));
+    matrixCache = normalized;
+    state.assetMatrix = normalized;
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    if (activeModule === 'matriz') renderMatriz();
   }
 
-  // Capa de medios sobre Firestore (alternativa gratuita a Storage)
+  // Capa de medios sobre Supabase Storage.
   const mediaCache = {};
-  function uploadMedia(id, dataUrl, cb) {
-    if (!cloudDb || !dataUrl) { cb && cb(''); return; }
-    if (dataUrl.length > 980000) { toast('Archivo muy grande; quedó solo en este equipo'); cb && cb(''); return; }
+  async function uploadMedia(id, dataUrl, cb) {
+    const c = supa();
+    if (!c || !dataUrl) { cb && cb(''); return; }
     try {
-      cloudDb.collection('quick_media').doc(id).set({ data: dataUrl, at: Date.now(), by: state.session?.name || '' })
-        .then(() => { mediaCache[id] = dataUrl; cb && cb(id); })
-        .catch(() => cb && cb(''));
-    } catch (e) { cb && cb(''); }
+      const match = String(dataUrl).match(/^data:([^;]+);base64,(.+)$/);
+      if (!match) throw new Error('Formato de archivo no válido');
+      const bytes = Uint8Array.from(atob(match[2]), value => value.charCodeAt(0));
+      const ext = (match[1].split('/')[1] || 'bin').replace(/[^a-z0-9]/gi, '');
+      const path = `${state.session?.id || 'usuario'}/${Date.now()}-${String(id).replace(/[^a-zA-Z0-9_-]/g, '_')}.${ext}`;
+      const { error } = await c.storage.from(window.QUICK_SUPABASE_CONFIG.bucket).upload(path, bytes, { contentType: match[1], upsert: false });
+      if (error) throw error;
+      const { data } = c.storage.from(window.QUICK_SUPABASE_CONFIG.bucket).getPublicUrl(path);
+      const url = data.publicUrl || '';
+      mediaCache[url] = url;
+      cb && cb(url);
+    } catch (e) { console.error(e); toast('No se pudo subir el archivo: ' + e.message); cb && cb(''); }
   }
   function mediaAttr(item) {
     const local = item && (item.dataUrl || item.photoData || item.url);
@@ -5619,16 +5594,12 @@ function toggleMode(forceDark) {
   }
   function hasMedia(item) { return !!(item && (item.dataUrl || item.photoData || item.url || item.mediaId)); }
   function loadMediaImages() {
-    if (!cloudDb) return;
     document.querySelectorAll('[data-media-id]:not([data-mloaded])').forEach(el => {
       const id = el.dataset.mediaId;
       const apply = data => { if (el.tagName === 'IMG') el.src = data; else if (el.tagName === 'A') el.href = data; el.dataset.mloaded = '1'; };
+      if (/^https?:/i.test(id)) { apply(id); return; }
       if (mediaCache[id]) { apply(mediaCache[id]); return; }
-      el.dataset.mloaded = 'pending';
-      cloudDb.collection('quick_media').doc(id).get().then(s => {
-        const d = s.data();
-        if (d && d.data) { mediaCache[id] = d.data; apply(d.data); }
-      }).catch(() => {});
+      el.dataset.mloaded = '1';
     });
   }
 
@@ -9848,6 +9819,7 @@ function toggleMode(forceDark) {
 
     // Punto de partida para detectar cambios: lo recién cargado ya está guardado
     tomarInstantanea();
+    await loadMatrixCloud();
 
     return { ok: fallas.length === 0, fallas };
   }
@@ -10149,7 +10121,6 @@ function toggleMode(forceDark) {
   }
   renderAll();
   renderCloudStatus();
-  initCloudSync();
 })();
 </script>
 </body>

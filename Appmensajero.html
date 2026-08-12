@@ -7,13 +7,11 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-storage-compat.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.47.10/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js"></script>
   <!-- Detección de rostros para validar la foto de marcación (si no carga, se usa la validación básica) -->
   <script defer src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.13/dist/face-api.js"></script>
-  <script src="quick_firebase_config.js"></script>
+  <script src="quick_supabase_config.js"></script>
   <style>
     :root{--q:#F5C518;--bg:#070707;--card:#15130f;--line:rgba(255,255,255,.12);--text:#fff;--muted:rgba(255,255,255,.62);--ok:#22C55E;--bad:#EF4444;--warn:#F59E0B}
     *{box-sizing:border-box} body{margin:0;min-height:100vh;background:radial-gradient(circle at 90% 0,rgba(245,197,24,.32),transparent 28%),linear-gradient(160deg,#050505,#15110a);font-family:"Aptos Narrow","Abadi","Segoe UI",Arial,sans-serif;color:var(--text)}
@@ -192,34 +190,24 @@
   <script>
     const KEY='quick_lastmile_mvp_state_v1';
     const fallback={users:[{name:'Carlos Mejía',username:'carlos.qk',password:'Mensajero2026!',profile:'Quicker',scope:'Carlos Mejía'}],clients:[{name:'Farmacias Andina',lunch:'Si',lat:4.6872,lng:-74.0488,points:[{name:'Santa Bárbara',address:'Cra 7 #120-20, Bogotá',lat:4.6872,lng:-74.0488}]}],quickers:[{name:'Carlos Mejía',cedula:'1018456789',phone:'3001234567',client:'Farmacias Andina',point:'Santa Bárbara',lat:4.6872,lng:-74.0488,paymentEnabled:'No',paymentTypes:['Parqueaderos']}],availabilities:[{id:'DIS-001',date:'2026-06-17',client:'Farmacias Andina',point:'Santa Bárbara',quicker:'Carlos Mejía',plannedStart:'08:00',plannedEnd:'18:00',realStart:'',realEnd:'',status:'Creado',evidencePhoto:'',custom:{}}],evidences:[],novelties:[],parkingReports:[],locationPings:[],tickets:[],notifications:[],prefs:{}};
-    let state=load(), session=null, current=null, lastGps=null, capturedPhoto='', stream=null, map=null, cloudRef=null, cloudHydrated=false, storage=null, watchId=null, lastPingSave=0;
+    let state=load(), session=null, current=null, lastGps=null, capturedPhoto='', stream=null, map=null, watchId=null, lastPingSave=0, sb=null, realtimeChannel=null;
     function load(){try{return {...fallback,...(JSON.parse(localStorage.getItem(KEY))||{})}}catch{return fallback}}
-    function save(msg){localStorage.setItem(KEY,JSON.stringify(state));touchSess();if(cloudRef&&cloudHydrated)cloudRef.set({state:publicState(),updatedAt:firebase.firestore.FieldValue.serverTimestamp(),updatedBy:session?.username||'mensajero'},{merge:true}).catch(()=>{});if(msg)toast(msg)}
-    function touchSess(){if(session)try{localStorage.setItem('quick_session_v1',JSON.stringify({username:session.username||session.email,at:Date.now()}))}catch(e){}}
-    function restoreSess(){try{const s=JSON.parse(localStorage.getItem('quick_session_v1')||'null');if(s&&(Date.now()-s.at)<900000){const u=(state.users||[]).find(x=>(x.username===s.username||x.email===s.username)&&x.profile==='Quicker');if(u){session=u;touchSess();return true}}}catch(e){}localStorage.removeItem('quick_session_v1');return false}
-    // Quita base64 (dataUrl/photoData) antes de subir a Firestore; conserva las URL de Storage
-    function publicState(){const s=JSON.parse(JSON.stringify({...state,session:null}));
-      if(Array.isArray(s.evidences))s.evidences=s.evidences.map(e=>({...e,photoData:null,dataUrl:null}));
-      if(Array.isArray(s.parkingReports))s.parkingReports=s.parkingReports.map(p=>({...p,photoData:null,dataUrl:null}));
-      if(Array.isArray(s.tickets))s.tickets=s.tickets.map(t=>({...t,evidence:(t.evidence||[]).map(e=>({...e,dataUrl:null}))}));
-      if(Array.isArray(s.quickers))s.quickers=s.quickers.map(q=>({...q,documents:Object.fromEntries(Object.entries(q.documents||{}).map(([k,v])=>[k,{...v,dataUrl:null}]))}));
-      if(Array.isArray(s.hsqPublications))s.hsqPublications=s.hsqPublications.map(p=>({...p,cover:p.cover?{...p.cover,dataUrl:null}:p.cover,doc:p.doc?{...p.doc,dataUrl:null}:p.doc}));
-      return s;}
-    function initCloud(){try{const cfg=window.QUICK_FIREBASE_CONFIG;if(!cfg?.enabled||!window.firebase)return;if(!firebase.apps.length)firebase.initializeApp(cfg.firebaseConfig);try{if(firebase.storage)storage=firebase.storage()}catch{}cloudRef=firebase.firestore().collection(cfg.collection||'quick_lastmile').doc(cfg.documentId||'platform_state');cloudRef.onSnapshot(s=>{if(s.metadata?.fromCache&&!cloudHydrated)return;if(!s.exists){cloudHydrated=true;save();return}if(s.metadata?.hasPendingWrites)return;const remote=s.data()?.state;if(!remote)return;const keep=session;
-      // Conservar marcaciones locales que el estado remoto aún no tiene (evita que un snapshot viejo las borre)
-      const myMarks={};(state.availabilities||[]).forEach(d=>{if(d.realStart||d.realEnd||d.lunchStart||d.lunchEnd)myMarks[d.id]={date:d.date,quicker:d.quicker,realStart:d.realStart,realEnd:d.realEnd,lunchStart:d.lunchStart,lunchEnd:d.lunchEnd,status:d.status}});
-      state={...fallback,...remote};
-      // Solo se reponen marcaciones al turno de su MISMA fecha y mensajero (nunca clonar entre días)
-      (state.availabilities||[]).forEach(d=>{const m=myMarks[d.id];if(!m)return;if(m.date&&d.date&&m.date!==d.date)return;if(m.quicker&&d.quicker&&m.quicker!==d.quicker)return;['realStart','realEnd','lunchStart','lunchEnd'].forEach(k=>{if(m[k]&&!d[k])d[k]=m[k]});if(m.realStart&&(!d.status||d.status==='Creado'))d.status=m.status||d.status});
-      localStorage.setItem(KEY,JSON.stringify(state));session=keep;cloudHydrated=true;if(session)renderHome(false)})}catch{}}
+    function save(msg){localStorage.setItem(KEY,JSON.stringify(state));if(msg)toast(msg)}
+    function supa(){if(sb)return sb;const c=window.QUICK_SUPABASE_CONFIG;if(!c?.enabled||!window.supabase)return null;sb=window.supabase.createClient(c.url,c.publishableKey,{auth:{persistSession:true,autoRefreshToken:true,storageKey:'quick_mensajero_supabase'}});return sb}
+    const hhmm=v=>v?String(v).slice(0,5):'';
+    function mallaDesdeFila(f){return{id:f.id,date:f.fecha,client:f.cliente||'',point:f.punto||'',city:f.ciudad||'',quickerId:f.quicker_id,quicker:f.quicker||session?.name||'',cedula:f.cedula||'',plannedStart:hhmm(f.hora_inicio),plannedEnd:hhmm(f.hora_fin),realStart:hhmm(f.real_inicio),realEnd:hhmm(f.real_fin),lunchStart:hhmm(f.almuerzo_inicio),lunchEnd:hhmm(f.almuerzo_fin),status:f.estado||'Programado',evidencePhoto:'',custom:f.extra||{}}}
+    async function cargarSupabase(){const c=supa();if(!c||!session)return false;const q=(state.quickers||[]).find(x=>x.usuarioId===session.id||x.cedula===session.cedula||x.email===session.email);const filtro=q?.id?['quicker_id',q.id]:['quicker',session.name];let mq=c.from('mallas').select('*').eq(filtro[0],filtro[1]).order('fecha',{ascending:false}).limit(180);const [{data:mallas,error:me},{data:evidencias},{data:adicionales},{data:pubs},{data:cfg}]=await Promise.all([mq,c.from('evidencias').select('*').order('registrado_en',{ascending:false}).limit(300),c.from('adicionales').select('*').order('fecha',{ascending:false}).limit(200),c.from('hsq_publicaciones').select('*').order('creado_en',{ascending:false}).limit(100),c.from('configuracion').select('*')]);if(me)throw me;state.availabilities=(mallas||[]).map(mallaDesdeFila);state.evidences=(evidencias||[]).map(e=>({id:e.id,availability:e.malla_id,quicker:e.quicker||session.name,stage:e.etapa||'',type:e.tipo||'Foto/GPS',status:'Cargada',url:e.foto_url||'',address:e.direccion||'',gps:e.lat&&e.lng?`${e.lat}, ${e.lng}`:'',time:e.registrado_en||''}));state.parkingReports=(adicionales||[]).map(a=>({id:a.id,availability:a.malla_id||'',type:a.tipo,quicker:a.quicker||'',client:a.cliente||'',point:a.punto||'',amount:a.valor,note:a.nota||'',url:a.soporte_url||'',status:a.estado||'Pendiente aprobación',time:a.registrado_en||a.fecha}));state.hsqPublications=(pubs||[]).map(p=>({id:p.id,kind:p.clase,title:p.titulo||'',body:p.cuerpo||'',link:p.enlace||'',urgency:p.urgencia||'',projects:p.clientes||[],allow:p.permite||{},createdAt:p.creado_en,acks:{}}));(cfg||[]).forEach(x=>{if(x.clave==='prefs'&&x.valor)state.prefs={...state.prefs,...x.valor}});save();return true}
+    async function iniciarSesion(correo,clave){const c=supa();if(!c)throw new Error('Supabase no está configurado');const{data,error}=await c.auth.signInWithPassword({email:correo,password:clave});if(error)throw error;const{data:perfil,error:pe}=await c.from('perfiles').select('*').eq('id',data.user.id).maybeSingle();if(pe||!perfil)throw new Error('No existe un perfil para este usuario');if(perfil.perfil!==window.QUICK_SUPABASE_CONFIG.perfilMensajero){await c.auth.signOut();throw new Error('Este usuario no tiene perfil Quicker')}session={id:perfil.id,name:perfil.nombre,email:data.user.email,username:data.user.email,profile:perfil.perfil,client:perfil.cliente||'',cedula:perfil.cedula||''};state.users=[session];const{data:quickers}=await c.from('quickers').select('*').or(`usuario_id.eq.${perfil.id},email.eq.${data.user.email}`);state.quickers=(quickers||[]).map(q=>({id:q.id,usuarioId:q.usuario_id,name:q.nombre,cedula:q.cedula,email:q.email,phone:q.telefono||'',client:q.cliente||'',point:q.punto||'',points:q.puntos||[],paymentEnabled:q.pagos_habilitados?'Si':'No',paymentTypes:q.tipos_pago||[],documents:q.documentos||{}}));await cargarSupabase();suscribirRealtime();return session}
+    async function restaurarSesion(){const c=supa();if(!c)return false;const{data:{session:s}}=await c.auth.getSession();if(!s)return false;try{await iniciarSesionExistente(s.user);return true}catch(e){await c.auth.signOut();return false}}
+    async function iniciarSesionExistente(user){const c=supa();const{data:p,error}=await c.from('perfiles').select('*').eq('id',user.id).maybeSingle();if(error||!p||p.perfil!==window.QUICK_SUPABASE_CONFIG.perfilMensajero)throw error||new Error('Perfil no autorizado');session={id:p.id,name:p.nombre,email:user.email,username:user.email,profile:p.perfil,client:p.cliente||'',cedula:p.cedula||''};state.users=[session];const{data:qs}=await c.from('quickers').select('*').or(`usuario_id.eq.${p.id},email.eq.${user.email}`);state.quickers=(qs||[]).map(q=>({id:q.id,usuarioId:q.usuario_id,name:q.nombre,cedula:q.cedula,email:q.email,phone:q.telefono||'',client:q.cliente||'',point:q.punto||'',points:q.puntos||[],paymentEnabled:q.pagos_habilitados?'Si':'No',paymentTypes:q.tipos_pago||[],documents:q.documentos||{}}));await cargarSupabase();suscribirRealtime()}
+    function suscribirRealtime(){const c=supa();if(!c||realtimeChannel)return;realtimeChannel=c.channel('mensajero-operacion').on('postgres_changes',{event:'*',schema:'public',table:'mallas'},()=>cargarSupabase().then(()=>renderHome(false)).catch(()=>{})).on('postgres_changes',{event:'*',schema:'public',table:'marcaciones'},()=>cargarSupabase().then(()=>renderHome(false)).catch(()=>{})).subscribe()}
     let uidSeq=0;
     function uid(p){uidSeq=(uidSeq+1)%1000000;return `${p}-${Date.now().toString(36).toUpperCase()}${uidSeq.toString(36).toUpperCase().padStart(4,'0')}${Math.random().toString(36).slice(2,8).toUpperCase()}`}
     let toastTimer=null;function toast(msg,cls,ms){const t=document.getElementById('toast');t.textContent=msg;t.className='toast on'+(cls?' '+cls:'');clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.classList.remove('on'),ms||1900)}
     function today(){return new Date().toISOString().slice(0,10)}
     function locate(cb){if(!navigator.geolocation){cb(null);return}navigator.geolocation.getCurrentPosition(pos=>{lastGps={lat:pos.coords.latitude,lng:pos.coords.longitude,time:new Date().toLocaleString('es-CO')};cb(lastGps)},()=>cb(lastGps),{enableHighAccuracy:true,timeout:9000})}
     function reverseGeocode(lat,lng,cb){fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&accept-language=es`,{headers:{'Accept':'application/json'}}).then(r=>r.json()).then(d=>cb(d.display_name||'')).catch(()=>cb(''))}
-    // Guarda un medio (foto/soporte) como documento Firestore individual (alternativa gratuita a Storage)
-    function uploadMedia(id,dataUrl,cb){if(!cloudRef||!dataUrl){cb('');return}if(dataUrl.length>980000){toast('Archivo muy grande; quedó solo en este equipo');cb('');return}try{firebase.firestore().collection('quick_media').doc(id).set({data:dataUrl,at:Date.now(),by:session?.name||''}).then(()=>cb(id)).catch(()=>cb(''))}catch{cb('')}}
+    async function uploadMedia(id,dataUrl,cb){const c=supa();if(!c||!dataUrl){cb&&cb('');return}try{const m=String(dataUrl).match(/^data:([^;]+);base64,(.+)$/);if(!m)throw new Error('Formato de archivo no válido');const bytes=Uint8Array.from(atob(m[2]),x=>x.charCodeAt(0));const ext=(m[1].split('/')[1]||'bin').replace(/[^a-z0-9]/gi,'');const path=`${session?.id||'anonimo'}/${Date.now()}-${String(id).replace(/[^a-zA-Z0-9_-]/g,'_')}.${ext}`;const{error}=await c.storage.from(window.QUICK_SUPABASE_CONFIG.bucket).upload(path,bytes,{contentType:m[1],upsert:false});if(error)throw error;const{data}=c.storage.from(window.QUICK_SUPABASE_CONFIG.bucket).getPublicUrl(path);cb&&cb(data.publicUrl||'')}catch(e){console.error(e);toast('No se pudo subir el archivo: '+e.message,'bad',4500);cb&&cb('')}}
     // Sella la foto con dirección, fecha y hora
     function stampPhoto(dataUrl,address,stamp,cb){const img=new Image();img.onload=()=>{const c=document.createElement('canvas');const W=Math.min(img.width,1280);const scale=W/img.width;c.width=W;c.height=img.height*scale;const ctx=c.getContext('2d');ctx.drawImage(img,0,0,c.width,c.height);
       const fs=Math.max(13,Math.round(c.width/40));const lh=fs*1.4;const addr=address||'Ubicación no disponible';const maxLen=Math.floor(c.width/(fs*0.56));
@@ -236,7 +224,7 @@
     function myCoordinators(){const cl=myQuicker().client||'';return (state.users||[]).filter(u=>u.profile==='Coordinador'&&u.name&&(!u.client||u.client==='Global'||u.client===cl)).map(u=>u.name)}
 
     document.getElementById('eye').onclick=()=>{const p=document.getElementById('pass'),i=document.querySelector('#eye .ti');const show=p.type==='password';p.type=show?'text':'password';i.className=show?'ti ti-eye-off':'ti ti-eye'}
-    document.getElementById('loginForm').onsubmit=e=>{e.preventDefault();const u=document.getElementById('user').value.trim(),p=document.getElementById('pass').value;const found=(state.users||[]).find(x=>(x.username===u||x.email===u)&&x.password===p&&x.profile==='Quicker');if(!found){toast('Usuario o contraseña incorrectos');return}session=found;touchSess();renderHome();startWatch()}
+    document.getElementById('loginForm').onsubmit=async e=>{e.preventDefault();const u=document.getElementById('user').value.trim().toLowerCase(),p=document.getElementById('pass').value;try{await iniciarSesion(u,p);renderHome();startWatch()}catch(err){toast(err.message||'Usuario o contraseña incorrectos','bad',4500)}}
     function elapsed(start,end){if(!start)return'00:00';const now=end||new Date().toTimeString().slice(0,5);const [sh,sm]=start.split(':').map(Number),[eh,em]=now.split(':').map(Number);let mins=(eh*60+em)-(sh*60+sm);if(mins<0)mins+=1440;return `${String(Math.floor(mins/60)).padStart(2,'0')}:${String(mins%60).padStart(2,'0')}`}
 
     const DOC_DEFS=[{k:'Foto perfil',exp:false},{k:'Foto moto',exp:false},{k:'SOAT',exp:true},{k:'Tecnomecánica',exp:true},{k:'Licencia de conducción',exp:true},{k:'Cédula',exp:false}];
@@ -304,7 +292,7 @@
       set(document.getElementById('lunchEnd'),current.lunchEnd,`<i class="ti ti-circle-check"></i> Almuerzo finalizado ${current.lunchEnd||''}`)}
 
     function carnetValidationText(q){return `QUICK HELP S.A.S. - Validacion de colaborador\nNombre: ${q.name||''}\nCedula: ${q.cedula||''}\nProyecto: ${q.client||''}\nPlaca: ${q.plate||''}\nEstado: ${q.status||'Activo'}`}
-    function resolveMedia(ref,cb){const direct=ref&&(ref.url||ref.dataUrl);if(direct){cb(direct);return}if(ref&&ref.mediaId&&window.firebase){firebase.firestore().collection('quick_media').doc(ref.mediaId).get().then(s=>cb(s.data()?.data||'')).catch(()=>cb(''));return}cb('')}
+    function resolveMedia(ref,cb){const direct=ref&&(ref.url||ref.dataUrl||(/^https?:/i.test(ref.mediaId||'')?ref.mediaId:''));cb(direct||'')}
     function renderCarnet(q){const box=document.getElementById('carnetBox');if(!box)return;const docs=q.documents||{};const ph=docs['Foto perfil']||(q.avatarUrl?{url:q.avatarUrl}:null);const active=(q.status||'Activo')==='Activo';const city=q.city||'';
       box.innerHTML=`<div class="qc"><div class="qc-head"><img class="qc-logo" src="https://i.ibb.co/KjmjjvNZ/Captura-de-pantalla-2025-09-15-161315.jpg" alt="Quick"><div class="qc-co">QUICK HELP S.A.S.<span>Carnet de colaborador</span></div><button class="qc-qrbtn" type="button" id="carnetQrBtn"><i class="ti ti-qrcode"></i></button></div>
         <div class="qc-photo" id="carnetPhoto"><div class="qc-initials">${initials(q.name)}</div></div>
@@ -429,35 +417,20 @@
       state.evidences.unshift(ev);
       state.locationPings=state.locationPings||[];if(gps)state.locationPings.unshift({quicker:session.name,availability:current.id,client:current.client,point:current.point,address,...gps});
       document.getElementById('gpsText').textContent=gps?`${stageLabel} · ${address} · ${stamp}`:'No fue posible tomar GPS';
-      localStorage.setItem(KEY,JSON.stringify(state));touchSess();
+      localStorage.setItem(KEY,JSON.stringify(state));
       toast(`Sincronizando ${stageLabel}...`,'',6000);
       syncMarcacion(stageLabel,ev);
       renderHome(false);
-      uploadMedia(eid,stamped,mid=>{if(mid){const e=(state.evidences||[]).find(x=>x.id===eid);if(e){e.mediaId=mid;pushFullState()}
-        // Registrar la foto también en el doc protegido de la marcación
-        try{firebase.firestore().collection('quick_media').doc('MARC-'+current.id).set({evidences:{[marcKey(stageLabel)]:{mediaId:mid}}},{merge:true}).catch(()=>{})}catch(x){}
-      }});
+      uploadMedia(eid,stamped,mid=>{if(mid){const e=(state.evidences||[]).find(x=>x.id===eid);if(e){e.url=mid;e.mediaId=mid;guardarEvidencia(e,gps).catch(err=>console.error(err))}}});
     }
-    // Sincronización inmediata de la marcación a la nube, con confirmación y reintentos.
-    // La marcación se guarda en su PROPIO documento (quick_media/MARC-<id>) para que ningún
-    // guardado del estado completo (admin o mensajero) pueda pisarla. El estado completo se
-    // sube después como mejor esfuerzo.
+    // Sincronización inmediata y anti-duplicado en Supabase.
     function marcKey(label){return String(label||'').replace(/[^a-zA-Z0-9]+/g,'_')}
-    function syncMarcacion(label,ev){
-      if(!cloudRef||!window.firebase){toast(`⚠ ${label} quedó guardado solo en este teléfono (sin conexión a la nube)`,'bad',4500);return}
-      const marks={kind:'marcacion',availability:current.id,quicker:session.name,client:current.client||'',point:current.point||'',date:current.date||'',realStart:current.realStart||'',realEnd:current.realEnd||'',lunchStart:current.lunchStart||'',lunchEnd:current.lunchEnd||'',status:current.status||'',at:new Date().toISOString()};
-      if(ev)marks.evidences={[marcKey(label)]:{id:ev.id,stage:ev.stage||label,time:ev.time||'',address:ev.address||'',gps:ev.gps||'',mediaId:ev.mediaId||''}};
-      const doc=firebase.firestore().collection('quick_media').doc('MARC-'+current.id);
-      const attempt=n=>doc.set(marks,{merge:true}).then(()=>{
-        toast(`✅ Marcación efectiva: ${label} registrado en la malla`,'ok',4500);
-        pushFullState();
-      }).catch(()=>{if(n<3){setTimeout(()=>attempt(n+1),1500*n)}else{toast(`❌ ${label} NO se sincronizó con la malla. Revisa tu señal y NO cierres la app; se reintentará`,'bad',6000);setTimeout(()=>attempt(1),15000)}});
-      attempt(1);
-    }
-    function pushFullState(){if(!cloudRef||!cloudHydrated)return;cloudRef.set({state:publicState(),updatedAt:firebase.firestore.FieldValue.serverTimestamp(),updatedBy:session?.username||'mensajero'},{merge:true}).catch(()=>{})}
+    function syncMarcacion(label,ev){const c=supa();if(!c){toast(`⚠ ${label} quedó guardado solo en este teléfono`,'bad',4500);return}const tipos={'Inicio de turno':'ingreso','Fin de turno':'salida','Inicio almuerzo':'almuerzo_inicio','Fin almuerzo':'almuerzo_fin'};const tipo=tipos[label]||marcKey(label).toLowerCase();const campo={ingreso:'realStart',salida:'realEnd',almuerzo_inicio:'lunchStart',almuerzo_fin:'lunchEnd'}[tipo];const fila={malla_id:current.id,tipo,hora:current[campo]||new Date().toTimeString().slice(0,5),fecha:current.date,quicker:session.name,quicker_id:myQuicker().id||null,lat:lastGps?.lat||null,lng:lastGps?.lng||null,direccion:ev?.address||null,registrado_por:session.id};const attempt=async n=>{const{error}=await c.from('marcaciones').upsert(fila,{onConflict:'malla_id,tipo'});if(!error){toast(`✅ Marcación efectiva: ${label}`,'ok',4500);return}if(n<3)setTimeout(()=>attempt(n+1),1500*n);else{console.error(error);toast(`❌ ${label} no se sincronizó. Se reintentará`,'bad',6000);setTimeout(()=>attempt(1),15000)}};attempt(1)}
+    async function guardarEvidencia(ev,gps){const c=supa();if(!c||!ev?.availability)return;const{error}=await c.from('evidencias').upsert({id:/^[0-9a-f-]{36}$/i.test(ev.id||'')?ev.id:undefined,malla_id:ev.availability,quicker:ev.quicker,etapa:ev.stage,tipo:ev.type||'Foto/GPS',foto_url:ev.url||ev.mediaId||null,direccion:ev.address||null,lat:gps?.lat||null,lng:gps?.lng||null,registrado_en:new Date().toISOString()});if(error)throw error}
+    function pushFullState(){}
 
     // GPS en tiempo real para Mapa en Vivo
-    function startWatch(){if(watchId||!navigator.geolocation)return;watchId=navigator.geolocation.watchPosition(pos=>{lastGps={lat:pos.coords.latitude,lng:pos.coords.longitude,time:new Date().toLocaleString('es-CO')};const now=Date.now();if(now-lastPingSave>120000){lastPingSave=now;state.locationPings=state.locationPings||[];state.locationPings.unshift({quicker:session.name,availability:current?.id||'',client:current?.client||myQuicker().client||'',point:current?.point||'',lat:lastGps.lat,lng:lastGps.lng,time:lastGps.time,day:today()});state.locationPings=state.locationPings.slice(0,300);save()}},()=>{},{enableHighAccuracy:true,maximumAge:30000,timeout:20000})}
+    function startWatch(){if(watchId||!navigator.geolocation)return;watchId=navigator.geolocation.watchPosition(pos=>{lastGps={lat:pos.coords.latitude,lng:pos.coords.longitude,time:new Date().toLocaleString('es-CO')};const now=Date.now();if(now-lastPingSave>120000){lastPingSave=now;const ping={quicker:session.name,quicker_id:myQuicker().id||null,malla_id:current?.id||null,cliente:current?.client||myQuicker().client||null,punto:current?.point||null,lat:lastGps.lat,lng:lastGps.lng,registrado_en:new Date().toISOString()};state.locationPings=state.locationPings||[];state.locationPings.unshift({...ping,time:lastGps.time,day:today()});state.locationPings=state.locationPings.slice(0,300);save();supa()?.from('ubicaciones').insert(ping).then(({error})=>{if(error)console.warn('Ubicación no sincronizada:',error.message)})}},()=>{},{enableHighAccuracy:true,maximumAge:30000,timeout:20000})}
 
     // GASTOS / ADICIONALES
     document.getElementById('paymentType').onchange=()=>{const t=document.getElementById('paymentType').value||'';const needInv=/parq/i.test(t);document.getElementById('invoiceLabel').textContent=needInv?'Factura electrónica (obligatoria)':'Soporte (opcional)';};
@@ -518,11 +491,11 @@
       });
       if(lastGps)L.circleMarker(here,{radius:9,color:'#22C55E',fillColor:'#22C55E',fillOpacity:.9}).addTo(map).bindPopup(`<strong>Tú</strong><br>${session.name}`);
       const zone=kmlLatLngs();if(zone.length>2){L.polygon(zone,{color:'#F5C518',weight:2,dashArray:'7 5',fillColor:'#F5C518',fillOpacity:.18}).addTo(map);map.fitBounds([[ptLat,ptLng],...zone,...(lastGps?[here]:[])],{padding:[24,24],maxZoom:15});document.getElementById('zoneText').textContent=`Zona: ${state.prefs.kmlName||'cargada'} · Punto: ${pt.name||current?.point||''}`}else{document.getElementById('zoneText').textContent=`Punto: ${pt.name||current?.point||''} · ${pt.address||''}`}}
-    function doLogout(){try{localStorage.removeItem('quick_session_v1')}catch(e){}if(watchId)navigator.geolocation.clearWatch(watchId);location.reload()}
+    async function doLogout(){if(watchId)navigator.geolocation.clearWatch(watchId);if(realtimeChannel)await supa()?.removeChannel(realtimeChannel);await supa()?.auth.signOut();localStorage.removeItem(KEY);location.reload()}
     document.getElementById('logout').onclick=doLogout;
     document.getElementById('drawerLogout').onclick=doLogout;
     document.addEventListener('click',e=>{
-      const open=e.target.closest('[data-info-open]');if(open){const id=open.dataset.infoOpen;const b=document.getElementById('info-body-'+id);if(b){const show=b.style.display==='none';b.style.display=show?'block':'none';if(show){const pill=open.querySelector('.pill');if(hsqAck(id,true)&&pill){pill.textContent='Visto';pill.classList.add('ok')}document.querySelectorAll('[data-info-media]:not([data-done])').forEach(img=>{img.dataset.done='1';try{firebase.firestore().collection('quick_media').doc(img.dataset.infoMedia).get().then(s=>{if(s.data()&&s.data().data)img.src=s.data().data}).catch(()=>{})}catch(x){}})}}return}
+      const open=e.target.closest('[data-info-open]');if(open){const id=open.dataset.infoOpen;const b=document.getElementById('info-body-'+id);if(b){const show=b.style.display==='none';b.style.display=show?'block':'none';if(show){const pill=open.querySelector('.pill');if(hsqAck(id,true)&&pill){pill.textContent='Visto';pill.classList.add('ok')}document.querySelectorAll('[data-info-media]:not([data-done])').forEach(img=>{img.dataset.done='1';if(/^https?:/i.test(img.dataset.infoMedia||''))img.src=img.dataset.infoMedia})}}return}
       const ack=e.target.closest('[data-info-ack]');if(ack){hsqAck(ack.dataset.infoAck);renderInfo();return}
       const cm=e.target.closest('[data-info-comment]');if(cm){const id=cm.dataset.infoComment;const p=(state.hsqPublications||[]).find(x=>x.id===id);const v=document.querySelector(`[data-info-comment-input="${id}"]`)?.value||'';if(p){p.acks=p.acks||{};p.acks[session.name]={...(p.acks[session.name]||{}),comment:v};save('Comentario guardado')}return}
       const er=e.target.closest('[data-info-error]');if(er){const id=er.dataset.infoError;const p=(state.hsqPublications||[]).find(x=>x.id===id);const v=document.querySelector(`[data-info-error-input="${id}"]`)?.value||'';if(p){p.acks=p.acks||{};p.acks[session.name]={...(p.acks[session.name]||{}),error:v};save('Error reportado')}return}
@@ -531,8 +504,7 @@
       const ev=e.target.closest('[data-info-evidence]');if(ev&&ev.files&&ev.files[0]){const id=ev.dataset.infoEvidence;const p=(state.hsqPublications||[]).find(x=>x.id===id);if(!p)return;const f=ev.files[0];const r=new FileReader();r.onload=()=>{const data=String(r.result||'');const mid=uid('IM');p.acks=p.acks||{};p.acks[session.name]={...(p.acks[session.name]||{})};uploadMedia(mid,data,id2=>{if(id2)p.acks[session.name].evidenceMediaId=id2;save('Evidencia enviada');renderInfo()})};r.readAsDataURL(f)}
     });
     setInterval(renderTimers,30000);
-    initCloud();
-    if(restoreSess()){renderHome();startWatch()}
+    restaurarSesion().then(ok=>{if(ok){renderHome();startWatch()}}).catch(err=>console.error(err));
   </script>
 </body>
 </html>
