@@ -83,6 +83,11 @@ alter table public.evidencias enable row level security;
 alter table public.ubicaciones enable row level security;
 alter table public.matriz_activos enable row level security;
 
+alter table public.perfiles enable row level security;
+drop policy if exists "cada usuario actualiza su perfil" on public.perfiles;
+create policy "cada usuario actualiza su perfil" on public.perfiles for update to authenticated
+using (id = auth.uid()) with check (id = auth.uid());
+
 drop policy if exists "usuarios autenticados leen mallas" on public.mallas;
 create policy "usuarios autenticados leen mallas" on public.mallas for select to authenticated using (true);
 drop policy if exists "administrativos gestionan mallas" on public.mallas;

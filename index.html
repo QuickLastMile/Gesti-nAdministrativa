@@ -8638,7 +8638,7 @@ function toggleMode(forceDark) {
     saveState('Pregunta eliminada');
   }
 
-  document.addEventListener('click', event => {
+  document.addEventListener('click', async event => {
     const previewAttachment = event.target.closest('[data-preview-attachment]');
     if (previewAttachment) openAttachmentPreview(previewAttachment.dataset.previewAttachment);
     const open = event.target.closest('[data-open]');
@@ -8706,6 +8706,10 @@ function toggleMode(forceDark) {
       const form = document.querySelector('[data-account-form]');
       if (!user?.id || !form) return;
       const data = Object.fromEntries(new FormData(form).entries());
+      const button = saveAccount;
+      const original = button.innerHTML;
+      button.disabled = true;
+      button.innerHTML = '<i class="ti ti-loader-2"></i> Guardando en Supabase...';
       if (user.profile === 'Administrador') {
         user.name = data.name || user.name;
         user.email = data.email || user.email;
@@ -8715,9 +8719,38 @@ function toggleMode(forceDark) {
         state.session.name = user.name;
         state.session.username = user.username;
       }
-      log('Usuario', 'Actualizó mi usuario', user.username || user.name);
-      saveState('Mi usuario actualizado');
-      applySession();
+      try {
+        const c = supa();
+        if (!c) throw new Error('No hay conexión con Supabase');
+        const cambios = { nombre: user.name, usuario: user.email || user.username, telefono: user.phone || null, avatar_url: user.avatarUrl || null };
+        const { data: guardado, error } = await c.from('perfiles').update(cambios).eq('id', user.id).select('id,nombre,usuario,telefono,avatar_url').single();
+        if (error) throw error;
+        if (data.password) {
+          const { error: passwordError } = await c.auth.updateUser({ password: data.password });
+          if (passwordError) throw passwordError;
+        }
+        if (data.email && data.email !== state.session.email) {
+          const { error: emailError } = await c.auth.updateUser({ email: data.email });
+          if (emailError) throw emailError;
+        }
+        user.name = guardado.nombre;
+        user.phone = guardado.telefono || '';
+        user.avatarUrl = guardado.avatar_url || '';
+        user.email = guardado.usuario || user.email;
+        user.username = guardado.usuario || user.username;
+        state.session = { ...state.session, name: user.name, phone: user.phone, avatarUrl: user.avatarUrl, email: user.email, username: user.username };
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        log('Usuario', 'Actualizó mi usuario en Supabase', user.username || user.name);
+        applySession();
+        renderConfig();
+        toast('✓ Perfil guardado y verificado en Supabase');
+      } catch (error) {
+        console.error('Guardar perfil:', error);
+        toast('No se guardó el perfil: ' + error.message);
+      } finally {
+        button.disabled = false;
+        button.innerHTML = original;
+      }
     }
     const exp = event.target.closest('[data-export]');
     if (exp) exportCSV(exp.dataset.export);
@@ -9341,11 +9374,22 @@ function toggleMode(forceDark) {
       const user = currentUser();
       if (!file || !user?.id) return;
       const reader = new FileReader();
-      reader.onload = () => {
-        user.avatarUrl = String(reader.result || '');
-        log('Usuario', 'Actualizó foto de perfil', user.username || user.name);
-        saveState('Foto de perfil actualizada');
-        applySession();
+      reader.onload = async () => {
+        const dataUrl = String(reader.result || '');
+        toast('Subiendo foto a Supabase...');
+        uploadMedia('perfil-' + user.id, dataUrl, async url => {
+          if (!url) return;
+          const c = supa();
+          const { data, error } = await c.from('perfiles').update({ avatar_url: url }).eq('id', user.id).select('avatar_url').single();
+          if (error) { console.error(error); toast('No se guardó la foto: ' + error.message); return; }
+          user.avatarUrl = data.avatar_url;
+          state.session.avatarUrl = data.avatar_url;
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+          log('Usuario', 'Actualizó foto de perfil en Supabase', user.username || user.name);
+          applySession();
+          renderConfig();
+          toast('✓ Foto guardada y verificada en Supabase');
+        });
       };
       reader.readAsDataURL(file);
     }
