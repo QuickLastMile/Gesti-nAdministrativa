@@ -5905,7 +5905,7 @@ function toggleMode(forceDark) {
           <div class="form-field"><label>Nombre</label><input name="name" value="${escapeHTML(user.name || '')}" ${isAdmin ? '' : 'readonly'}></div>
           <div class="form-field"><label>Correo / usuario</label><input name="email" type="email" value="${escapeHTML(user.email || user.username || '')}" ${isAdmin ? '' : 'readonly'}></div>
           <div class="form-field"><label>Teléfono</label><input name="phone" value="${escapeHTML(user.phone || '')}" ${isAdmin ? '' : 'readonly'}></div>
-          <div class="form-field"><label>Nueva contraseña</label><input name="password" type="password" placeholder="${isAdmin ? 'Cambiar contraseña' : 'Solo administrador'}" ${isAdmin ? '' : 'readonly'}></div>
+          <div class="form-field"><label>Nueva contraseña</label><input name="password" type="password" value="" autocomplete="new-password" data-new-password placeholder="${isAdmin ? 'Déjalo vacío para conservarla' : 'Solo administrador'}" ${isAdmin ? '' : 'readonly'}></div>
           <div class="form-field full"><button class="dev-btn primary" type="button" data-save-account><i class="ti ti-device-floppy"></i> Guardar cambios</button></div>
         </form>
       </div>
@@ -8725,9 +8725,12 @@ function toggleMode(forceDark) {
         const cambios = { nombre: user.name, usuario: user.email || user.username, telefono: user.phone || null, avatar_url: user.avatarUrl || null };
         const { data: guardado, error } = await c.from('perfiles').update(cambios).eq('id', user.id).select('id,nombre,usuario,telefono,avatar_url').single();
         if (error) throw error;
-        if (data.password) {
+        let avisoSecundario = '';
+        const passwordInput = form.querySelector('[data-new-password]');
+        if (data.password && passwordInput?.dataset.edited === 'true') {
           const { error: passwordError } = await c.auth.updateUser({ password: data.password });
-          if (passwordError) throw passwordError;
+          if (passwordError && !/different from the old password/i.test(passwordError.message)) throw passwordError;
+          if (passwordError) avisoSecundario = ' La contraseña no cambió porque coincide con la anterior.';
         }
         if (data.email && data.email !== state.session.email) {
           const { error: emailError } = await c.auth.updateUser({ email: data.email });
@@ -8743,7 +8746,7 @@ function toggleMode(forceDark) {
         log('Usuario', 'Actualizó mi usuario en Supabase', user.username || user.name);
         applySession();
         renderConfig();
-        toast('✓ Perfil guardado y verificado en Supabase');
+        toast('✓ Perfil guardado y verificado en Supabase.' + avisoSecundario);
       } catch (error) {
         console.error('Guardar perfil:', error);
         toast('No se guardó el perfil: ' + error.message);
@@ -9106,6 +9109,7 @@ function toggleMode(forceDark) {
   });
 
   document.addEventListener('change', event => {
+    if (event.target.matches('[data-new-password]')) event.target.dataset.edited = 'true';
     // Carnet: foto y logo (se guardan como dataURL dentro del carnet del usuario)
     if (event.target.id === 'carnet-photo' || event.target.id === 'carnet-logo') {
       const f = event.target.files && event.target.files[0];
