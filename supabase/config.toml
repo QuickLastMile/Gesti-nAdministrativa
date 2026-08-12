@@ -1,0 +1,4 @@
+project_id = "lfssdwtbxadzkcccestq"
+
+[functions.create-messenger]
+verify_jwt = true

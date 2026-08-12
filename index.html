@@ -8409,7 +8409,7 @@ function toggleMode(forceDark) {
       <div class="form-field"><label>Cargo</label><select name="cargo">${['Quicker mensajero', 'Quicker conductor', 'Auxiliar', 'Supervisor'].map(c => `<option ${item.cargo === c ? 'selected' : ''}>${c}</option>`).join('')}</select></div>
       <div class="form-field"><label>Ciudad</label><input name="city" id="messenger-city" value="${escapeHTML(item.city || '')}"></div>
       <div class="form-field"><label>Placa de la moto</label><input name="plate" value="${escapeHTML(item.plate || '')}" placeholder="Ej: ABC12D"></div>
-      <div class="form-field"><label>Contrasena</label><input name="password" type="text" value="${escapeHTML(loginUser.password || '')}" placeholder="Define contrasena" ${id ? '' : 'required'}></div>
+      <div class="form-field"><label>${id ? 'Nueva contraseña (opcional)' : 'Contraseña inicial'}</label><input name="password" type="password" value="" autocomplete="new-password" placeholder="${id ? 'Déjala vacía para conservarla' : 'Mínimo 8 caracteres'}" ${id ? '' : 'required minlength="8"'}></div>
       <div class="form-field"><label>Proyecto matriz</label><input name="projectName" id="messenger-project" value="${escapeHTML(item.projectName || '')}"></div>
       <div class="form-field"><label>Fecha contratacion</label><input name="dateIngress" id="messenger-date" type="date" value="${escapeHTML(item.dateIngress || '')}"></div>
       <div class="form-field"><label>Cliente asignado</label><select name="client" id="messenger-client">${clients.map(c => `<option value="${escapeHTML(c)}" ${c === selectedClient ? 'selected' : ''}>${escapeHTML(c)}</option>`).join('')}</select></div>
@@ -8445,27 +8445,42 @@ function toggleMode(forceDark) {
       document.getElementById('messenger-date').value = asset.dateIngress || '';
       toast('Datos cargados desde matriz');
     };
-    form.onsubmit = event => {
+    form.onsubmit = async event => {
       event.preventDefault();
       const data = Object.fromEntries(new FormData(form).entries());
       const selectedPts = [...form.querySelectorAll('input[name="points"]:checked')].map(o => o.value);
       const primaryPoint = selectedPts[0] || '';
-      const q = {
-        ...item, id: item.id || nextQuickerId(), cedula: data.cedula, name: data.name, phone: data.phone, email: data.email,
-        cargo: data.cargo || 'Quicker mensajero', city: data.city || '', plate: (data.plate || '').toUpperCase(),
-        client: data.client, point: primaryPoint, points: selectedPts,
-        zone: item.zone || '', docName: item.docName || 'Documentos base', docExpires: item.docExpires || '', status: item.status || 'Activo',
-        projectName: data.projectName, dateIngress: data.dateIngress, paymentEnabled: data.paymentEnabled,
-        paymentTypes: [...form.querySelectorAll('input[name="paymentTypes"]:checked')].map(o => o.value)
-      };
-      if (id) state.quickers = state.quickers.map(existing => existing.id === id ? q : existing);
-      else state.quickers.unshift(q);
-      const userPayload = { ...(loginUser || {}), id: loginUser.id || uid('USR'), name: data.name, email: data.email, phone: data.phone, username: data.email, password: data.password || loginUser.password || '', profile: 'Quicker', scope: data.name, client: data.client, point: primaryPoint, permissions: ['mensajero'] };
-      if (loginUser.id) state.users = state.users.map(u => u.id === loginUser.id ? userPayload : u);
-      else state.users.unshift(userPayload);
-      closeModal();
-      log('Usuario', id ? 'Edito usuario mensajero' : 'Creo usuario mensajero', data.email);
-      saveState(id ? 'Mensajero actualizado' : 'Mensajero creado');
+      const submit = form.querySelector('button[type="submit"]');
+      const original = submit.innerHTML;
+      submit.disabled = true;
+      submit.innerHTML = '<i class="ti ti-loader-2"></i> Creando cuenta segura...';
+      try {
+        const c = supa();
+        if (!c) throw new Error('No hay conexión con Supabase');
+        const payload = {
+          quicker_id: id || null, cedula: data.cedula.trim(), nombre: data.name.trim(),
+          telefono: data.phone.trim(), email: data.email.trim().toLowerCase(), password: data.password || null,
+          cargo: data.cargo || 'Quicker mensajero', ciudad: data.city || '', placa: (data.plate || '').toUpperCase(),
+          cliente: data.client, punto: primaryPoint, puntos: selectedPts,
+          proyecto: data.projectName || '', fecha_ingreso: data.dateIngress || null,
+          pagos_habilitados: data.paymentEnabled === 'Si',
+          tipos_pago: [...form.querySelectorAll('input[name="paymentTypes"]:checked')].map(o => o.value)
+        };
+        const { data: resultado, error } = await c.functions.invoke('create-messenger', { body: payload });
+        if (error) throw new Error(error.context?.body?.message || error.message);
+        if (!resultado?.ok) throw new Error(resultado?.message || 'No se pudo crear la cuenta');
+        await cargarDesdeSupabase();
+        closeModal();
+        log('Usuario', id ? 'Editó usuario mensajero en Supabase' : 'Creó usuario mensajero en Supabase', payload.email);
+        toast(id ? '✓ Mensajero actualizado en Supabase' : '✓ Cuenta creada. El mensajero ya puede ingresar');
+        renderCurrentModule();
+      } catch (error) {
+        console.error('Crear mensajero:', error);
+        toast('No se creó el mensajero: ' + error.message);
+      } finally {
+        submit.disabled = false;
+        submit.innerHTML = original;
+      }
     };
     document.getElementById('cancel-form').onclick = closeModal;
     document.getElementById('app-modal').classList.add('open');
