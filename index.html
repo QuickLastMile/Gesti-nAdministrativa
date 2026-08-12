@@ -16,7 +16,9 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-storage-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.47.10/dist/umd/supabase.js"></script>
 <script src="quick_firebase_config.js"></script>
+<script src="quick_supabase_config.js"></script>
 <style>
   /* ───── RESET & BASE ───── */
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -1904,10 +1906,10 @@
       <div class="sb-logo-icon"><img src="https://i.ibb.co/KjmjjvNZ/Captura-de-pantalla-2025-09-15-161315.jpg" alt="Quick"></div>
       <div><h2>Quick Last Mile</h2><p style="margin:0">Ingreso administrativo y operativo</p></div>
     </div>
-    <div class="login-field"><label for="login-user">Usuario</label><input id="login-user" autocomplete="username" value="admin.quick" required></div>
+    <div class="login-field"><label for="login-user">Correo</label><input id="login-user" type="email" autocomplete="username" placeholder="tucorreo@quick.com.co" required></div>
     <div class="login-field"><label for="login-pass">Contraseña</label><div class="password-wrap"><input id="login-pass" type="password" autocomplete="current-password" value="" required><button class="password-toggle" type="button" id="toggle-login-pass"><i class="ti ti-eye"></i></button></div></div>
     <button class="dev-btn primary" type="submit" style="width:100%;justify-content:center;height:42px">Ingresar</button>
-    <div class="bootstrap-note">Acceso inicial de administrador: usuario <strong>admin.quick</strong> y contraseña <strong>Quick2026!</strong>. Los demás usuarios se crean desde Configuración y su visual queda definida por el perfil asignado por el administrador.</div>
+    <div class="bootstrap-note">Ingresa con el correo y la contraseña que te asignó el administrador. Si olvidaste tu contraseña, solicita el restablecimiento a tu coordinador.</div>
   </form>
 </div>
 
@@ -9558,19 +9560,121 @@ function toggleMode(forceDark) {
     return String(name || 'AD').split(' ').map(p => p[0]).join('').slice(0,2).toUpperCase();
   }
 
-  document.getElementById('login-form')?.addEventListener('submit', event => {
-    event.preventDefault();
-    const username = document.getElementById('login-user').value.trim();
-    const password = document.getElementById('login-pass').value;
-    const user = state.users.find(u => u.username === username && (u.password || '1234') === password);
-    if (!user) {
-      toast('Usuario o contraseña incorrectos');
-      return;
+  // ════════════════════ AUTENTICACIÓN CON SUPABASE ════════════════════
+  // La contraseña la verifica Supabase y viaja cifrada; nunca se guarda
+  // en el estado ni en el navegador. El perfil y el alcance operativo se
+  // leen de la tabla "perfiles", protegida por seguridad a nivel de fila.
+
+  let sb = null;
+  function supa() {
+    if (sb) return sb;
+    const cfg = window.QUICK_SUPABASE_CONFIG;
+    if (!cfg?.enabled || !window.supabase) return null;
+    sb = window.supabase.createClient(cfg.url, cfg.publishableKey, {
+      auth: { persistSession: true, autoRefreshToken: true, storageKey: 'quick_sesion_supabase' }
+    });
+    return sb;
+  }
+
+  // Convierte una fila de "perfiles" al formato de sesión que usa la plataforma
+  function sesionDesdePerfil(perfil, email) {
+    return {
+      id: perfil.id,
+      name: perfil.nombre,
+      username: perfil.usuario || email,
+      email: email,
+      profile: perfil.perfil,
+      client: perfil.cliente || '',
+      scope: perfil.cliente || 'Global',
+      projects: perfil.clientes || [],
+      phone: perfil.telefono || '',
+      cedula: perfil.cedula || '',
+      avatarUrl: perfil.avatar_url || '',
+      carnet: perfil.carnet || {}
+    };
+  }
+
+  async function cargarPerfilSesion(usuario) {
+    const cliente = supa();
+    if (!cliente || !usuario) return null;
+    const { data, error } = await cliente
+      .from('perfiles').select('*').eq('id', usuario.id).maybeSingle();
+    if (error) { console.warn('No se pudo leer el perfil:', error.message); return null; }
+    if (!data) return null;
+    if (data.activo === false) return 'inactivo';
+    return sesionDesdePerfil(data, usuario.email);
+  }
+
+  async function iniciarSesionSupabase(correo, contrasena) {
+    const cliente = supa();
+    if (!cliente) return { ok: false, mensaje: 'No se pudo conectar con el servidor. Revisa tu conexión.' };
+
+    const { data, error } = await cliente.auth.signInWithPassword({ email: correo, password: contrasena });
+    if (error) {
+      const m = /invalid login/i.test(error.message)
+        ? 'Correo o contraseña incorrectos'
+        : /email not confirmed/i.test(error.message)
+          ? 'Tu correo aún no ha sido confirmado. Revisa tu bandeja de entrada.'
+          : error.message;
+      return { ok: false, mensaje: m };
     }
-    state.session = { id: user.id, name: user.name, username: user.username, profile: user.profile, scope: user.scope, projects: user.projects || [] };
-    touchSession();
-    saveState(`Bienvenido ${user.name}`, { syncCloud: false });
+
+    const sesion = await cargarPerfilSesion(data.user);
+    if (sesion === 'inactivo') {
+      await cliente.auth.signOut();
+      return { ok: false, mensaje: 'Tu usuario está inactivo. Contacta al administrador.' };
+    }
+    if (!sesion) {
+      await cliente.auth.signOut();
+      return { ok: false, mensaje: 'Tu usuario no tiene un perfil asignado. Contacta al administrador.' };
+    }
+
+    const permitidos = window.QUICK_SUPABASE_CONFIG.perfilesAdministrativos || [];
+    if (!permitidos.includes(sesion.profile)) {
+      await cliente.auth.signOut();
+      return { ok: false, mensaje: 'Este usuario no tiene acceso a la plataforma administrativa.' };
+    }
+
+    return { ok: true, sesion };
+  }
+
+  // Restaura la sesión al abrir la plataforma, si el token sigue vigente
+  async function restaurarSesionSupabase() {
+    const cliente = supa();
+    if (!cliente) return false;
+    const { data } = await cliente.auth.getSession();
+    if (!data?.session?.user) return false;
+    const sesion = await cargarPerfilSesion(data.session.user);
+    if (!sesion || sesion === 'inactivo') { await cliente.auth.signOut(); return false; }
+    const permitidos = window.QUICK_SUPABASE_CONFIG.perfilesAdministrativos || [];
+    if (!permitidos.includes(sesion.profile)) { await cliente.auth.signOut(); return false; }
+    state.session = sesion;
+    return true;
+  }
+
+  async function cerrarSesionSupabase() {
+    try { await supa()?.auth.signOut(); } catch (e) {}
+  }
+
+  document.getElementById('login-form')?.addEventListener('submit', async event => {
+    event.preventDefault();
+    const boton = event.currentTarget.querySelector('button[type="submit"]');
+    const correo = document.getElementById('login-user').value.trim();
+    const contrasena = document.getElementById('login-pass').value;
+    if (!correo || !contrasena) { toast('Escribe tu correo y contraseña'); return; }
+
+    const textoOriginal = boton ? boton.innerHTML : '';
+    if (boton) { boton.disabled = true; boton.innerHTML = 'Verificando...'; }
+
+    const r = await iniciarSesionSupabase(correo, contrasena);
+
+    if (boton) { boton.disabled = false; boton.innerHTML = textoOriginal; }
+    if (!r.ok) { toast(r.mensaje); return; }
+
+    state.session = r.sesion;
+    document.getElementById('login-pass').value = '';
     applySession();
+    toast(`Bienvenido ${r.sesion.name}`);
   });
 
   // Menú de usuario / cerrar sesión
@@ -9579,7 +9683,8 @@ function toggleMode(forceDark) {
     document.getElementById('user-menu')?.classList.toggle('open');
   });
   document.addEventListener('click', () => document.getElementById('user-menu')?.classList.remove('open'));
-  document.getElementById('logout-btn')?.addEventListener('click', () => {
+  document.getElementById('logout-btn')?.addEventListener('click', async () => {
+    await cerrarSesionSupabase();
     state.session = null;
     localStorage.removeItem(SESSION_KEY);
     document.getElementById('user-menu')?.classList.remove('open');
@@ -9602,8 +9707,10 @@ function toggleMode(forceDark) {
     icon.className = show ? 'ti ti-eye-off' : 'ti ti-eye';
   });
 
-  if (!state.session) restoreSession();
+  // El ingreso ahora lo valida Supabase: no se restaura ninguna sesión local.
+  state.session = null;
   applySession();
+  restaurarSesionSupabase().then(ok => { if (ok) applySession(); }).catch(() => {});
   // Restaurar sidebar colapsado
   if (localStorage.getItem('quick_sidebar_collapsed') === '1') {
     const sb = document.getElementById('sidebar');
