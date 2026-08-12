@@ -3350,15 +3350,25 @@ function toggleMode(forceDark) {
       const d = docs[def.k] || {};
       const has = hasMedia(d);
       const dd = def.exp && d.expiry ? daysToExpiry(d.expiry) : null;
-      const estado = !def.exp ? (has ? '<span class="b b-green">Cargado</span>' : '<span class="b b-yellow">Pendiente</span>')
+      const review = d.reviewStatus || (has ? 'Pendiente' : 'Sin cargar');
+      const reviewBadge = review === 'Aprobado' ? '<span class="b b-green">Aprobado</span>' : review === 'Rechazado' ? '<span class="b b-red">Rechazado</span>' : has ? '<span class="b b-yellow">Por revisar</span>' : '<span class="b b-yellow">Pendiente</span>';
+      const estado = !def.exp ? reviewBadge
         : !d.expiry ? '<span class="b b-yellow">Sin fecha</span>'
         : dd < 0 ? '<span class="b b-red">Vencido</span>'
-        : dd <= 30 ? `<span class="b b-yellow">Vence en ${dd}d</span>` : '<span class="b b-green">Vigente</span>';
-      const view = has ? ((d.fileType || '').startsWith('image/') || /^data:image|^https?.*(jpg|jpeg|png)/i.test(d.url || d.dataUrl || '') || !d.fileType
+        : dd <= 30 ? `<span class="b b-yellow">Vence en ${dd}d</span>` : reviewBadge;
+      const fileUrl = d.url || d.dataUrl || (/^https?:/i.test(d.mediaId || '') ? d.mediaId : '');
+      const view = has ? ((d.fileType || '').startsWith('image/') || /^data:image|^https?.*(jpg|jpeg|png|webp)/i.test(fileUrl) || !d.fileType
           ? `<img class="qdoc-img" ${mediaAttr(d)} alt="${escapeHTML(def.k)}">`
-          : `<a class="dev-btn" ${d.dataUrl || d.url ? `href="${d.dataUrl || d.url}"` : `data-media-id="${escapeHTML(d.mediaId || '')}"`} target="_blank" download="${escapeHTML(d.fileName || def.k)}"><i class="ti ti-download"></i> Ver archivo</a>`)
+          : `<div class="fp-sub"><i class="ti ti-file"></i> ${escapeHTML(d.fileName || 'Documento adjunto')}</div>`)
         : '<div class="fp-sub">Sin archivo adjunto</div>';
-      return `<div class="qdoc-card"><div class="qdoc-head"><strong>${escapeHTML(def.k)}</strong>${estado}</div>${def.exp ? `<div class="fp-sub">Vence: ${escapeHTML(d.expiry || '—')}</div>` : ''}${def.k === 'Foto moto' && q.plate ? `<div class="fp-sub">Placa: ${escapeHTML(q.plate)}</div>` : ''}<div class="qdoc-view">${view}</div></div>`;
+      const actions = has ? `<div class="row-actions" style="margin-top:10px;flex-wrap:wrap">
+        <a class="dev-btn" href="${escapeHTML(fileUrl)}" target="_blank" rel="noopener"><i class="ti ti-eye"></i> Ver</a>
+        <a class="dev-btn" href="${escapeHTML(fileUrl)}" download="${escapeHTML(d.fileName || def.k)}"><i class="ti ti-download"></i> Descargar</a>
+        <button class="dev-btn" type="button" data-doc-approve="${escapeHTML(def.k)}"><i class="ti ti-circle-check"></i> Aprobar</button>
+        <button class="dev-btn" type="button" data-doc-reject="${escapeHTML(def.k)}"><i class="ti ti-x"></i> Rechazar</button>
+      </div>` : '';
+      const reason = d.reviewStatus === 'Rechazado' && d.rejectionReason ? `<div class="alert-item warn" style="margin-top:8px"><div><strong>Motivo del rechazo</strong><div class="fp-sub">${escapeHTML(d.rejectionReason)}</div></div></div>` : '';
+      return `<div class="qdoc-card"><div class="qdoc-head"><strong>${escapeHTML(def.k)}</strong>${estado}</div>${def.exp ? `<div class="fp-sub">Vence: ${escapeHTML(d.expiry || '—')}</div>` : ''}${def.k === 'Foto moto' && q.plate ? `<div class="fp-sub">Placa: ${escapeHTML(q.plate)}</div>` : ''}<div class="qdoc-view">${view}</div>${reason}${actions}</div>`;
     }).join('');
     const form = document.getElementById('modal-form');
     document.getElementById('modal-title').textContent = `Documentación · ${q.name || ''}`;
@@ -3369,6 +3379,19 @@ function toggleMode(forceDark) {
     </div>
     <div class="modal-foot"><button class="dev-btn" type="button" id="cancel-form">Cerrar</button></div>`;
     document.getElementById('cancel-form').onclick = closeModal;
+    const persistReview = async (name, status, reason = '') => {
+      q.documents = q.documents || {};
+      q.documents[name] = { ...(q.documents[name] || {}), reviewStatus: status, rejectionReason: reason, reviewedAt: new Date().toISOString(), reviewedBy: currentUser().name };
+      const { error } = await supa().from('quickers').update({ documentos: q.documents }).eq('id', q.id);
+      if (error) { toast('No se guardó la revisión: ' + error.message); return; }
+      toast(status === 'Aprobado' ? '✓ Documento aprobado' : 'Documento rechazado y notificado');
+      openQuickerDocs(id);
+    };
+    form.querySelectorAll('[data-doc-approve]').forEach(btn => btn.onclick = () => persistReview(btn.dataset.docApprove, 'Aprobado'));
+    form.querySelectorAll('[data-doc-reject]').forEach(btn => btn.onclick = () => {
+      const reason = prompt('Indica por qué se rechaza este documento:');
+      if (reason?.trim()) persistReview(btn.dataset.docReject, 'Rechazado', reason.trim());
+    });
     const modal = document.getElementById('app-modal');
     modal.classList.add('wide', 'open');
     modal.setAttribute('aria-hidden', 'false');

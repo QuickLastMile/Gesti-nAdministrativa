@@ -88,6 +88,15 @@ drop policy if exists "cada usuario actualiza su perfil" on public.perfiles;
 create policy "cada usuario actualiza su perfil" on public.perfiles for update to authenticated
 using (id = auth.uid()) with check (id = auth.uid());
 
+alter table public.quickers enable row level security;
+drop policy if exists "quicker actualiza sus documentos" on public.quickers;
+create policy "quicker actualiza sus documentos" on public.quickers for update to authenticated
+using (usuario_id = auth.uid()) with check (usuario_id = auth.uid());
+drop policy if exists "administrativos revisan documentos quicker" on public.quickers;
+create policy "administrativos revisan documentos quicker" on public.quickers for update to authenticated
+using (exists (select 1 from public.perfiles p where p.id = auth.uid() and p.perfil in ('Administrador','Gerencia','Jefe','Coordinador','HSQ')))
+with check (exists (select 1 from public.perfiles p where p.id = auth.uid() and p.perfil in ('Administrador','Gerencia','Jefe','Coordinador','HSQ')));
+
 drop policy if exists "usuarios autenticados leen mallas" on public.mallas;
 create policy "usuarios autenticados leen mallas" on public.mallas for select to authenticated using (true);
 drop policy if exists "administrativos gestionan mallas" on public.mallas;
