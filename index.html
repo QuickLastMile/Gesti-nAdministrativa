@@ -1908,6 +1908,7 @@
     </div>
     <div class="login-field"><label for="login-user">Correo</label><input id="login-user" type="email" autocomplete="username" placeholder="tucorreo@quick.com.co" required></div>
     <div class="login-field"><label for="login-pass">Contraseña</label><div class="password-wrap"><input id="login-pass" type="password" autocomplete="current-password" value="" required><button class="password-toggle" type="button" id="toggle-login-pass"><i class="ti ti-eye"></i></button></div></div>
+    <div id="login-error" style="display:none;margin:10px 0 0;padding:11px 13px;border-radius:12px;background:rgba(239,68,68,.14);border:1px solid rgba(239,68,68,.45);color:#fca5a5;font-size:13px;line-height:1.4"></div>
     <button class="dev-btn primary" type="submit" style="width:100%;justify-content:center;height:42px">Ingresar</button>
     <div class="bootstrap-note">Ingresa con el correo y la contraseña que te asignó el administrador. Si olvidaste tu contraseña, solicita el restablecimiento a tu coordinador.</div>
   </form>
@@ -2603,6 +2604,17 @@ function toggleMode(forceDark) {
 
   function scheduleCloudSave(delay = 650) {
     if (!cloudDb || applyingRemoteState) return;
+    // Sin sesión iniciada no se escribe nada en la nube. Evita la avalancha
+    // de escrituras en cola ("Write stream exhausted") en la pantalla de ingreso.
+    if (!state.session) return;
+    // Migración en curso: mientras Supabase esté activo, Firebase queda en
+    // solo lectura. Así se conserva la información histórica sin seguir
+    // escribiendo en una base que estamos dejando atrás.
+    if (window.QUICK_SUPABASE_CONFIG?.enabled) {
+      cloudStatus = 'Firebase en solo lectura (migrando a Supabase)';
+      renderCloudStatus();
+      return;
+    }
     if (!cloudHydrated) {
       cloudStatus = 'Firebase esperando datos remotos...';
       renderCloudStatus();
@@ -9656,21 +9668,43 @@ function toggleMode(forceDark) {
     try { await supa()?.auth.signOut(); } catch (e) {}
   }
 
+  // El aviso va dentro de la tarjeta: la pantalla de ingreso se dibuja
+  // por encima del toast, así que un toast aquí no se vería.
+  function errorIngreso(mensaje) {
+    const caja = document.getElementById('login-error');
+    if (!caja) return;
+    if (!mensaje) { caja.style.display = 'none'; caja.textContent = ''; return; }
+    caja.innerHTML = `<i class="ti ti-alert-circle"></i> ${escapeHTML(mensaje)}`;
+    caja.style.display = 'block';
+  }
+
   document.getElementById('login-form')?.addEventListener('submit', async event => {
     event.preventDefault();
     const boton = event.currentTarget.querySelector('button[type="submit"]');
-    const correo = document.getElementById('login-user').value.trim();
+    const correo = document.getElementById('login-user').value.trim().toLowerCase();
     const contrasena = document.getElementById('login-pass').value;
-    if (!correo || !contrasena) { toast('Escribe tu correo y contraseña'); return; }
+    errorIngreso('');
+
+    if (!correo || !contrasena) { errorIngreso('Escribe tu correo y tu contraseña.'); return; }
+    if (!/^[^@\s]+@[^@\s]+\.[a-z]{2,}$/i.test(correo)) {
+      errorIngreso(`"${correo}" no es un correo válido. Revisa que no tenga letras de más.`);
+      return;
+    }
 
     const textoOriginal = boton ? boton.innerHTML : '';
     if (boton) { boton.disabled = true; boton.innerHTML = 'Verificando...'; }
 
-    const r = await iniciarSesionSupabase(correo, contrasena);
+    let r;
+    try {
+      r = await iniciarSesionSupabase(correo, contrasena);
+    } catch (e) {
+      r = { ok: false, mensaje: 'No se pudo conectar con el servidor. Revisa tu conexión e intenta de nuevo.' };
+    }
 
     if (boton) { boton.disabled = false; boton.innerHTML = textoOriginal; }
-    if (!r.ok) { toast(r.mensaje); return; }
+    if (!r.ok) { errorIngreso(r.mensaje); return; }
 
+    errorIngreso('');
     state.session = r.sesion;
     document.getElementById('login-pass').value = '';
     applySession();
