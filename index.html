@@ -2273,7 +2273,11 @@ function toggleMode(forceDark) {
       updateNavBadges();
       updateNotifDot();
     }
-    if (!applyingRemoteState && options.syncCloud !== false) scheduleCloudSave();
+    if (!applyingRemoteState && options.syncCloud !== false) {
+      scheduleCloudSave();
+      // Envía a Supabase únicamente las filas que cambiaron
+      if (typeof programarSync === 'function') programarSync();
+    }
     toast(message);
   }
 
@@ -2481,6 +2485,14 @@ function toggleMode(forceDark) {
       const ref = cloudDocRef();
       cloudUnsubscribe?.();
       cloudUnsubscribe = ref.onSnapshot(snapshot => {
+        // Migración en curso: Supabase es la única fuente de verdad. Firebase
+        // no debe reemplazar el estado en memoria, porque al hacerlo disparaba
+        // una copia no controlada de sus datos hacia Supabase.
+        if (window.QUICK_SUPABASE_CONFIG?.enabled) {
+          cloudStatus = 'Firebase desconectado (migrado a Supabase)';
+          renderCloudStatus();
+          return;
+        }
         if (snapshot.metadata?.fromCache && !cloudHydrated) {
           cloudStatus = 'Firebase verificando datos...';
           renderCloudStatus();
@@ -9834,7 +9846,203 @@ function toggleMode(forceDark) {
       if (fila.clave === 'prefs' && fila.valor) state.prefs = { ...state.prefs, ...fila.valor };
     });
 
+    // Punto de partida para detectar cambios: lo recién cargado ya está guardado
+    tomarInstantanea();
+
     return { ok: fallas.length === 0, fallas };
+  }
+
+  // ════════════════════ ESCRITURA HACIA SUPABASE ════════════════════
+  // La interfaz modifica el objeto "state" en cientos de lugares. En vez de
+  // reescribir cada uno, se guarda una instantánea y al guardar se comparan
+  // las diferencias: solo se envían las filas que realmente cambiaron.
+
+  const ES_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const nulo = v => (v === '' || v === undefined ? null : v);
+  const hora = v => (v ? String(v).slice(0, 5) : null);
+
+  let instantanea = {};
+  let sincronizando = false;
+
+  // Traductores de la interfaz hacia las columnas de la base
+  const TABLAS = {
+    clients: {
+      tabla: 'clientes', lista: () => state.clients,
+      fila: c => ({ nombre: c.name, id_proyecto: nulo(c.idProyecto), almuerzo: c.lunch === 'Si',
+                    lat: nulo(c.lat), lng: nulo(c.lng), tipos_pago: c.paymentTypes || [] })
+    },
+    quickers: {
+      tabla: 'quickers', lista: () => state.quickers,
+      fila: q => ({ codigo: nulo(q.codigo || q.id), cedula: q.cedula, nombre: q.name,
+                    telefono: nulo(q.phone), email: nulo(q.email), ciudad: nulo(q.city),
+                    cliente: nulo(q.client), punto: nulo(q.point), puntos: q.points || [],
+                    placa: nulo(q.plate), cargo: nulo(q.cargo), fecha_ingreso: nulo(q.dateIngress),
+                    estado: q.status || 'Activo', pagos_habilitados: q.paymentEnabled === 'Si',
+                    tipos_pago: q.paymentTypes || [], documentos: q.documents || {} })
+    },
+    availabilities: {
+      tabla: 'mallas', lista: () => state.availabilities,
+      // estado y las horas reales las deriva la base desde las marcaciones
+      fila: d => ({ fecha: d.date, cliente: d.client, punto: nulo(d.point), ciudad: nulo(d.city),
+                    quicker_id: ES_UUID.test(d.quickerId || '') ? d.quickerId : null,
+                    quicker: nulo(d.quicker), cedula: nulo(d.cedula),
+                    hora_inicio: hora(d.plannedStart), hora_fin: hora(d.plannedEnd),
+                    tipo_contrato: d.contractType || 'Fijo', tipo_gestion: d.managementType || 'Fijo',
+                    quick_go_id: nulo(d.quickGoId), quick_go_estado: nulo(d.quickGoStatus),
+                    novedad_tipo: nulo(d.noveltyType), observaciones: nulo(d.observations),
+                    aprobacion: d.approval || 'Pendiente', extra: d.custom || {} })
+    },
+    novelties: {
+      tabla: 'novedades', lista: () => state.novelties,
+      fila: n => ({ tipo: n.type, subtipo: nulo(n.subtype), origen: nulo(n.origin),
+                    malla_id: ES_UUID.test(n.ref || '') ? n.ref : null,
+                    fecha: n.date || new Date().toISOString().slice(0, 10),
+                    cliente: nulo(n.client), punto: nulo(n.point), quicker: nulo(n.quicker),
+                    cedula: nulo(n.cedula), oasis_id: nulo(n.oasisId), severidad: n.severity || 'Media',
+                    estado_gestion: n.gestionStatus || 'Pendiente', responsable: nulo(n.gestionOwner),
+                    nota: nulo(n.note), datos: n.formData || {} })
+    },
+    mapZones: {
+      tabla: 'zonas_mapa', lista: () => state.mapZones,
+      fila: z => ({ nombre: z.name, cliente: nulo(z.operation), coordinador: nulo(z.coordinator),
+                    color: nulo(z.color), poligonos: z.polygons || [] })
+    },
+    mapPoints: {
+      tabla: 'puntos_mapa', lista: () => state.mapPoints,
+      fila: p => ({ cliente: nulo(p.operation), nombre: p.name, direccion: nulo(p.address),
+                    lat: p.lat, lng: p.lng })
+    }
+  };
+
+  function tomarInstantanea() {
+    instantanea = {};
+    Object.entries(TABLAS).forEach(([clave, def]) => {
+      instantanea[clave] = {};
+      (def.lista() || []).forEach(r => { if (r.id) instantanea[clave][r.id] = JSON.stringify(def.fila(r)); });
+    });
+    instantanea._puntos = JSON.stringify((state.clients || []).map(c => [c.name, c.points || []]));
+    instantanea._prefs = JSON.stringify(state.prefs || {});
+    instantanea._marcas = {};
+    (state.availabilities || []).forEach(d => {
+      if (ES_UUID.test(d.id || '')) {
+        instantanea._marcas[d.id] = [d.realStart || '', d.realEnd || '', d.lunchStart || '', d.lunchEnd || ''].join('|');
+      }
+    });
+  }
+
+  // Las marcaciones son filas propias en la base. Cuando el administrador
+  // corrige una hora en la malla, se traduce a alta, cambio o baja de la
+  // marcación correspondiente, respetando los cerrojos anti-duplicado.
+  const TIPO_MARCA = { realStart: 'ingreso', realEnd: 'salida', lunchStart: 'almuerzo_inicio', lunchEnd: 'almuerzo_fin' };
+
+  async function sincronizarMarcaciones(c, malla, antes) {
+    const previo = (antes || '|||').split('|');
+    const campos = ['realStart', 'realEnd', 'lunchStart', 'lunchEnd'];
+    for (let i = 0; i < campos.length; i++) {
+      const campo = campos[i];
+      const valor = hora(malla[campo]) || '';
+      if (valor === (previo[i] ? hora(previo[i]) : '')) continue;
+      const tipo = TIPO_MARCA[campo];
+      if (!valor) {
+        await c.from('marcaciones').delete().eq('malla_id', malla.id).eq('tipo', tipo);
+      } else {
+        await c.from('marcaciones')
+          .upsert({ malla_id: malla.id, tipo, hora: valor, fecha: malla.date,
+                    quicker: nulo(malla.quicker),
+                    quicker_id: ES_UUID.test(malla.quickerId || '') ? malla.quickerId : null },
+                  { onConflict: 'malla_id,tipo' });
+      }
+    }
+  }
+
+  async function sincronizarConSupabase() {
+    const c = supa();
+    if (!c || !state.session || sincronizando) return;
+    sincronizando = true;
+    const problemas = [];
+
+    try {
+      for (const [clave, def] of Object.entries(TABLAS)) {
+        const filas = def.lista() || [];
+        const previas = instantanea[clave] || {};
+        const vistos = new Set();
+
+        for (const registro of filas) {
+          const cuerpo = def.fila(registro);
+          const serial = JSON.stringify(cuerpo);
+          const tieneId = ES_UUID.test(registro.id || '');
+          if (tieneId) vistos.add(registro.id);
+
+          if (!tieneId) {
+            // Registro nuevo: la base genera el identificador definitivo
+            const { data, error } = await c.from(def.tabla).insert(cuerpo).select('id').single();
+            if (error) { problemas.push(`${def.tabla}: ${error.message}`); continue; }
+            registro.id = data.id;
+            vistos.add(data.id);
+          } else if (previas[registro.id] !== serial) {
+            const { error } = await c.from(def.tabla).update(cuerpo).eq('id', registro.id);
+            if (error) problemas.push(`${def.tabla}: ${error.message}`);
+          }
+        }
+
+        // Bajas: lo que estaba en la instantánea y ya no está en pantalla
+        for (const idPrevio of Object.keys(previas)) {
+          if (!vistos.has(idPrevio)) {
+            const { error } = await c.from(def.tabla).delete().eq('id', idPrevio);
+            if (error) problemas.push(`${def.tabla} (baja): ${error.message}`);
+          }
+        }
+      }
+
+      // Marcaciones derivadas de cambios en la malla
+      for (const d of (state.availabilities || [])) {
+        if (!ES_UUID.test(d.id || '')) continue;
+        const antes = instantanea._marcas?.[d.id];
+        const ahora = [d.realStart || '', d.realEnd || '', d.lunchStart || '', d.lunchEnd || ''].join('|');
+        if (antes !== undefined && antes === ahora) continue;
+        try { await sincronizarMarcaciones(c, d, antes); }
+        catch (e) { problemas.push(`marcaciones: ${e.message}`); }
+      }
+
+      // Puntos de venta: se reescriben por operación cuando cambian
+      const puntosAhora = JSON.stringify((state.clients || []).map(x => [x.name, x.points || []]));
+      if (puntosAhora !== instantanea._puntos) {
+        for (const cli of (state.clients || [])) {
+          const filas = (cli.points || []).filter(p => p && typeof p === 'object' && p.name)
+            .map(p => ({ cliente: cli.name, nombre: p.name, direccion: nulo(p.address),
+                         ciudad: nulo(p.city), lat: nulo(p.lat), lng: nulo(p.lng) }));
+          if (filas.length) {
+            const { error } = await c.from('puntos').upsert(filas, { onConflict: 'cliente,nombre' });
+            if (error) problemas.push(`puntos: ${error.message}`);
+          }
+        }
+      }
+
+      // Preferencias y configuración de la plataforma
+      const prefsAhora = JSON.stringify(state.prefs || {});
+      if (prefsAhora !== instantanea._prefs) {
+        const { error } = await c.from('configuracion')
+          .upsert({ clave: 'prefs', valor: state.prefs || {}, actualizado_en: new Date().toISOString() },
+                  { onConflict: 'clave' });
+        if (error) problemas.push(`configuración: ${error.message}`);
+      }
+
+      tomarInstantanea();
+      const estado = document.getElementById('cloud-status');
+      if (estado) estado.textContent = problemas.length ? `Supabase: ${problemas.length} error(es)` : 'Supabase en vivo';
+      if (problemas.length) {
+        console.warn('No se pudieron guardar algunos cambios:', problemas);
+        toast(`No se guardaron ${problemas.length} cambio(s). Revisa la consola.`);
+      }
+    } finally {
+      sincronizando = false;
+    }
+  }
+
+  let temporizadorSync = null;
+  function programarSync(retraso = 500) {
+    clearTimeout(temporizadorSync);
+    temporizadorSync = setTimeout(() => { sincronizarConSupabase().catch(e => console.warn(e)); }, retraso);
   }
 
   // El aviso va dentro de la tarjeta: la pantalla de ingreso se dibuja
