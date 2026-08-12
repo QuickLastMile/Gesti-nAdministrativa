@@ -1151,6 +1151,24 @@
   .check-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(170px,1fr)); gap: 8px; }
   .check-tile { display: flex; align-items: center; gap: 8px; border: 1px solid var(--border); border-radius: 12px; padding: 10px; background: rgba(255,255,255,.045); color: var(--text-1); font-weight: 750; }
   .check-tile input { width: auto; accent-color: var(--q-yellow); }
+  .multi-select { position: relative; width: 100%; }
+  .multi-select > summary { list-style: none; min-height: 48px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--card-bg); color: var(--text-1); cursor: pointer; }
+  .multi-select > summary::-webkit-details-marker { display: none; }
+  .multi-select > summary:hover,.multi-select[open] > summary { border-color: rgba(245,197,24,.65); box-shadow: 0 0 0 3px rgba(245,197,24,.08); }
+  .multi-select-summary { min-width: 0; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .multi-select-placeholder { color: var(--text-2); font-size: 13px; }
+  .multi-select-count { display: inline-flex; align-items: center; padding: 4px 9px; border-radius: 999px; background: rgba(245,197,24,.15); color: var(--q); font-size: 12px; font-weight: 800; }
+  .multi-select-chevron { transition: transform .18s ease; color: var(--text-2); }
+  .multi-select[open] .multi-select-chevron { transform: rotate(180deg); }
+  .multi-select-panel { position: absolute; z-index: 50; left: 0; right: 0; top: calc(100% + 7px); padding: 10px; border: 1px solid var(--border); border-radius: 14px; background: #17131b; box-shadow: 0 18px 45px rgba(0,0,0,.45); }
+  .multi-select-search { margin-bottom: 8px; }
+  .multi-select-options { max-height: 230px; overflow: auto; display: grid; gap: 5px; padding-right: 3px; }
+  .multi-select-option { display: grid; grid-template-columns: 22px minmax(0,1fr); align-items: center; gap: 9px; padding: 9px 10px; border: 1px solid transparent; border-radius: 10px; color: var(--text-1); cursor: pointer; font-size: 13px; line-height: 1.25; text-transform: none; letter-spacing: 0; margin: 0; }
+  .multi-select-option:hover { background: rgba(255,255,255,.06); border-color: var(--border); }
+  .multi-select-option:has(input:checked) { background: rgba(245,197,24,.12); border-color: rgba(245,197,24,.35); color: var(--q); }
+  .multi-select-option input { width: 17px; height: 17px; margin: 0; accent-color: var(--q); }
+  .multi-select-empty { padding: 14px; text-align: center; color: var(--text-2); font-size: 13px; }
+  .light-mode .multi-select-panel { background: #fff; }
   .calendar-head { display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:16px; }
   .calendar-grid { display:grid; grid-template-columns: repeat(7, minmax(120px,1fr)); gap:8px; overflow:auto; }
   .calendar-day { min-height: 132px; border:1px solid var(--border); border-radius:16px; padding:10px; background:rgba(255,255,255,.04); }
@@ -8392,8 +8410,25 @@ function toggleMode(forceDark) {
   function messengerPointsHTML(clientName, selectedPoints) {
     const c = state.clients.find(x => x.name === clientName) || {};
     const pts = (c.points || []).map(pointName);
-    if (!pts.length) return '<span class="fp-sub">Este cliente no tiene puntos creados.</span>';
-    return pts.map(p => `<label style="display:flex;align-items:center;gap:6px;padding:4px 10px;border:1px solid var(--border);border-radius:8px;cursor:pointer;font-size:13px"><input type="checkbox" name="points" value="${escapeHTML(p)}" ${(selectedPoints||[]).includes(p)?'checked':''}> ${escapeHTML(p)}</label>`).join('');
+    if (!pts.length) return '<div class="multi-select-empty">Este cliente no tiene puntos creados.</div>';
+    return pts.map(p => `<label class="multi-select-option" data-point-option data-point-name="${escapeHTML(p.toLowerCase())}"><input type="checkbox" name="points" value="${escapeHTML(p)}" ${(selectedPoints||[]).includes(p)?'checked':''}><span>${escapeHTML(p)}</span></label>`).join('');
+  }
+  function messengerPointsSelectorHTML(clientName, selectedPoints = []) {
+    return `<details class="multi-select" id="messenger-points-select">
+      <summary><span class="multi-select-summary" data-points-summary></span><i class="ti ti-chevron-down multi-select-chevron"></i></summary>
+      <div class="multi-select-panel">
+        <input class="multi-select-search" type="search" data-points-search placeholder="Buscar punto de venta..." autocomplete="off">
+        <div class="multi-select-options" id="messenger-points-list">${messengerPointsHTML(clientName, selectedPoints)}</div>
+      </div>
+    </details>`;
+  }
+  function updateMessengerPointsSummary() {
+    const selected = [...document.querySelectorAll('#messenger-points-list input[name="points"]:checked')].map(x => x.value);
+    const summary = document.querySelector('[data-points-summary]');
+    if (!summary) return;
+    summary.innerHTML = selected.length
+      ? `<span class="multi-select-count">${selected.length} seleccionado${selected.length === 1 ? '' : 's'}</span><span class="multi-select-placeholder">${escapeHTML(selected.slice(0,2).join(' · '))}${selected.length > 2 ? ` · +${selected.length-2}` : ''}</span>`
+      : '<span class="multi-select-placeholder">Seleccionar uno o varios puntos...</span>';
   }
 
   function openMessengerUserForm(id = '') {
@@ -8421,7 +8456,7 @@ function toggleMode(forceDark) {
       <div class="form-field"><label>Fecha contratacion</label><input name="dateIngress" id="messenger-date" type="date" value="${escapeHTML(item.dateIngress || '')}"></div>
       <div class="form-field"><label>Cliente asignado</label><select name="client" id="messenger-client">${clients.map(c => `<option value="${escapeHTML(c)}" ${c === selectedClient ? 'selected' : ''}>${escapeHTML(c)}</option>`).join('')}</select></div>
       <div class="form-field full"><label>Puntos asignados <span class="fp-sub">(puede ser mas de uno)</span></label>
-        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px" id="messenger-points-list">${messengerPointsHTML(selectedClient, selectedPoints)}</div>
+        ${messengerPointsSelectorHTML(selectedClient, selectedPoints)}
       </div>
       <div class="form-field"><label>Reporta pagos adicionales</label><select name="paymentEnabled"><option>No</option><option>Si</option></select></div>
       <div class="form-field full"><label>Tipos de pago habilitados</label><div class="check-grid">
@@ -8429,9 +8464,18 @@ function toggleMode(forceDark) {
       </div></div>
     </div><div class="modal-foot"><button class="dev-btn" type="button" id="cancel-form">Cancelar</button><button class="dev-btn primary" type="submit">${id ? 'Guardar mensajero' : 'Crear mensajero'}</button></div>`;
     form.elements.paymentEnabled.value = item.paymentEnabled || 'No';
+    updateMessengerPointsSummary();
     document.getElementById('messenger-client').onchange = event => {
       document.getElementById('messenger-points-list').innerHTML = messengerPointsHTML(event.target.value, []);
+      const search = document.querySelector('[data-points-search]');
+      if (search) search.value = '';
+      updateMessengerPointsSummary();
     };
+    form.addEventListener('change', event => { if (event.target.matches('input[name="points"]')) updateMessengerPointsSummary(); });
+    form.querySelector('[data-points-search]')?.addEventListener('input', event => {
+      const term = event.target.value.trim().toLowerCase();
+      form.querySelectorAll('[data-point-option]').forEach(option => { option.style.display = !term || option.dataset.pointName.includes(term) ? '' : 'none'; });
+    });
     document.getElementById('messenger-cedula').oninput = () => {
       const asset = findAssetByCedula(document.getElementById('messenger-cedula').value);
       if (!asset) return;
