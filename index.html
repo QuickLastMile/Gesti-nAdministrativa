@@ -1169,6 +1169,18 @@
   .multi-select-option input { width: 17px; height: 17px; margin: 0; accent-color: var(--q); }
   .multi-select-empty { padding: 14px; text-align: center; color: var(--text-2); font-size: 13px; }
   .light-mode .multi-select-panel { background: #fff; }
+  .doc-preview-click { cursor: zoom-in; position: relative; border-radius: 12px; overflow: hidden; }
+  .doc-preview-click::after { content: 'Ampliar'; position: absolute; right: 10px; bottom: 10px; padding: 5px 9px; border-radius: 999px; background: rgba(0,0,0,.72); color: #fff; font-size: 11px; font-weight: 800; opacity: 0; transform: translateY(4px); transition: .18s ease; pointer-events: none; }
+  .doc-preview-click:hover::after { opacity: 1; transform: none; }
+  .doc-file-tile { min-height: 150px; display: grid; place-items: center; gap: 8px; padding: 22px; border: 1px dashed var(--border); background: rgba(255,255,255,.035); color: var(--text-2); text-align: center; }
+  .doc-file-tile i { font-size: 42px; color: var(--q); }
+  .document-viewer { position: fixed; inset: 0; z-index: 10000; display: none; place-items: center; padding: 22px; background: rgba(0,0,0,.88); backdrop-filter: blur(10px); }
+  .document-viewer.open { display: grid; }
+  .document-viewer-shell { width: min(1180px,96vw); height: min(860px,92vh); display: flex; flex-direction: column; border: 1px solid rgba(245,197,24,.35); border-radius: 18px; overflow: hidden; background: #0c0a0f; box-shadow: 0 28px 90px rgba(0,0,0,.65); }
+  .document-viewer-head { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 12px 16px; border-bottom: 1px solid var(--border); color: #fff; }
+  .document-viewer-body { flex: 1; min-height: 0; display: grid; place-items: center; overflow: auto; padding: 16px; }
+  .document-viewer-body img { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 10px; }
+  .document-viewer-body iframe { width: 100%; height: 100%; border: 0; border-radius: 10px; background: #fff; }
   .calendar-head { display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:16px; }
   .calendar-grid { display:grid; grid-template-columns: repeat(7, minmax(120px,1fr)); gap:8px; overflow:auto; }
   .calendar-day { min-height: 132px; border:1px solid var(--border); border-radius:16px; padding:10px; background:rgba(255,255,255,.04); }
@@ -3350,21 +3362,20 @@ function toggleMode(forceDark) {
       const d = docs[def.k] || {};
       const has = hasMedia(d);
       const dd = def.exp && d.expiry ? daysToExpiry(d.expiry) : null;
-      const review = d.reviewStatus || (has ? 'Pendiente' : 'Sin cargar');
-      const reviewBadge = review === 'Aprobado' ? '<span class="b b-green">Aprobado</span>' : review === 'Rechazado' ? '<span class="b b-red">Rechazado</span>' : has ? '<span class="b b-yellow">Por revisar</span>' : '<span class="b b-yellow">Pendiente</span>';
+      const review = d.reviewStatus || (has ? 'Cargado' : 'Sin cargar');
+      const reviewBadge = review === 'Rechazado' ? '<span class="b b-red">Rechazado</span>' : has ? '<span class="b b-green">Cargado</span>' : '<span class="b b-yellow">Pendiente</span>';
       const estado = !def.exp ? reviewBadge
         : !d.expiry ? '<span class="b b-yellow">Sin fecha</span>'
         : dd < 0 ? '<span class="b b-red">Vencido</span>'
         : dd <= 30 ? `<span class="b b-yellow">Vence en ${dd}d</span>` : reviewBadge;
       const fileUrl = d.url || d.dataUrl || (/^https?:/i.test(d.mediaId || '') ? d.mediaId : '');
-      const view = has ? ((d.fileType || '').startsWith('image/') || /^data:image|^https?.*(jpg|jpeg|png|webp)/i.test(fileUrl) || !d.fileType
-          ? `<img class="qdoc-img" ${mediaAttr(d)} alt="${escapeHTML(def.k)}">`
-          : `<div class="fp-sub"><i class="ti ti-file"></i> ${escapeHTML(d.fileName || 'Documento adjunto')}</div>`)
+      const imageLike = (d.fileType || '').startsWith('image/') || /^data:image|^https?.*(jpg|jpeg|png|webp)/i.test(fileUrl) || (!d.fileType && !/\.pdf(\?|$)/i.test(fileUrl));
+      const view = has ? (imageLike
+          ? `<div class="doc-preview-click" data-doc-preview="${escapeHTML(fileUrl)}" data-doc-title="${escapeHTML(def.k)}" data-doc-type="image"><img class="qdoc-img" ${mediaAttr(d)} alt="${escapeHTML(def.k)}"></div>`
+          : `<div class="doc-preview-click doc-file-tile" data-doc-preview="${escapeHTML(fileUrl)}" data-doc-title="${escapeHTML(def.k)}" data-doc-type="document"><i class="ti ti-file-type-pdf"></i><strong>${escapeHTML(d.fileName || def.k)}</strong><span class="fp-sub">Pulsa para visualizar</span></div>`)
         : '<div class="fp-sub">Sin archivo adjunto</div>';
       const actions = has ? `<div class="row-actions" style="margin-top:10px;flex-wrap:wrap">
-        <a class="dev-btn" href="${escapeHTML(fileUrl)}" target="_blank" rel="noopener"><i class="ti ti-eye"></i> Ver</a>
         <a class="dev-btn" href="${escapeHTML(fileUrl)}" download="${escapeHTML(d.fileName || def.k)}"><i class="ti ti-download"></i> Descargar</a>
-        <button class="dev-btn" type="button" data-doc-approve="${escapeHTML(def.k)}"><i class="ti ti-circle-check"></i> Aprobar</button>
         <button class="dev-btn" type="button" data-doc-reject="${escapeHTML(def.k)}"><i class="ti ti-x"></i> Rechazar</button>
       </div>` : '';
       const reason = d.reviewStatus === 'Rechazado' && d.rejectionReason ? `<div class="alert-item warn" style="margin-top:8px"><div><strong>Motivo del rechazo</strong><div class="fp-sub">${escapeHTML(d.rejectionReason)}</div></div></div>` : '';
@@ -3387,16 +3398,33 @@ function toggleMode(forceDark) {
       toast(status === 'Aprobado' ? '✓ Documento aprobado' : 'Documento rechazado y notificado');
       openQuickerDocs(id);
     };
-    form.querySelectorAll('[data-doc-approve]').forEach(btn => btn.onclick = () => persistReview(btn.dataset.docApprove, 'Aprobado'));
     form.querySelectorAll('[data-doc-reject]').forEach(btn => btn.onclick = () => {
       const reason = prompt('Indica por qué se rechaza este documento:');
       if (reason?.trim()) persistReview(btn.dataset.docReject, 'Rechazado', reason.trim());
     });
+    form.querySelectorAll('[data-doc-preview]').forEach(preview => preview.onclick = () => openDocumentViewer(preview.dataset.docPreview, preview.dataset.docTitle, preview.dataset.docType));
     const modal = document.getElementById('app-modal');
     modal.classList.add('wide', 'open');
     modal.setAttribute('aria-hidden', 'false');
     loadMediaImages();
     genQRImages();
+  }
+
+  function openDocumentViewer(url, title, type) {
+    let viewer = document.getElementById('document-viewer');
+    if (!viewer) {
+      viewer = document.createElement('div');
+      viewer.id = 'document-viewer';
+      viewer.className = 'document-viewer';
+      document.body.appendChild(viewer);
+    }
+    const content = type === 'image'
+      ? `<img src="${escapeHTML(url)}" alt="${escapeHTML(title || 'Documento')}">`
+      : `<iframe src="${escapeHTML(url)}" title="${escapeHTML(title || 'Documento')}"></iframe>`;
+    viewer.innerHTML = `<div class="document-viewer-shell"><div class="document-viewer-head"><strong>${escapeHTML(title || 'Documento')}</strong><button class="dev-btn" type="button" data-close-document-viewer><i class="ti ti-x"></i> Cerrar</button></div><div class="document-viewer-body">${content}</div></div>`;
+    viewer.classList.add('open');
+    viewer.querySelector('[data-close-document-viewer]').onclick = () => viewer.classList.remove('open');
+    viewer.onclick = event => { if (event.target === viewer) viewer.classList.remove('open'); };
   }
 
   // QR para compartir la app del mensajero
