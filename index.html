@@ -4956,12 +4956,21 @@ function toggleMode(forceDark) {
   function daysToExpiry(date) { if (!date) return null; return Math.ceil((new Date(date) - new Date()) / 86400000); }
   function quickerDocState(q) {
     const docs = q.documents || {};
-    let venc = 0, prox = 0;
-    QUICKER_DOC_DEFS.filter(d => d.exp).forEach(d => {
-      const e = docs[d.k]?.expiry; if (!e) return;
-      const dd = daysToExpiry(e); if (dd < 0) venc++; else if (dd <= 30) prox++;
+    let loaded = 0, missing = 0, noDate = 0, rejected = 0, venc = 0, prox = 0;
+    QUICKER_DOC_DEFS.forEach(def => {
+      const doc = docs[def.k] || {};
+      if (doc.reviewStatus === 'Rechazado') rejected++;
+      if (!hasMedia(doc)) { missing++; return; }
+      loaded++;
+      if (!def.exp) return;
+      if (!doc.expiry) { noDate++; return; }
+      const dd = daysToExpiry(doc.expiry);
+      if (dd < 0) venc++; else if (dd <= 30) prox++;
     });
+    if (loaded === 0) return { label: 'Sin diligenciar', cls: 'b-red', key: 'missing' };
+    if (rejected) return { label: `${rejected} rechazado${rejected > 1 ? 's' : ''}`, cls: 'b-red', key: 'rejected' };
     if (venc) return { label: `${venc} vencido${venc > 1 ? 's' : ''}`, cls: 'b-red' };
+    if (missing || noDate) return { label: `Incompleta · ${missing + noDate} pendiente${missing + noDate > 1 ? 's' : ''}`, cls: 'b-yellow', key: 'incomplete' };
     if (prox) return { label: `${prox} por vencer`, cls: 'b-yellow' };
     return { label: 'Al día', cls: 'b-green' };
   }
@@ -4984,8 +4993,8 @@ function toggleMode(forceDark) {
     };
     const kpisHTML = `<div class="kpi-row module-kpi-row" style="margin-bottom:16px">
       <div class="kpi-card q-accent"><i class="ti ti-users kpi-icon"></i><div class="kpi-label">Activos</div><div class="kpi-value yellow">${kpi.activos}</div><div class="kpi-delta">De ${all.length} registrados</div></div>
-      <div class="kpi-card grad-orange"><i class="ti ti-file-x kpi-icon"></i><div class="kpi-label">Doc. vencido</div><div class="kpi-value">${kpi.docVenc}</div><div class="kpi-delta down">Requiere acción</div></div>
-      <div class="kpi-card grad-purple"><i class="ti ti-clock-exclamation kpi-icon"></i><div class="kpi-label">Por vencer</div><div class="kpi-value">${kpi.porVencer}</div><div class="kpi-delta">Próximos 30 días</div></div>
+      <div class="kpi-card grad-orange"><i class="ti ti-file-x kpi-icon"></i><div class="kpi-label">Requiere atención</div><div class="kpi-value">${kpi.docVenc}</div><div class="kpi-delta down">Sin diligenciar, rechazado o vencido</div></div>
+      <div class="kpi-card grad-purple"><i class="ti ti-clock-exclamation kpi-icon"></i><div class="kpi-label">Pendiente documental</div><div class="kpi-value">${kpi.porVencer}</div><div class="kpi-delta">Incompleto o próximo a vencer</div></div>
       <div class="kpi-card grad-teal"><i class="ti ti-user-off kpi-icon"></i><div class="kpi-label">Inactivos</div><div class="kpi-value">${kpi.inactivos}</div><div class="kpi-delta">Suspendidos / inactivos</div></div>
     </div>`;
 
