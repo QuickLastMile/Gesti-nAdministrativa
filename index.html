@@ -2647,7 +2647,7 @@ function toggleMode(forceDark) {
     const el = document.getElementById('cloud-status');
     if (!el) return;
     el.textContent = cloudStatus;
-    el.className = cloudStatus.includes('Firebase en vivo') || cloudStatus.includes('sincronizado') ? 'status-pill st-ok' : cloudStatus.includes('error') || cloudStatus.includes('pendiente') ? 'status-pill st-bad' : 'status-pill st-warn';
+    el.className = cloudStatus.includes('en vivo') || cloudStatus.includes('sincronizado') || cloudStatus.includes('Conectado') ? 'status-pill st-ok' : cloudStatus.includes('error') || cloudStatus.includes('Sin conexión') || cloudStatus.includes('fallo') ? 'status-pill st-bad' : 'status-pill st-warn';
   }
 
   // Id único: milisegundos + contador incremental + aleatorio largo.
@@ -9764,7 +9764,13 @@ function toggleMode(forceDark) {
   // que falle no tumba las demás: se reporta y el resto sigue disponible.
   async function cargarDesdeSupabase() {
     const c = supa();
-    if (!c) return { ok: false, fallas: ['sin conexión'] };
+    cloudStatus = 'Conectando Supabase...';
+    renderCloudStatus();
+    if (!c) {
+      cloudStatus = 'Supabase: Sin conexión';
+      renderCloudStatus();
+      return { ok: false, fallas: ['sin conexión'] };
+    }
 
     const pedir = (tabla, opciones = {}) => {
       let q = c.from(tabla).select(opciones.select || '*');
@@ -9883,6 +9889,9 @@ function toggleMode(forceDark) {
     // Punto de partida para detectar cambios: lo recién cargado ya está guardado
     tomarInstantanea();
     await loadMatrixCloud();
+
+    cloudStatus = fallas.length ? `Supabase conectado · ${fallas.length} tabla(s) con error` : 'Supabase en vivo';
+    renderCloudStatus();
 
     return { ok: fallas.length === 0, fallas };
   }
@@ -10063,8 +10072,8 @@ function toggleMode(forceDark) {
       }
 
       tomarInstantanea();
-      const estado = document.getElementById('cloud-status');
-      if (estado) estado.textContent = problemas.length ? `Supabase: ${problemas.length} error(es)` : 'Supabase en vivo';
+      cloudStatus = problemas.length ? `Supabase: ${problemas.length} error(es)` : 'Supabase en vivo';
+      renderCloudStatus();
       if (problemas.length) {
         console.warn('No se pudieron guardar algunos cambios:', problemas);
         toast(`No se guardaron ${problemas.length} cambio(s). Revisa la consola.`);
@@ -10121,7 +10130,11 @@ function toggleMode(forceDark) {
     document.getElementById('login-pass').value = '';
 
     if (boton) { boton.disabled = true; boton.innerHTML = 'Cargando datos...'; }
-    const carga = await cargarDesdeSupabase().catch(e => ({ ok: false, fallas: [e.message] }));
+    const carga = await cargarDesdeSupabase().catch(e => {
+      cloudStatus = 'Supabase: error de conexión';
+      renderCloudStatus();
+      return { ok: false, fallas: [e.message] };
+    });
     if (boton) { boton.disabled = false; boton.innerHTML = textoOriginal; }
 
     applySession();
@@ -10170,7 +10183,11 @@ function toggleMode(forceDark) {
     .then(async ok => {
       if (!ok) return;
       applySession();
-      const carga = await cargarDesdeSupabase().catch(e => ({ ok: false, fallas: [e.message] }));
+      const carga = await cargarDesdeSupabase().catch(e => {
+        cloudStatus = 'Supabase: error de conexión';
+        renderCloudStatus();
+        return { ok: false, fallas: [e.message] };
+      });
       renderCurrentModule();
       if (!carga.ok) console.warn('Tablas que no cargaron:', carga.fallas);
     })
