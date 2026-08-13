@@ -2834,7 +2834,13 @@ function toggleMode(forceDark) {
     }];
   }
 
-  function escapeHTML(value) {
+  // Solo enlaces http(s) o rutas firmadas de la cubeta. Impide que un enlace
+// "javascript:" guardado en una publicacion ejecute codigo al hacer clic.
+function urlSegura(v) {
+  const s = String(v || '').trim();
+  return /^(https?:\/\/|\/)/i.test(s) ? escapeHTML(s) : '#';
+}
+function escapeHTML(value) {
     return String(value ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
   }
 
@@ -3496,7 +3502,7 @@ function toggleMode(forceDark) {
           : `<div class="doc-preview-click doc-file-tile" data-doc-preview="${escapeHTML(fileUrl)}" data-doc-title="${escapeHTML(def.k)}" data-doc-type="document"><i class="ti ti-file-type-pdf"></i><strong>${escapeHTML(d.fileName || def.k)}</strong><span class="fp-sub">Pulsa para visualizar</span></div>`)
         : '<div class="fp-sub">Sin archivo adjunto</div>';
       const actions = has ? `<div class="row-actions" style="margin-top:10px;flex-wrap:wrap">
-        <a class="dev-btn" href="${escapeHTML(fileUrl)}" download="${escapeHTML(d.fileName || def.k)}"><i class="ti ti-download"></i> Descargar</a>
+        <a class="dev-btn" href="${urlSegura(fileUrl)}" download="${escapeHTML(d.fileName || def.k)}"><i class="ti ti-download"></i> Descargar</a>
         <button class="dev-btn" type="button" data-doc-reject="${escapeHTML(def.k)}"><i class="ti ti-x"></i> Rechazar</button>
       </div>` : '';
       const reason = d.reviewStatus === 'Rechazado' && d.rejectionReason ? `<div class="alert-item warn" style="margin-top:8px"><div><strong>Motivo del rechazo</strong><div class="fp-sub">${escapeHTML(d.rejectionReason)}</div></div></div>` : '';
@@ -6044,7 +6050,7 @@ function toggleMode(forceDark) {
           ${p.quicker ? `<p class="fp-sub"><strong>Mensajero:</strong> ${escapeHTML(p.quicker)}${p.cedula ? ' · CC ' + escapeHTML(p.cedula) : ''}</p>` : ''}
           ${p.valor ? `<p class="fp-sub"><strong>Valor:</strong> $${escapeHTML(p.valor)} · ${escapeHTML(p.infraction || '')} · ${escapeHTML(p.dateImposicion || '')}</p>` : ''}
           ${p.body ? `<div class="hsq-text">${escapeHTML(p.body)}</div>` : ''}
-          ${p.link ? `<a class="dev-btn" href="${escapeHTML(p.link)}" target="_blank" rel="noopener"><i class="ti ti-external-link"></i> Abrir enlace</a>` : ''}
+          ${p.link ? `<a class="dev-btn" href="${urlSegura(p.link)}" target="_blank" rel="noopener"><i class="ti ti-external-link"></i> Abrir enlace</a>` : ''}
           ${p.doc && hasMedia(p.doc) ? `<a class="dev-btn" ${p.doc.dataUrl || p.doc.url ? `href="${p.doc.dataUrl || p.doc.url}"` : `data-media-id="${escapeHTML(p.doc.mediaId)}"`} target="_blank" download><i class="ti ti-download"></i> Documento</a>` : ''}
           <button class="dev-btn hsq-track-btn" data-hsq-track="${p.id}"><i class="ti ti-users"></i> Mensajeros y seguimiento (${st.opened}/${st.total})</button>
           <div class="hsq-track" id="hsq-track-${p.id}" style="display:none;margin-top:8px">

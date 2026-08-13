@@ -1,71 +1,51 @@
 -- ============================================================================
---  CORRECCIÓN DE SEGURIDAD — ejecutar en el SQL Editor del proyecto
+--  CORRECCIÓN DE SEGURIDAD
 --
---  Corrige dos problemas detectados tras la migración:
+--  IMPORTANTE: ejecutar los PASOS POR SEPARADO, no todo de una vez.
+--  El editor SQL corre cada ejecución dentro de una transacción: si una sola
+--  línea falla, se revierte TODO y parece que no pasó nada. Eso fue lo que
+--  ocurrió en el primer intento: la cubeta siguió pública.
 --
---  1) La cubeta "evidencias" quedó PÚBLICA. Se verificó que los documentos
---     (cédula, licencia, SOAT, fotos) se descargaban desde internet sin
---     iniciar sesión, solo con la dirección del archivo.
---
---  2) Se agregaron políticas con "using (true)" sobre mallas, marcaciones,
---     evidencias y ubicaciones. Como las políticas permisivas se suman entre
---     sí, esas anulan en la práctica el control por operación y por perfil:
---     cualquier usuario con sesión podía leer, modificar o borrar la
---     información de cualquier otro, incluidas las marcaciones que sustentan
---     la nómina.
---
---  Requiere que la aplicación ya use enlaces firmados en vez de URL públicas.
+--  Corrige dos hallazgos verificados:
+--   1) La cubeta "evidencias" es pública: se descargaron documentos de
+--      identidad desde internet sin iniciar sesión.
+--   2) Se agregaron políticas "using (true)" que anulan el control por
+--      operación sobre mallas, marcaciones, evidencias y ubicaciones.
 -- ============================================================================
 
 
--- ─────────────────────────────────────────────────────────────
--- 1. La cubeta deja de ser pública
--- ─────────────────────────────────────────────────────────────
+-- ╔══════════════════════════════════════════════════════════════╗
+-- ║  PASO 1 — LO MÁS URGENTE. Ejecutar solo estas dos líneas.    ║
+-- ╚══════════════════════════════════════════════════════════════╝
+
 update storage.buckets set public = false where id = 'evidencias';
 
--- Solo el dueño del archivo o el personal administrativo puede verlo
-drop policy if exists "autenticados leen evidencias storage" on storage.objects;
-create policy "lectura de evidencias por dueno o administrativo"
-  on storage.objects for select to authenticated
-  using (
-    bucket_id = 'evidencias'
-    and (
-      (storage.foldername(name))[1] = auth.uid()::text
-      or public.es_gestor()
-    )
-  );
+select id, public as sigue_publica from storage.buckets where id = 'evidencias';
 
--- Cada quien sube en su propia carpeta (se conserva la regla existente)
-drop policy if exists "autenticados suben evidencias storage" on storage.objects;
-create policy "cada usuario sube en su carpeta"
-  on storage.objects for insert to authenticated
-  with check (bucket_id = 'evidencias' and (storage.foldername(name))[1] = auth.uid()::text);
-
-drop policy if exists "solo administrador borra evidencias storage" on storage.objects;
-create policy "solo administrador borra evidencias storage"
-  on storage.objects for delete to authenticated
-  using (bucket_id = 'evidencias' and public.es_admin());
+-- Debe responder sigue_publica = false.
+-- Si da error de permisos, hacerlo desde el panel:
+--   Storage → evidencias → ⋮ → Edit bucket → desactivar "Public bucket"
 
 
--- ─────────────────────────────────────────────────────────────
--- 2. Se retiran las políticas abiertas
---    Las políticas por operación y perfil del esquema original
---    siguen existiendo y vuelven a ser las que mandan.
--- ─────────────────────────────────────────────────────────────
-drop policy if exists "usuarios autenticados leen mallas"      on public.mallas;
-drop policy if exists "administrativos gestionan mallas"       on public.mallas;
-drop policy if exists "autenticados gestionan marcaciones"     on public.marcaciones;
-drop policy if exists "autenticados gestionan evidencias"      on public.evidencias;
-drop policy if exists "autenticados leen ubicaciones"          on public.ubicaciones;
-drop policy if exists "autenticados registran ubicaciones"     on public.ubicaciones;
+-- ╔══════════════════════════════════════════════════════════════╗
+-- ║  PASO 2 — Quitar las políticas abiertas de las tablas.       ║
+-- ║  Ejecutar este bloque aparte.                                ║
+-- ╚══════════════════════════════════════════════════════════════╝
+
+drop policy if exists "usuarios autenticados leen mallas"  on public.mallas;
+drop policy if exists "administrativos gestionan mallas"   on public.mallas;
+drop policy if exists "autenticados gestionan marcaciones" on public.marcaciones;
+drop policy if exists "autenticados gestionan evidencias"  on public.evidencias;
+drop policy if exists "autenticados leen ubicaciones"      on public.ubicaciones;
+drop policy if exists "autenticados registran ubicaciones" on public.ubicaciones;
 
 
--- ─────────────────────────────────────────────────────────────
--- 3. Se reponen las reglas correctas donde hagan falta
---    (idempotente: se puede ejecutar más de una vez sin daño)
--- ─────────────────────────────────────────────────────────────
+-- ╔══════════════════════════════════════════════════════════════╗
+-- ║  PASO 3 — Reponer el control por operación y perfil.         ║
+-- ║  Ejecutar este bloque aparte.                                ║
+-- ╚══════════════════════════════════════════════════════════════╝
 
--- Mallas: el mensajero ve las suyas; el resto por operación asignada
+-- Mallas
 drop policy if exists "mallas: el mensajero ve sus turnos" on public.mallas;
 create policy "mallas: el mensajero ve sus turnos"
   on public.mallas for select to authenticated
@@ -91,8 +71,8 @@ drop policy if exists "mallas: solo administrador elimina" on public.mallas;
 create policy "mallas: solo administrador elimina"
   on public.mallas for delete to authenticated using (public.es_admin());
 
--- Marcaciones: el mensajero solo marca su propio turno; corregir o borrar
--- es potestad del administrador. Es la información que sustenta la nómina.
+-- Marcaciones: sustentan la nómina. El mensajero solo marca su propio turno;
+-- corregir o borrar queda reservado al administrador.
 drop policy if exists "marcaciones: el mensajero ve las suyas" on public.marcaciones;
 create policy "marcaciones: el mensajero ve las suyas"
   on public.marcaciones for select to authenticated
@@ -129,16 +109,15 @@ drop policy if exists "marcaciones: solo administrador elimina" on public.marcac
 create policy "marcaciones: solo administrador elimina"
   on public.marcaciones for delete to authenticated using (public.es_admin());
 
--- Evidencias fotográficas
+-- Evidencias
+drop policy if exists "evidencias: lectura por alcance" on public.evidencias;
+create policy "evidencias: lectura por alcance"
+  on public.evidencias for select to authenticated using (public.es_gestor());
+
 drop policy if exists "evidencias: el mensajero ve las suyas" on public.evidencias;
 create policy "evidencias: el mensajero ve las suyas"
   on public.evidencias for select to authenticated
   using (quicker = (select nombre from public.perfiles where id = auth.uid()));
-
-drop policy if exists "evidencias: lectura por alcance" on public.evidencias;
-create policy "evidencias: lectura por alcance"
-  on public.evidencias for select to authenticated
-  using (public.es_gestor());
 
 drop policy if exists "evidencias: insercion autenticada" on public.evidencias;
 create policy "evidencias: insercion autenticada"
@@ -169,7 +148,25 @@ create policy "ubicaciones: solo administrador purga"
   on public.ubicaciones for delete to authenticated using (public.es_admin());
 
 
--- ─────────────────────────────────────────────────────────────
--- Comprobación: la cubeta debe quedar en "false"
--- ─────────────────────────────────────────────────────────────
-select id, public as es_publica from storage.buckets where id = 'evidencias';
+-- ╔══════════════════════════════════════════════════════════════╗
+-- ║  PASO 4 — Acceso a los archivos de la cubeta.                ║
+-- ║                                                              ║
+-- ║  Si este bloque da "must be owner of table objects", NO es   ║
+-- ║  un problema: al dejar la cubeta privada (Paso 1) el archivo ║
+-- ║  ya solo se alcanza con enlace firmado, que es lo que usa    ║
+-- ║  la aplicación. Estas políticas afinan quién puede pedirlo.  ║
+-- ║  En ese caso créalas desde Storage → Policies en el panel.   ║
+-- ╚══════════════════════════════════════════════════════════════╝
+
+drop policy if exists "autenticados leen evidencias storage" on storage.objects;
+create policy "lectura de evidencias por dueno o administrativo"
+  on storage.objects for select to authenticated
+  using (
+    bucket_id = 'evidencias'
+    and ((storage.foldername(name))[1] = auth.uid()::text or public.es_gestor())
+  );
+
+drop policy if exists "autenticados suben evidencias storage" on storage.objects;
+create policy "cada usuario sube en su carpeta"
+  on storage.objects for insert to authenticated
+  with check (bucket_id = 'evidencias' and (storage.foldername(name))[1] = auth.uid()::text);

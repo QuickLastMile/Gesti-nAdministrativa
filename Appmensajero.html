@@ -201,7 +201,12 @@
     async function restaurarSesion(){const c=supa();if(!c)return false;const{data:{session:s}}=await c.auth.getSession();if(!s)return false;try{await iniciarSesionExistente(s.user);return true}catch(e){await c.auth.signOut();return false}}
     async function iniciarSesionExistente(user){const c=supa();const{data:p,error}=await c.from('perfiles').select('*').eq('id',user.id).maybeSingle();if(error||!p||p.perfil!==window.QUICK_SUPABASE_CONFIG.perfilMensajero)throw error||new Error('Perfil no autorizado');session={id:p.id,name:p.nombre,email:user.email,username:user.email,profile:p.perfil,client:p.cliente||'',cedula:p.cedula||''};state.users=[session];const{data:qs}=await c.from('quickers').select('*').or(`usuario_id.eq.${p.id},email.eq.${user.email}`);state.quickers=(qs||[]).map(q=>({id:q.id,usuarioId:q.usuario_id,name:q.nombre,cedula:q.cedula,email:q.email,phone:q.telefono||'',client:q.cliente||'',point:q.punto||'',points:q.puntos||[],paymentEnabled:q.pagos_habilitados?'Si':'No',paymentTypes:q.tipos_pago||[],documents:q.documentos||{}}));await cargarSupabase();suscribirRealtime()}
     function suscribirRealtime(){const c=supa();if(!c||realtimeChannel)return;realtimeChannel=c.channel('mensajero-operacion').on('postgres_changes',{event:'*',schema:'public',table:'mallas'},()=>cargarSupabase().then(()=>renderHome(false)).catch(()=>{})).on('postgres_changes',{event:'*',schema:'public',table:'marcaciones'},()=>cargarSupabase().then(()=>renderHome(false)).catch(()=>{})).subscribe()}
-    let uidSeq=0;
+    // Escapa texto antes de insertarlo en HTML. Sin esto, un comunicado con
+// codigo malicioso se ejecutaria en el telefono de cada mensajero.
+function esc(v){return String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;')}
+// Solo se permiten enlaces http(s): bloquea javascript: y data:
+function urlSegura(v){const s=String(v||'').trim();return /^https?:\/\//i.test(s)?esc(s):'#'}
+let uidSeq=0;
     function uid(p){uidSeq=(uidSeq+1)%1000000;return `${p}-${Date.now().toString(36).toUpperCase()}${uidSeq.toString(36).toUpperCase().padStart(4,'0')}${Math.random().toString(36).slice(2,8).toUpperCase()}`}
     let toastTimer=null;function toast(msg,cls,ms){const t=document.getElementById('toast');t.textContent=msg;t.className='toast on'+(cls?' '+cls:'');clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.classList.remove('on'),ms||1900)}
     function today(){return new Date().toISOString().slice(0,10)}
@@ -239,22 +244,22 @@
     function renderTickets(){const mine=(state.tickets||[]).filter(t=>t.createdByName===session.name);document.getElementById('tkList').innerHTML=mine.length?mine.slice(0,20).map(t=>`<div class="tk"><b>${t.title||''}</b><div class="meta-row"><span>${t.type||''}</span><span class="pill ${/finaliz/i.test(overall(t))?'ok':''}">${overall(t)}</span></div></div>`).join(''):'<p class="muted">Sin solicitudes aún.</p>'}
     function infoForMe(){const cl=myQuicker().client||'';return (state.hsqPublications||[]).filter(p=>{const pr=p.projects||[];return pr.includes('Todos')||pr.length===0||pr.includes(cl)}).sort((a,b)=>(b.createdAt||'').localeCompare(a.createdAt||''))}
     function renderInfo(){const box=document.getElementById('infoList');if(!box)return;const items=infoForMe();box.innerHTML=items.length?items.map(p=>{const a=(p.acks&&p.acks[session.name])||{};const seen=!!a.openedAt;const cover=(p.cover&&(p.cover.dataUrl||p.cover.url))?`<img class="info-cover" src="${p.cover.dataUrl||p.cover.url}" alt="">`:(p.cover&&p.cover.mediaId?`<img class="info-cover" data-info-media="${p.cover.mediaId}" alt="">`:'');const al=p.allow||{};return `<div class="tk" data-info-card="${p.id}">
-      <div class="info-head" data-info-open="${p.id}"><b>${p.title||p.label||''}</b><span class="pill ${seen?'ok':''}">${seen?'Visto':'Nuevo'}</span></div>
-      <div class="meta-row"><span>${p.label||p.kind}</span><span>${(p.createdAt||'').slice(0,10)}</span></div>
+      <div class="info-head" data-info-open="${p.id}"><b>${esc(p.title||p.label||'')}</b><span class="pill ${seen?'ok':''}">${seen?'Visto':'Nuevo'}</span></div>
+      <div class="meta-row"><span>${esc(p.label||p.kind||'')}</span><span>${(p.createdAt||'').slice(0,10)}</span></div>
       <div class="info-body" id="info-body-${p.id}" style="display:none">
         ${cover}
-        ${p.urgency?`<span class="pill bad">Urgencia: ${p.urgency}</span>`:''}
-        ${p.valor?`<p class="muted">Valor: $${p.valor} · ${p.infraction||''} · ${p.dateImposicion||''}</p>`:''}
-        ${p.body?`<p style="white-space:pre-wrap;margin:8px 0">${p.body}</p>`:''}
-        ${p.link?`<a class="btn ghost small" href="${p.link}" target="_blank" rel="noopener"><i class="ti ti-external-link"></i> Abrir enlace</a>`:''}
+        ${p.urgency?`<span class="pill bad">Urgencia: ${esc(p.urgency)}</span>`:''}
+        ${p.valor?`<p class="muted">Valor: $${p.valor} · ${esc(p.infraction||'')} · ${esc(p.dateImposicion||'')}</p>`:''}
+        ${p.body?`<p style="white-space:pre-wrap;margin:8px 0">${esc(p.body)}</p>`:''}
+        ${p.link?`<a class="btn ghost small" href="${urlSegura(p.link)}" target="_blank" rel="noopener"><i class="ti ti-external-link"></i> Abrir enlace</a>`:''}
         ${p.doc&&(p.doc.dataUrl||p.doc.url)?`<a class="btn ghost small" href="${p.doc.dataUrl||p.doc.url}" target="_blank" download><i class="ti ti-download"></i> Documento</a>`:''}
-        ${!seen?`<button class="btn ok" data-info-ack="${p.id}"><i class="ti ti-check"></i> Marcar como recibido</button>`:`<p class="muted">Recibido: ${a.openedAt}</p>`}
+        ${!seen?`<button class="btn ok" data-info-ack="${p.id}"><i class="ti ti-check"></i> Marcar como recibido</button>`:`<p class="muted">Recibido: ${esc(a.openedAt)}</p>`}
         ${al.evidence?`<label class="btn ghost small"><i class="ti ti-camera"></i> ${a.evidenceMediaId?'Cambiar evidencia':'Adjuntar evidencia'}<input type="file" accept="image/*,.pdf" data-info-evidence="${p.id}" style="display:none"></label>`:''}
         ${al.comment?`<textarea data-info-comment-input="${p.id}" placeholder="Comentario / seguimiento">${a.comment||''}</textarea><button class="btn ghost small" data-info-comment="${p.id}">Guardar comentario</button>`:''}
         ${al.error?`<textarea data-info-error-input="${p.id}" placeholder="Reportar error">${a.error||''}</textarea><button class="btn ghost small" data-info-error="${p.id}">Reportar error</button>`:''}
       </div></div>`}).join(''):'<p class="muted">Sin publicaciones por ahora.</p>'}
     function appAlerts(){const q=myQuicker();const out=[];DOC_DEFS.filter(d=>d.exp).forEach(def=>{const d=q.documents&&q.documents[def.k];if(d&&d.expiry){const dd=daysTo(d.expiry);if(dd<0)out.push({icon:'ti-alert-triangle',cls:'bad',text:`${def.k} VENCIDO (${d.expiry})`});else if(dd<=30)out.push({icon:'ti-clock',cls:'warn',text:`${def.k} vence en ${dd} día(s)`})}});infoForMe().forEach(p=>{const a=(p.acks&&p.acks[session.name])||{};if(!a.openedAt)out.push({icon:'ti-news',cls:'ok',text:`Nueva publicación: ${p.title||p.label}`})});return out}
-    function renderBell(){const a=appAlerts();const dot=document.getElementById('bellDot');if(dot)dot.style.display=a.length?'block':'none';const list=document.getElementById('notifList');if(list)list.innerHTML=a.length?a.map(x=>`<div class="alert ${x.cls}"><i class="ti ${x.icon}"></i> ${x.text}</div>`).join(''):'<p class="muted">Sin alertas.</p>'}
+    function renderBell(){const a=appAlerts();const dot=document.getElementById('bellDot');if(dot)dot.style.display=a.length?'block':'none';const list=document.getElementById('notifList');if(list)list.innerHTML=a.length?a.map(x=>`<div class="alert ${x.cls}"><i class="ti ${x.icon}"></i> ${esc(x.text)}</div>`).join(''):'<p class="muted">Sin alertas.</p>'}
     function hsqAck(id,silent){const p=(state.hsqPublications||[]).find(x=>x.id===id);if(!p)return false;p.acks=p.acks||{};if(!p.acks[session.name]||!p.acks[session.name].openedAt){p.acks[session.name]={...(p.acks[session.name]||{}),openedAt:new Date().toLocaleString('es-CO')};const cl=myQuicker().client||'';const coords=(state.users||[]).filter(u=>u.profile==='Coordinador'&&(!u.client||u.client==='Global'||u.client===cl)).map(u=>u.name);state.notifications=state.notifications||[];[p.createdByName,...coords].filter(Boolean).forEach(n=>state.notifications.unshift({id:uid('NT'),to:n,ticketId:null,read:false,at:new Date().toLocaleString('es-CO'),text:`${session.name} abrió "${p.title||p.label}" (${new Date().toLocaleString('es-CO')})`}));save(silent?'':'Marcado como recibido');return true}return false}
     function overall(t){const ns=(t.assignees||[]);if(!ns.length)return 'Pendiente';const f=ns.filter(n=>(t.gestion?.[n]?.status)==='Finalizado').length;return f===ns.length?'Finalizado':f>0?'En proceso':'Pendiente'}
 
