@@ -5816,15 +5816,55 @@ function toggleMode(forceDark) {
       const path = `${state.session?.id || 'usuario'}/${Date.now()}-${String(id).replace(/[^a-zA-Z0-9_-]/g, '_')}.${ext}`;
       const { error } = await c.storage.from(window.QUICK_SUPABASE_CONFIG.bucket).upload(path, bytes, { contentType: match[1], upsert: false });
       if (error) throw error;
-      const { data } = c.storage.from(window.QUICK_SUPABASE_CONFIG.bucket).getPublicUrl(path);
-      const url = data.publicUrl || '';
-      mediaCache[url] = url;
-      cb && cb(url);
+      // Se guarda la RUTA, no una URL pública. El acceso se concede después
+      // con un enlace firmado y temporal, solo a quien tenga sesión válida.
+      cb && cb(path);
     } catch (e) { console.error(e); toast('No se pudo subir el archivo: ' + e.message); cb && cb(''); }
   }
+
+  // Convierte a ruta de la cubeta cualquier valor guardado: rutas nuevas y
+  // también las URL públicas que quedaron de la configuración anterior.
+  function rutaDeMedio(valor) {
+    const v = String(valor || '');
+    if (!v) return '';
+    const marca = `/storage/v1/object/public/${window.QUICK_SUPABASE_CONFIG.bucket}/`;
+    if (v.includes(marca)) return decodeURIComponent(v.split(marca)[1].split('?')[0]);
+    if (/^https?:/i.test(v)) return '';        // enlace externo, se usa tal cual
+    if (/^data:/i.test(v)) return '';          // imagen embebida
+    return v;                                   // ya es una ruta
+  }
+
+  // Enlace firmado con vencimiento (1 hora), guardado en memoria para no
+  // pedirlo de nuevo en cada repintado de la pantalla.
+  const firmasEnCurso = {};
+  async function urlFirmada(ruta) {
+    if (!ruta) return '';
+    if (mediaCache[ruta]) return mediaCache[ruta];
+    if (firmasEnCurso[ruta]) return firmasEnCurso[ruta];
+    const c = supa();
+    if (!c) return '';
+    firmasEnCurso[ruta] = c.storage.from(window.QUICK_SUPABASE_CONFIG.bucket)
+      .createSignedUrl(ruta, 3600)
+      .then(({ data, error }) => {
+        delete firmasEnCurso[ruta];
+        if (error || !data?.signedUrl) return '';
+        mediaCache[ruta] = data.signedUrl;
+        // Se olvida antes de vencer, para volver a firmarlo cuando haga falta
+        setTimeout(() => { delete mediaCache[ruta]; }, 3300 * 1000);
+        return data.signedUrl;
+      })
+      .catch(() => { delete firmasEnCurso[ruta]; return ''; });
+    return firmasEnCurso[ruta];
+  }
+
   function mediaAttr(item) {
     const local = item && (item.dataUrl || item.photoData || item.url);
-    if (local) return `src="${local}"`;
+    if (local) {
+      const ruta = rutaDeMedio(local);
+      // Los archivos de la cubeta se resuelven con enlace firmado
+      if (ruta) return `data-media-id="${escapeHTML(ruta)}"`;
+      return `src="${local}"`;
+    }
     if (item && item.mediaId) return `data-media-id="${escapeHTML(item.mediaId)}"`;
     return '';
   }
@@ -5832,10 +5872,13 @@ function toggleMode(forceDark) {
   function loadMediaImages() {
     document.querySelectorAll('[data-media-id]:not([data-mloaded])').forEach(el => {
       const id = el.dataset.mediaId;
-      const apply = data => { if (el.tagName === 'IMG') el.src = data; else if (el.tagName === 'A') el.href = data; el.dataset.mloaded = '1'; };
-      if (/^https?:/i.test(id)) { apply(id); return; }
-      if (mediaCache[id]) { apply(mediaCache[id]); return; }
+      const apply = data => { if (!data) return; if (el.tagName === 'IMG') el.src = data; else if (el.tagName === 'A') el.href = data; };
       el.dataset.mloaded = '1';
+      if (/^data:/i.test(id)) { apply(id); return; }
+      const ruta = rutaDeMedio(id);
+      if (!ruta) { if (/^https?:/i.test(id)) apply(id); return; }
+      if (mediaCache[ruta]) { apply(mediaCache[ruta]); return; }
+      urlFirmada(ruta).then(apply).catch(() => {});
     });
   }
 

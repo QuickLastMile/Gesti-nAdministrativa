@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="es">
 <head>
   <meta charset="utf-8">
@@ -207,7 +207,7 @@
     function today(){return new Date().toISOString().slice(0,10)}
     function locate(cb){if(!navigator.geolocation){cb(null);return}navigator.geolocation.getCurrentPosition(pos=>{lastGps={lat:pos.coords.latitude,lng:pos.coords.longitude,time:new Date().toLocaleString('es-CO')};cb(lastGps)},()=>cb(lastGps),{enableHighAccuracy:true,timeout:9000})}
     function reverseGeocode(lat,lng,cb){fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&accept-language=es`,{headers:{'Accept':'application/json'}}).then(r=>r.json()).then(d=>cb(d.display_name||'')).catch(()=>cb(''))}
-    async function uploadMedia(id,dataUrl,cb){const c=supa();if(!c||!dataUrl){cb&&cb('');return}try{const m=String(dataUrl).match(/^data:([^;]+);base64,(.+)$/);if(!m)throw new Error('Formato de archivo no válido');const bytes=Uint8Array.from(atob(m[2]),x=>x.charCodeAt(0));const ext=(m[1].split('/')[1]||'bin').replace(/[^a-z0-9]/gi,'');const path=`${session?.id||'anonimo'}/${Date.now()}-${String(id).replace(/[^a-zA-Z0-9_-]/g,'_')}.${ext}`;const{error}=await c.storage.from(window.QUICK_SUPABASE_CONFIG.bucket).upload(path,bytes,{contentType:m[1],upsert:false});if(error)throw error;const{data}=c.storage.from(window.QUICK_SUPABASE_CONFIG.bucket).getPublicUrl(path);cb&&cb(data.publicUrl||'')}catch(e){console.error(e);toast('No se pudo subir el archivo: '+e.message,'bad',4500);cb&&cb('')}}
+    async function uploadMedia(id,dataUrl,cb){const c=supa();if(!c||!dataUrl){cb&&cb('');return}try{const m=String(dataUrl).match(/^data:([^;]+);base64,(.+)$/);if(!m)throw new Error('Formato de archivo no válido');const bytes=Uint8Array.from(atob(m[2]),x=>x.charCodeAt(0));const ext=(m[1].split('/')[1]||'bin').replace(/[^a-z0-9]/gi,'');const path=`${session?.id||'anonimo'}/${Date.now()}-${String(id).replace(/[^a-zA-Z0-9_-]/g,'_')}.${ext}`;const{error}=await c.storage.from(window.QUICK_SUPABASE_CONFIG.bucket).upload(path,bytes,{contentType:m[1],upsert:false});if(error)throw error;/* Se guarda la RUTA: el acceso se concede con enlace firmado, no publico */cb&&cb(path)}catch(e){console.error(e);toast('No se pudo subir el archivo: '+e.message,'bad',4500);cb&&cb('')}}
     // Sella la foto con dirección, fecha y hora
     function stampPhoto(dataUrl,address,stamp,cb){const img=new Image();img.onload=()=>{const c=document.createElement('canvas');const W=Math.min(img.width,1280);const scale=W/img.width;c.width=W;c.height=img.height*scale;const ctx=c.getContext('2d');ctx.drawImage(img,0,0,c.width,c.height);
       const fs=Math.max(13,Math.round(c.width/40));const lh=fs*1.4;const addr=address||'Ubicación no disponible';const maxLen=Math.floor(c.width/(fs*0.56));
