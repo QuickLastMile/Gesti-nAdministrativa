@@ -3843,7 +3843,7 @@ function toggleMode(forceDark) {
   }
 
   function renderDashboard() {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Bogota' }).format(new Date());
     const scopeAvail = scopedItems(state.availabilities, a => ({ client: a.client, point: a.point, quicker: a.quicker }));
     const todayShifts = scopeAvail.filter(d => d.date === today);
     const activeQuickers = scopedItems(state.quickers, q => q).filter(q => q.status === 'Activo');
@@ -3852,8 +3852,8 @@ function toggleMode(forceDark) {
     const inProgress = todayShifts.filter(d => d.realStart && !d.realEnd);
     const completed = todayShifts.filter(d => d.realEnd);
     const notStarted = todayShifts.filter(d => !d.realStart);
-    const openNovelties = state.novelties.filter(n => !/cerrada|rechazada|resuelta|finalizada/i.test(n.status || ''));
-    const openTickets = state.tickets.filter(isTicketOpen);
+    const openNovelties = scopedItems(state.novelties, n => ({ client: n.client, point: n.point, quicker: n.quicker })).filter(n => !/cerrada|rechazada|resuelta|finalizada/i.test(n.status || ''));
+    const openTickets = scopedItems(state.tickets, t => ({ client: t.client, point: t.point, quicker: t.quicker })).filter(isTicketOpen);
     const docAlerts = documentNotifications();
     const noClose = noCloseNotifications();
     const documented = activeQuickers.filter(q => quickerDocState(q).label === 'Al día').length;
@@ -3881,15 +3881,11 @@ function toggleMode(forceDark) {
     </div>
     <div style="display:grid;grid-template-columns:minmax(0,1.55fr) minmax(280px,.75fr);gap:16px">
       <section class="settings-block" style="margin:0"><div style="display:flex;align-items:center;justify-content:space-between;gap:12px"><div><div class="settings-block-title">Prioridades para revisar</div><div class="fp-sub">Pendientes que requieren decisión o seguimiento.</div></div><span class="b ${attention.length ? 'b-red' : 'b-green'}">${attention.length} visibles</span></div><div style="margin-top:8px">${attentionHTML}</div></section>
-      <div style="display:grid;gap:16px;align-content:start">
-        <section class="settings-block" style="margin:0"><div class="settings-block-title">Malla de hoy</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px 0"><div><strong style="font-size:22px">${todayShifts.length}</strong><div class="fp-sub">Programados</div></div><div><strong style="font-size:22px">${notStarted.length}</strong><div class="fp-sub">Sin iniciar</div></div></div>${operationHTML}<button class="dev-btn" type="button" data-nav-module="mallas" style="margin-top:12px;width:100%">Ver malla completa</button></section>
-        <section class="settings-block" style="margin:0"><div class="settings-block-title">Seguimiento</div><div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:12px"><span class="b b-red">${unassigned.length} sin asignar</span><span class="b b-yellow">${noClose.length} sin cierre</span><span class="b b-yellow">${docAlerts.length} documentos</span><span class="b b-blue">${inProgress.length} en curso</span></div></section>
-      </div>
+      <section class="settings-block" style="margin:0;align-self:start"><div class="settings-block-title">Malla de hoy</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px 0"><div><strong style="font-size:22px">${todayShifts.length}</strong><div class="fp-sub">Programados</div></div><div><strong style="font-size:22px">${notStarted.length}</strong><div class="fp-sub">Sin iniciar</div></div></div>${operationHTML}<button class="dev-btn" type="button" data-nav-module="mallas" style="margin-top:12px;width:100%">Ver malla completa</button></section>
     </div>`;
     panel('dashboard', 'Resumen general', `Operación y pendientes clave · ${today}`,
       `<button class="dev-btn primary" data-open="malla"><i class="ti ti-calendar-plus"></i> Crear malla</button>
-       <button class="dev-btn" data-open="ticket"><i class="ti ti-ticket"></i> Crear ticket</button>
-       <button class="dev-btn" data-export="all"><i class="ti ti-download"></i> Exportar todo</button>`,
+       <button class="dev-btn" data-open="ticket"><i class="ti ti-ticket"></i> Crear ticket</button>`,
       summary
     );
   }
