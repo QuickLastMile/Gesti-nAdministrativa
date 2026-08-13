@@ -3843,21 +3843,54 @@ function toggleMode(forceDark) {
   }
 
   function renderDashboard() {
-    const openNov = state.novelties.filter(n => !/cerrada|rechazada/i.test(n.status)).length;
-    const activeQuickers = state.quickers.filter(q => q.status === 'Activo').length;
-    const inProgress = state.availabilities.filter(d => /iniciado|en turno|novedad/i.test(d.status)).length;
-    const openTickets = state.tickets.filter(isTicketOpen).length;
-    const logs = state.logs.slice(0, 5).map(l => row([escapeHTML(l.time), escapeHTML(l.user), escapeHTML(l.entity), escapeHTML(l.action), escapeHTML(l.detail)]));
-    panel('dashboard', 'MVP funcional conectado a datos locales', 'Estos indicadores ya salen de registros creados/editados en el navegador.',
+    const today = new Date().toISOString().slice(0, 10);
+    const scopeAvail = scopedItems(state.availabilities, a => ({ client: a.client, point: a.point, quicker: a.quicker }));
+    const todayShifts = scopeAvail.filter(d => d.date === today);
+    const activeQuickers = scopedItems(state.quickers, q => q).filter(q => q.status === 'Activo');
+    const assigned = todayShifts.filter(d => d.quicker);
+    const unassigned = todayShifts.filter(d => !d.quicker);
+    const inProgress = todayShifts.filter(d => d.realStart && !d.realEnd);
+    const completed = todayShifts.filter(d => d.realEnd);
+    const notStarted = todayShifts.filter(d => !d.realStart);
+    const openNovelties = state.novelties.filter(n => !/cerrada|rechazada|resuelta|finalizada/i.test(n.status || ''));
+    const openTickets = state.tickets.filter(isTicketOpen);
+    const docAlerts = documentNotifications();
+    const noClose = noCloseNotifications();
+    const documented = activeQuickers.filter(q => quickerDocState(q).label === 'Al día').length;
+    const coverage = todayShifts.length ? Math.round((assigned.length / todayShifts.length) * 100) : 0;
+    const completion = todayShifts.length ? Math.round((completed.length / todayShifts.length) * 100) : 0;
+    const attention = [
+      ...unassigned.map(d => ({ level: 'Crítico', icon: 'ti-user-question', title: 'Turno sin mensajero', detail: `${d.client || 'Sin operación'} · ${d.point || 'Sin punto'} · ${d.plannedStart || 'Sin hora'}`, module: 'mallas' })),
+      ...noClose.map(n => ({ level: 'Crítico', icon: 'ti-clock-exclamation', title: 'Marcación de salida pendiente', detail: n.text, module: 'mallas' })),
+      ...docAlerts.map(n => ({ level: /venció|rechazado|no ha cargado/i.test(n.text) ? 'Crítico' : 'Revisar', icon: 'ti-file-alert', title: 'Documentación', detail: n.text, module: 'quickers' })),
+      ...openNovelties.map(n => ({ level: /crític|alta|urgente/i.test(`${n.priority || ''} ${n.status || ''}`) ? 'Crítico' : 'Revisar', icon: 'ti-alert-triangle', title: n.type || 'Novedad pendiente', detail: `${n.quicker || n.ref || 'Sin referencia'} · ${n.status || 'Pendiente'}`, module: 'novedades' })),
+      ...openTickets.map(t => ({ level: /alta|urgente|venc/i.test(`${t.priority || ''} ${t.status || ''}`) ? 'Crítico' : 'Revisar', icon: 'ti-ticket', title: t.title || t.type || 'Ticket abierto', detail: `${t.owner || t.assignee || 'Sin responsable'} · ${t.status || 'Abierto'}`, module: 'tickets' }))
+    ].slice(0, 8);
+    const attentionHTML = attention.length ? attention.map(item => `<div style="display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:12px;align-items:center;padding:12px 4px;border-bottom:1px solid var(--border)">
+      <div class="tl-dot ${item.level === 'Crítico' ? 'r' : 'y'}"><i class="ti ${item.icon}" style="font-size:11px"></i></div>
+      <div style="min-width:0"><div style="font-weight:800">${escapeHTML(item.title)}</div><div class="fp-sub" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHTML(item.detail)}</div></div>
+      <button class="dev-btn" type="button" data-nav-module="${item.module}">Revisar</button>
+    </div>`).join('') : '<div style="padding:28px;text-align:center"><i class="ti ti-circle-check" style="font-size:28px;color:#22c55e"></i><div style="font-weight:800;margin-top:8px">Sin pendientes prioritarios</div><div class="fp-sub">La operación no presenta alertas que requieran atención.</div></div>';
+    const operationCounts = Object.entries(todayShifts.reduce((acc, d) => { const key = d.client || 'Sin operación'; acc[key] = (acc[key] || 0) + 1; return acc; }, {})).sort((a,b) => b[1]-a[1]).slice(0, 6);
+    const operationHTML = operationCounts.length ? operationCounts.map(([name, count]) => `<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)"><span style="font-weight:700">${escapeHTML(name)}</span><span class="b b-blue">${count} turnos</span></div>`).join('') : '<div class="fp-sub" style="padding:18px 0">No hay malla programada para hoy.</div>';
+    const summary = `<div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:16px">
+      <div class="record-card"><div class="fp-sub">Cobertura de malla</div><div style="font-size:30px;font-weight:900;margin:6px 0">${coverage}%</div><div class="fp-sub">${assigned.length} asignados · ${unassigned.length} sin asignar</div></div>
+      <div class="record-card"><div class="fp-sub">Ejecución de hoy</div><div style="font-size:30px;font-weight:900;margin:6px 0">${completion}%</div><div class="fp-sub">${inProgress.length} en curso · ${completed.length} finalizados</div></div>
+      <div class="record-card"><div class="fp-sub">Pendientes operativos</div><div style="font-size:30px;font-weight:900;margin:6px 0">${openNovelties.length + openTickets.length}</div><div class="fp-sub">${openNovelties.length} novedades · ${openTickets.length} tickets</div></div>
+      <div class="record-card"><div class="fp-sub">Documentos al día</div><div style="font-size:30px;font-weight:900;margin:6px 0">${documented}/${activeQuickers.length}</div><div class="fp-sub">${docAlerts.length} alertas documentales</div></div>
+    </div>
+    <div style="display:grid;grid-template-columns:minmax(0,1.55fr) minmax(280px,.75fr);gap:16px">
+      <section class="settings-block" style="margin:0"><div style="display:flex;align-items:center;justify-content:space-between;gap:12px"><div><div class="settings-block-title">Prioridades para revisar</div><div class="fp-sub">Pendientes que requieren decisión o seguimiento.</div></div><span class="b ${attention.length ? 'b-red' : 'b-green'}">${attention.length} visibles</span></div><div style="margin-top:8px">${attentionHTML}</div></section>
+      <div style="display:grid;gap:16px;align-content:start">
+        <section class="settings-block" style="margin:0"><div class="settings-block-title">Malla de hoy</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px 0"><div><strong style="font-size:22px">${todayShifts.length}</strong><div class="fp-sub">Programados</div></div><div><strong style="font-size:22px">${notStarted.length}</strong><div class="fp-sub">Sin iniciar</div></div></div>${operationHTML}<button class="dev-btn" type="button" data-nav-module="mallas" style="margin-top:12px;width:100%">Ver malla completa</button></section>
+        <section class="settings-block" style="margin:0"><div class="settings-block-title">Seguimiento</div><div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:12px"><span class="b b-red">${unassigned.length} sin asignar</span><span class="b b-yellow">${noClose.length} sin cierre</span><span class="b b-yellow">${docAlerts.length} documentos</span><span class="b b-blue">${inProgress.length} en curso</span></div></section>
+      </div>
+    </div>`;
+    panel('dashboard', 'Resumen general', `Operación y pendientes clave · ${today}`,
       `<button class="dev-btn primary" data-open="malla"><i class="ti ti-calendar-plus"></i> Crear malla</button>
        <button class="dev-btn" data-open="ticket"><i class="ti ti-ticket"></i> Crear ticket</button>
        <button class="dev-btn" data-export="all"><i class="ti ti-download"></i> Exportar todo</button>`,
-      metrics([
-        ['Quickers activos', activeQuickers, 'Maestra de Quickers'],
-        ['Turnos en curso', inProgress, 'Disponibilidades activas'],
-        ['Novedades abiertas', openNov, 'Pendientes de coordinador'],
-        ['Tickets abiertos', openTickets, 'Carga de coordinadores']
-      ]) + table(['Hora', 'Usuario', 'Entidad', 'Acción', 'Detalle'], logs)
+      summary
     );
   }
 
@@ -6011,7 +6044,7 @@ function toggleMode(forceDark) {
     const isJefe = profile === 'Jefe';
     // El carnet de presentación solo lo pueden crear estos perfiles
     const canCarnet = ['Administrador', 'Jefe', 'Coordinador', 'HSQ'].includes(profile) || !profile;
-    const allowedTabs = ['miUsuario', ...(isAdmin ? ['clientes', 'usuarios', 'quickers', 'modulos', 'tickets', 'hsq'] : []), ...((isCoordinator || isJefe) ? ['quickers'] : []), ...(canCarnet ? ['carnet'] : []), 'apariencia'];
+    const allowedTabs = ['miUsuario', ...(isAdmin ? ['clientes', 'usuarios', 'quickers', 'modulos', 'tickets', 'hsq', 'actividad'] : []), ...((isCoordinator || isJefe) ? ['quickers', 'actividad'] : []), ...(canCarnet ? ['carnet'] : []), 'apariencia'];
     const tab = allowedTabs.includes(state.prefs.configTab) ? state.prefs.configTab : 'miUsuario';
     const navBtn = (id, icon, label) => `<button class="settings-tab ${tab === id ? 'on' : ''}" data-config-tab="${id}"><i class="ti ${icon}"></i><span>${label}</span></button>`;
     const userPhoto = user.avatarUrl ? `<img src="${user.avatarUrl}" alt="${escapeHTML(user.name)}">` : initials(user.name);
@@ -6092,9 +6125,12 @@ function toggleMode(forceDark) {
         </button>
       </div>
     </section>`;
+    const activityRows = state.logs.slice(0, 150).map(l => row([escapeHTML(l.time), escapeHTML(l.user), escapeHTML(l.entity), escapeHTML(l.action), escapeHTML(l.detail)]));
+    const actividadSection = `<section class="settings-block"><div class="settings-actions"><span class="b b-blue">${state.logs.length} registros</span></div>${table(['Hora', 'Usuario', 'Entidad', 'Acción', 'Detalle'], activityRows)}</section>`;
     const sections = {
       miUsuario: accountSection,
       apariencia: aparienciaSection,
+      actividad: actividadSection,
       clientes: `<section class="settings-block"><div class="settings-actions"><button class="dev-btn primary" data-open="cliente"><i class="ti ti-building-plus"></i> Nuevo cliente</button><select data-points-client>${clientOptions}</select><label class="dev-btn"><i class="ti ti-upload"></i> Importar puntos<input type="file" accept=".xlsx,.xls,.csv" data-import-points style="display:none"></label><button class="dev-btn" data-export-points><i class="ti ti-download"></i> Exportar puntos</button></div><div class="record-grid">${clientCards || '<div class="fp-sub">No hay clientes creados.</div>'}</div></section>`,
       usuarios: `<section class="settings-block"><div class="settings-actions"><button class="dev-btn primary" data-open="usuario"><i class="ti ti-user-plus"></i> Nuevo usuario</button><select data-edit-user-select><option value="">Editar usuario existente...</option>${existing}</select><button class="dev-btn" data-edit-selected-user>Editar seleccionado</button></div><div class="record-grid">${userCards || '<div class="fp-sub">No hay usuarios creados.</div>'}</div></section>`,
       quickers: `<section class="settings-block"><div class="settings-actions"><button class="dev-btn primary" data-open="messengerUser"><i class="ti ti-user-bolt"></i> Crear mensajero</button></div><div class="record-grid">${quickers || '<div class="fp-sub">No hay mensajeros creados.</div>'}</div></section>`,
@@ -6141,12 +6177,13 @@ function toggleMode(forceDark) {
           ${(isAdmin || isCoordinator || isJefe) ? navBtn('quickers', 'ti-motorbike', 'Quickers') : ''}
           ${canCarnet ? '<div class="settings-section-label">Presentación</div>' + navBtn('carnet', 'ti-id-badge', 'Mi carnet') : ''}
           ${isAdmin ? '<div class="settings-section-label">Módulos</div>' + navBtn('modulos', 'ti-layout-grid-add', 'Módulos') + navBtn('tickets', 'ti-ticket', 'Tickets') + navBtn('hsq', 'ti-shield-half', 'HSQ / Alertas') : ''}
+          ${(isAdmin || isCoordinator || isJefe) ? '<div class="settings-section-label">Auditoría</div>' + navBtn('actividad', 'ti-history', 'Registro de cambios') : ''}
           <div class="settings-section-label">Apariencia</div>
           ${navBtn('apariencia', 'ti-palette', 'Apariencia')}
         </aside>
         <main class="settings-main">
-          <div class="settings-title">${tab === 'miUsuario' ? 'Mi usuario' : tab === 'clientes' ? 'Clientes' : tab === 'usuarios' ? 'Usuarios' : tab === 'quickers' ? 'Quickers' : tab === 'tickets' ? 'Tickets' : tab === 'hsq' ? 'HSQ / Alertas' : tab === 'apariencia' ? 'Apariencia' : tab === 'carnet' ? 'Mi carnet' : 'Módulos'}</div>
-          <div class="settings-desc">${tab === 'miUsuario' ? 'Administra la información de la cuenta con la que ingresaste.' : tab === 'clientes' ? 'Crea clientes, reglas de operación y puntos de venta.' : tab === 'usuarios' ? 'Crea usuarios, perfiles, alcance operativo y permisos.' : tab === 'quickers' ? 'Crea usuarios mensajeros desde matriz de activos y habilita pagos adicionales.' : tab === 'tickets' ? 'Configura las preguntas y listas del formulario de creación de tickets.' : tab === 'apariencia' ? 'Elige el tema visual de la plataforma.' : tab === 'carnet' ? 'Carnet digital de presentación para visitas a puntos de venta.' : 'Configura títulos, plantillas y listas que alimentan la malla.'}</div>
+          <div class="settings-title">${tab === 'miUsuario' ? 'Mi usuario' : tab === 'clientes' ? 'Clientes' : tab === 'usuarios' ? 'Usuarios' : tab === 'quickers' ? 'Quickers' : tab === 'tickets' ? 'Tickets' : tab === 'hsq' ? 'HSQ / Alertas' : tab === 'actividad' ? 'Registro de cambios' : tab === 'apariencia' ? 'Apariencia' : tab === 'carnet' ? 'Mi carnet' : 'Módulos'}</div>
+          <div class="settings-desc">${tab === 'miUsuario' ? 'Administra la información de la cuenta con la que ingresaste.' : tab === 'clientes' ? 'Crea clientes, reglas de operación y puntos de venta.' : tab === 'usuarios' ? 'Crea usuarios, perfiles, alcance operativo y permisos.' : tab === 'quickers' ? 'Crea usuarios mensajeros desde matriz de activos y habilita pagos adicionales.' : tab === 'tickets' ? 'Configura las preguntas y listas del formulario de creación de tickets.' : tab === 'actividad' ? 'Consulta la trazabilidad de cambios realizados en la plataforma.' : tab === 'apariencia' ? 'Elige el tema visual de la plataforma.' : tab === 'carnet' ? 'Carnet digital de presentación para visitas a puntos de venta.' : 'Configura títulos, plantillas y listas que alimentan la malla.'}</div>
           ${sections[tab] || sections.miUsuario}
         </main>
       </div>`
@@ -8805,6 +8842,13 @@ function toggleMode(forceDark) {
   }
 
   document.addEventListener('click', async event => {
+    const dashboardNav = event.target.closest('[data-nav-module]');
+    if (dashboardNav) {
+      const moduleId = dashboardNav.dataset.navModule;
+      const menuItem = document.querySelector(`.nav-item[onclick*="'${moduleId}'"]`);
+      window.nav(moduleId, menuItem || null);
+      return;
+    }
     const previewAttachment = event.target.closest('[data-preview-attachment]');
     if (previewAttachment) openAttachmentPreview(previewAttachment.dataset.previewAttachment);
     const open = event.target.closest('[data-open]');
