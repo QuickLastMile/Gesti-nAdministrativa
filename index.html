@@ -256,11 +256,13 @@
   .tb-icon-btn:hover { background: var(--card-bg-hover); color: var(--text-1); }
   .tb-icon-btn .ti { font-size: 17px; }
   .notif-dot {
-    position: absolute; top: 4px; right: 4px;
-    width: 8px; height: 8px; border-radius: 50%;
-    background: #EF4444;
-    border: 2px solid var(--topbar-bg);
+    position:absolute; top:-7px; right:-7px; min-width:19px; height:19px;
+    padding:0 5px; border-radius:999px; display:none; place-items:center;
+    background:#ef4444; color:#fff; border:2px solid var(--topbar-bg);
+    font-size:9px; line-height:1; font-weight:900;
   }
+  @keyframes bell-ring { 0%,100%{transform:rotate(0)} 20%{transform:rotate(13deg)} 40%{transform:rotate(-11deg)} 60%{transform:rotate(8deg)} 80%{transform:rotate(-5deg)} }
+  .tb-icon-btn.has-unread .ti-bell { animation:bell-ring .75s ease-in-out 2; transform-origin:50% 10%; color:#fbbf24; }
   #mode-toggle {
     display: flex; align-items: center; gap: 7px;
     padding: 7px 14px; border-radius: 20px;
@@ -1048,14 +1050,14 @@
   .malla-record-toolbar input { min-width:240px; }
   .record-sort-btn { border:0; background:transparent; color:inherit; font:inherit; font-weight:900; cursor:pointer; white-space:nowrap; }
   .config-split { display: grid; grid-template-columns: 1fr; gap: 16px; }
-  .settings-shell { display: grid; grid-template-columns: 260px minmax(0,1fr); min-height: 620px; border: 1px solid var(--border); border-radius: 18px; overflow: hidden; background: rgba(0,0,0,.14); }
+  .settings-shell { display:grid; grid-template-columns:230px minmax(0,1fr); width:100%; min-width:0; min-height:calc(100vh - 145px); border:1px solid var(--border); border-radius:16px; overflow:visible; background:rgba(0,0,0,.14); }
   .settings-nav { border-right: 1px solid var(--border); padding: 16px 12px; background: rgba(0,0,0,.16); overflow: auto; }
   .settings-section-label { margin: 12px 10px 8px; color: var(--text-3); font-size: 10px; font-weight: 900; letter-spacing: .8px; text-transform: uppercase; }
   .settings-tab { width: 100%; min-height: 42px; border: 0; border-radius: 11px; padding: 9px 10px; background: transparent; color: var(--text-2); display: flex; align-items: center; gap: 10px; text-align: left; font-weight: 800; cursor: pointer; }
   .settings-tab:hover { background: var(--card-bg); color: var(--text-1); }
   .settings-tab.on { color: var(--text-1); background: rgba(245,197,24,.15); border: 1px solid rgba(245,197,24,.25); }
   .settings-tab .ti { color: var(--q); font-size: 18px; }
-  .settings-main { padding: 24px; overflow: auto; }
+  .settings-main { min-width:0; padding:20px; overflow:visible; }
   .settings-title { font-size: 26px; line-height: 1.1; font-weight: 900; margin-bottom: 6px; }
   .settings-desc { color: var(--text-2); font-size: 13px; margin-bottom: 22px; }
   .settings-block { border-top: 1px solid var(--border); padding-top: 18px; margin-top: 18px; }
@@ -1485,6 +1487,31 @@
     #page-mallas .malla-action-groups.compact-actions { align-items:flex-start; }
     #page-mallas .malla-action-groups.compact-actions .action-group { border-right:0; padding:4px 6px; }
   }
+  #topbar .tb-search { width:min(420px,34vw); }
+  #topbar .tb-search input { width:100%; min-width:0; }
+  .functional-panel > .fp-head { min-height:38px; margin-bottom:8px; }
+  .functional-panel > .fp-head .fp-actions { margin-left:auto; }
+  .functional-panel > .fp-head .fp-actions:empty { display:none; }
+  .settings-main .settings-block { max-width:none; }
+  .settings-main input,.settings-main select,.settings-main textarea { max-width:100%; }
+  .hsq-config-list { display:grid; gap:8px; }
+  .hsq-config-card { border:1px solid var(--border); border-radius:12px; background:rgba(255,255,255,.025); overflow:hidden; }
+  .hsq-config-card > summary { list-style:none; min-height:48px; padding:9px 12px; display:flex; align-items:center; gap:10px; cursor:pointer; }
+  .hsq-config-card > summary::-webkit-details-marker { display:none; }
+  .hsq-config-card > summary strong { flex:1; }
+  .hsq-config-card > summary::before { content:'›'; color:var(--text-3); font-size:20px; transition:transform .2s; }
+  .hsq-config-card[open] > summary::before { transform:rotate(90deg); }
+  .hsq-config-body { border-top:1px solid var(--border); padding:12px; display:grid; gap:12px; }
+  .hsq-options { display:flex; flex-wrap:wrap; gap:6px; }
+  .hsq-options .ticket-req-toggle { padding:6px 8px; border:1px solid var(--border); border-radius:8px; background:rgba(255,255,255,.025); font-size:11px; }
+  .notification-list { display:grid; gap:6px; }
+  .notification-item { display:grid; grid-template-columns:minmax(0,1fr) 32px; align-items:stretch; border:1px solid var(--border); border-radius:11px; overflow:hidden; background:rgba(255,255,255,.025); }
+  .notification-item.unread { border-left:3px solid #ef4444; background:rgba(239,68,68,.045); }
+  .notification-open { width:100%; border:0; background:transparent; color:inherit; padding:10px; display:grid; grid-template-columns:32px minmax(0,1fr); gap:10px; align-items:center; text-align:left; cursor:pointer; }
+  .notification-open:hover { background:rgba(96,165,250,.06); }
+  .notification-dismiss { border:0; border-left:1px solid var(--border); background:transparent; color:var(--text-3); cursor:pointer; }
+  .notification-dismiss:hover { color:#fb7185; background:rgba(239,68,68,.08); }
+  @media(max-width:980px) { .settings-shell{grid-template-columns:190px minmax(0,1fr)} #topbar .tb-search{width:min(320px,38vw)} }
 </style>
 </head>
 <body>
@@ -1573,12 +1600,10 @@
       <span class="tb-title" id="tb-title">Mallas</span>
       <span class="tb-crumb" id="tb-crumb">/ Operaciones</span>
       <div class="tb-spacer"></div>
-      <span id="cloud-status" class="status-pill st-warn">Modo local</span>
-      <span id="project-pill" class="status-pill st-info project-pill">Proyecto: Global</span>
       <div class="tb-search"><i class="ti ti-search"></i><input id="global-search" placeholder="Buscar módulo o Quicker..."></div>
       <button class="tb-icon-btn" type="button" title="Notificaciones" aria-label="Notificaciones" data-show-notifications>
         <i class="ti ti-bell"></i>
-        <div class="notif-dot"></div>
+        <span class="notif-dot" aria-label="0 notificaciones">0</span>
       </button>
       <div class="top-avatar-wrap" style="position:relative">
         <div class="top-avatar" id="top-avatar" title="Cuenta" style="cursor:pointer">AD</div>
@@ -2500,7 +2525,7 @@ function toggleMode(forceDark) {
         parkingReports: source.parkingReports,
         overtimeReports: source.overtimeReports,
         availabilities: source.availabilities,
-        prefs: prefsPick(['novedadesTab', 'novedadesFilters', 'dismissedDelays', 'dismissedOvertime', 'dismissedNoClose'])
+        prefs: prefsPick(['novedadesTab', 'novedadesFilters', 'dismissedDelays', 'dismissedOvertime', 'dismissedNoClose', 'dismissedNotifications'])
       },
       tickets: { tickets: source.tickets, users: source.users },
       quickers: { quickers: source.quickers, users: source.users, clients: source.clients },
@@ -3687,12 +3712,8 @@ function toggleMode(forceDark) {
     Array.from(page.children).forEach(child => {
       if (child !== box) child.remove();
     });
-    box.innerHTML = `
-      <div class="fp-head">
-        <div><div class="fp-title">${title}</div><div class="fp-sub">${subtitle}</div></div>
-        <div class="fp-actions">${moduleDashboardButton(pageId)}${actions}</div>
-      </div>
-      ${body}`;
+    const headerActions = `${actions || ''}`;
+    box.innerHTML = `${headerActions ? `<div class="fp-head"><div class="fp-actions">${headerActions}</div></div>` : ''}${body}`;
   }
 
   function metrics(items) {
@@ -3702,8 +3723,7 @@ function toggleMode(forceDark) {
   }
 
   function moduleDashboardButton(pageId) {
-    if (['dashboard', 'config', 'matriz'].includes(pageId)) return '';
-    return `<button class="dashboard-icon-btn" type="button" data-open-module-dashboard="${pageId}" title="Dashboard de ${moduleLabel(pageId)}" aria-label="Dashboard de ${moduleLabel(pageId)}"><i class="ti ti-chart-dots"></i></button>`;
+    return '';
   }
 
   function moduleKpiGrid(cards) {
@@ -5861,8 +5881,10 @@ function toggleMode(forceDark) {
     };
     const read = new Set(state.prefs.readDocumentAlerts || []);
     const alerts = [];
+    const dismissed = new Set(state.prefs.dismissedNotifications || []);
     (state.quickers || []).filter(scope).forEach(q => {
       const docs = q.documents || {};
+      const issues = [];
       QUICKER_DOC_DEFS.forEach(def => {
         const d = docs[def.k] || {};
         const has = hasMedia(d);
@@ -5875,22 +5897,33 @@ function toggleMode(forceDark) {
           if (days < 0) { level = 'expired'; text = `${q.name}: ${def.k} venció hace ${Math.abs(days)} día(s) (${d.expiry}) y no ha sido actualizado.`; }
           else if (days <= 30) { level = 'soon'; text = `${q.name}: ${def.k} vence en ${days} día(s) (${d.expiry}).`; }
         }
-        if (!level) return;
-        const id = `DOC-${q.id}-${def.k}-${level}`;
-        alerts.push({ id, quickerId: q.id, documentAlert: true, read: read.has(id), at: d.expiry || 'Pendiente', text });
+        if (level) issues.push({ level, text, name: def.k, at: d.expiry || 'Pendiente' });
       });
+      if (!issues.length) return;
+      const urgent = issues.filter(i => ['rejected','expired','soon'].includes(i.level));
+      const id = `DOC-${q.id}-${issues.map(i => i.level + i.name).join('-')}`;
+      if (dismissed.has(id)) return;
+      const text = urgent.length
+        ? `${q.name}: ${urgent.map(i => i.text.replace(`${q.name}: `, '').replace(`${q.name} `, '')).join(' · ')}`
+        : `${q.name} tiene ${issues.length} documento(s) pendientes por completar.`;
+      alerts.push({ id, quickerId:q.id, documentAlert:true, read:read.has(id), at:urgent[0]?.at || 'Pendiente', text, issueCount:issues.length });
     });
-    return alerts.slice(0, 80);
+    return alerts.slice(0, 30);
   }
   function myNotifications() {
     const me = currentUser().name;
-    return [...documentNotifications(), ...noCloseNotifications(), ...(state.notifications || []).filter(n => n.to === me)];
+    const dismissed = new Set(state.prefs.dismissedNotifications || []);
+    return [...documentNotifications(), ...noCloseNotifications(), ...(state.notifications || []).filter(n => n.to === me)].filter(n => !dismissed.has(n.id));
   }
   function updateNotifDot() {
-    const dot = document.querySelector('[data-show-notifications] .notif-dot');
-    if (!dot) return;
+    const button = document.querySelector('[data-show-notifications]');
+    const dot = button?.querySelector('.notif-dot');
+    if (!button || !dot) return;
     const unread = myNotifications().filter(n => !n.read).length;
-    dot.style.display = unread > 0 ? 'block' : 'none';
+    dot.textContent = unread > 99 ? '99+' : String(unread);
+    dot.setAttribute('aria-label', `${unread} notificaciones`);
+    dot.style.display = unread > 0 ? 'grid' : 'none';
+    button.classList.toggle('has-unread', unread > 0);
   }
 
   // ════════════════════ HSQ / ALERTAS ════════════════════
@@ -6188,13 +6221,14 @@ function toggleMode(forceDark) {
       ...(state.prefs.ticketRequirementOptions || []).map((r, index) => `<div class="form-field-card"><div><strong>${escapeHTML(r.label)}</strong><br><span class="fp-sub">Personalizado · marcable por el coordinador</span></div><span>Manual</span><div class="row-actions">${iconAction('Eliminar requisito', 'deleteTicketReq', String(index), 'ti-trash')}</div></div>`)
     ].join('');
     const pqrCards = (state.prefs.pqrTypes || []).map((t, index) => `<div class="form-field-card"><div><strong>${escapeHTML(t)}</strong></div><span>Mensajero</span><div class="row-actions">${iconAction('Eliminar tipo', 'deletePqrType', String(index), 'ti-trash')}</div></div>`).join('');
-    const hsqCfgCards = (state.prefs.hsqTypes || []).map(t => `<div class="form-field-card" style="display:block">
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px"><strong><i class="ti ${t.icon || 'ti-bell'}"></i> ${escapeHTML(t.label)}</strong><div class="row-actions"><label class="ticket-req-toggle"><input type="checkbox" data-hsq-cfg-enabled="${t.key}" ${t.enabled !== false ? 'checked' : ''}> Activo</label>${iconAction('Eliminar tipo', 'deleteHsqType', t.key, 'ti-trash')}</div></div>
-      <div class="fp-sub" style="margin-bottom:4px">Campos / preguntas</div>
-      <div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:8px">${Object.keys(HSQ_FIELD_DEFS).map(fk => `<label class="ticket-req-toggle"><input type="checkbox" data-hsq-cfg-field="${t.key}:${fk}" ${(t.fields || []).includes(fk) ? 'checked' : ''}> ${escapeHTML(HSQ_FIELD_DEFS[fk].label)}</label>`).join('')}</div>
-      <div class="fp-sub" style="margin-bottom:4px">El mensajero puede</div>
-      <div style="display:flex;flex-wrap:wrap;gap:10px">${['evidence', 'comment', 'error'].map(a => `<label class="ticket-req-toggle"><input type="checkbox" data-hsq-cfg-allow="${t.key}:${a}" ${t[a] ? 'checked' : ''}> ${a === 'evidence' ? 'Evidencia' : a === 'comment' ? 'Comentar' : 'Reportar error'}</label>`).join('')}</div>
-    </div>`).join('');
+    const hsqCfgCards = (state.prefs.hsqTypes || []).map((t, index) => `<details class="hsq-config-card" ${index === 0 ? 'open' : ''}>
+      <summary><i class="ti ${t.icon || 'ti-bell'}"></i><strong>${escapeHTML(t.label)}</strong><span class="b ${t.enabled !== false ? 'b-green' : ''}">${t.enabled !== false ? 'Activo' : 'Inactivo'}</span></summary>
+      <div class="hsq-config-body">
+        <div><div class="fp-sub" style="margin-bottom:6px">Campos que solicitará esta publicación</div><div class="hsq-options">${Object.keys(HSQ_FIELD_DEFS).map(fk => `<label class="ticket-req-toggle"><input type="checkbox" data-hsq-cfg-field="${t.key}:${fk}" ${(t.fields || []).includes(fk) ? 'checked' : ''}> ${escapeHTML(HSQ_FIELD_DEFS[fk].label)}</label>`).join('')}</div></div>
+        <div><div class="fp-sub" style="margin-bottom:6px">Acciones disponibles para el mensajero</div><div class="hsq-options">${['evidence', 'comment', 'error'].map(a => `<label class="ticket-req-toggle"><input type="checkbox" data-hsq-cfg-allow="${t.key}:${a}" ${t[a] ? 'checked' : ''}> ${a === 'evidence' ? 'Adjuntar evidencia' : a === 'comment' ? 'Comentar' : 'Reportar error'}</label>`).join('')}</div></div>
+        <div class="row-actions" style="justify-content:space-between"><label class="ticket-req-toggle"><input type="checkbox" data-hsq-cfg-enabled="${t.key}" ${t.enabled !== false ? 'checked' : ''}> Publicación activa</label>${iconAction('Eliminar tipo', 'deleteHsqType', t.key, 'ti-trash')}</div>
+      </div>
+    </details>`).join('');
     const isDarkNow = !document.body.classList.contains('light-mode');
     const aparienciaSection = `<section class="settings-block">
       <div class="settings-block-title">Apariencia</div>
@@ -6253,7 +6287,7 @@ function toggleMode(forceDark) {
       hsq: `<section class="settings-block">
         <div class="settings-block-desc" style="margin-bottom:14px;color:var(--text-2)">Define qué se puede publicar en HSQ (capacitaciones, comparendos, tránsito, comunicados…), qué campos pide cada uno y qué puede hacer el mensajero.</div>
         <div class="settings-actions"><button class="dev-btn primary" data-add-hsq-type><i class="ti ti-plus"></i> Agregar tipo de publicación</button></div>
-        <div class="form-builder-list">${hsqCfgCards || '<div class="fp-sub">Sin tipos.</div>'}</div></section>`,
+        <div class="hsq-config-list">${hsqCfgCards || '<div class="fp-sub">Sin tipos.</div>'}</div></section>`,
       carnet: buildAdminCarnetSection(user, profile)
     };
     panel('config', 'Configuración', '', '',
@@ -6272,7 +6306,7 @@ function toggleMode(forceDark) {
         </aside>
         <main class="settings-main">
           <div class="settings-title">${tab === 'miUsuario' ? 'Mi usuario' : tab === 'clientes' ? 'Clientes' : tab === 'usuarios' ? 'Usuarios' : tab === 'quickers' ? 'Quickers' : tab === 'tickets' ? 'Tickets' : tab === 'hsq' ? 'HSQ / Alertas' : tab === 'actividad' ? 'Registro de cambios' : tab === 'apariencia' ? 'Apariencia' : tab === 'carnet' ? 'Mi carnet' : 'Módulos'}</div>
-          <div class="settings-desc">${tab === 'miUsuario' ? 'Administra la información de la cuenta con la que ingresaste.' : tab === 'clientes' ? 'Crea clientes, reglas de operación y puntos de venta.' : tab === 'usuarios' ? 'Crea usuarios, perfiles, alcance operativo y permisos.' : tab === 'quickers' ? 'Crea usuarios mensajeros desde matriz de activos y habilita pagos adicionales.' : tab === 'tickets' ? 'Configura las preguntas y listas del formulario de creación de tickets.' : tab === 'actividad' ? 'Consulta la trazabilidad de cambios realizados en la plataforma.' : tab === 'apariencia' ? 'Elige el tema visual de la plataforma.' : tab === 'carnet' ? 'Carnet digital de presentación para visitas a puntos de venta.' : 'Configura títulos, plantillas y listas que alimentan la malla.'}</div>
+          <div class="settings-desc">${tab === 'miUsuario' ? 'Administra la información de la cuenta con la que ingresaste.' : tab === 'clientes' ? 'Crea clientes, reglas de operación y puntos de venta.' : tab === 'usuarios' ? 'Crea usuarios, perfiles, alcance operativo y permisos.' : tab === 'quickers' ? 'Crea usuarios mensajeros desde matriz de activos y habilita pagos adicionales.' : tab === 'tickets' ? 'Configura las preguntas y listas del formulario de creación de tickets.' : tab === 'hsq' ? 'Organiza los tipos de publicación y los campos que verá el mensajero.' : tab === 'actividad' ? 'Consulta la trazabilidad de cambios realizados en la plataforma.' : tab === 'apariencia' ? 'Elige el tema visual de la plataforma.' : tab === 'carnet' ? 'Carnet digital de presentación para visitas a puntos de venta.' : 'Configura títulos, plantillas y listas que alimentan la malla.'}</div>
           ${sections[tab] || sections.miUsuario}
         </main>
       </div>`
@@ -8183,38 +8217,25 @@ function toggleMode(forceDark) {
     const documentAlerts = all.filter(n => n.documentAlert);
     const noClose = all.filter(n => n.noClose);
     const mine = all.filter(n => !n.noClose && !n.documentAlert).slice(0, 30);
-    const documentHTML = documentAlerts.length ? documentAlerts.map(n => `<button type="button" class="notif-row ${n.read ? '' : 'unread'}" data-open-document-alert="${escapeHTML(n.id)}" data-quicker-id="${escapeHTML(n.quickerId)}">
-      <div class="tl-dot ${/venció|rechazado|no ha cargado/i.test(n.text) ? 'r' : 'y'}"><i class="ti ti-file-alert" style="font-size:10px"></i></div>
-      <div class="tl-body"><div class="tl-body-title">${escapeHTML(n.text)}</div><div class="tl-body-meta">${escapeHTML(n.at)}${n.read ? '' : ' · nuevo'}</div></div>
-    </button>`).join('') : '<div class="fp-sub">Sin alertas documentales.</div>';
-    const noCloseHTML = noClose.length ? noClose.map(n => `<button type="button" class="notif-row ${n.read ? '' : 'unread'}" data-open-noclose="${escapeHTML(n.id)}">
-      <div class="tl-dot ${n.read ? 'b' : 'y'}"><i class="ti ti-clock-exclamation" style="font-size:10px"></i></div>
-      <div class="tl-body"><div class="tl-body-title">${escapeHTML(n.text)}</div><div class="tl-body-meta">${escapeHTML(n.at)}${n.read ? '' : ' · nuevo'}</div></div>
-    </button>`).join('') : '<div class="fp-sub">Sin turnos pendientes de cierre.</div>';
-    const ticketNotifsHTML = mine.length ? mine.map(n => `<button type="button" class="notif-row ${n.read ? '' : 'unread'}" data-open-ticket-notif="${escapeHTML(n.ticketId || '')}">
-      <div class="tl-dot ${n.read ? 'b' : 'y'}"><i class="ti ti-ticket" style="font-size:10px"></i></div>
-      <div class="tl-body"><div class="tl-body-title">${escapeHTML(n.text)}</div><div class="tl-body-meta">${escapeHTML(n.at)}${n.read ? '' : ' · nuevo'}</div></div>
-    </button>`).join('') : '<div class="fp-sub">No tienes notificaciones de tickets.</div>';
-
-    const alerts = [
-      ...state.novelties.filter(n => !/cerrada|rechazada/i.test(n.status)).slice(0, 6).map(n => ({ icon: 'ti-alert-triangle', title: n.type, meta: `${n.status || 'Pendiente'} · ${n.ref || ''}` })),
-      ...state.logs.slice(0, 4).map(l => ({ icon: 'ti-history', title: l.action, meta: `${l.entity} · ${l.time}` }))
-    ];
+    const notificationItem = (n, kind) => `<div class="notification-item ${n.read ? '' : 'unread'}">
+      <button type="button" class="notification-open" ${kind === 'document' ? `data-open-document-alert="${escapeHTML(n.id)}" data-quicker-id="${escapeHTML(n.quickerId)}"` : kind === 'noclose' ? `data-open-noclose="${escapeHTML(n.id)}"` : `data-open-ticket-notif="${escapeHTML(n.ticketId || '')}"`}>
+        <div class="tl-dot ${kind === 'document' && /venció|rechazado/i.test(n.text) ? 'r' : n.read ? 'b' : 'y'}"><i class="ti ${kind === 'document' ? 'ti-file-alert' : kind === 'noclose' ? 'ti-clock-exclamation' : 'ti-ticket'}" style="font-size:11px"></i></div>
+        <div class="tl-body"><div class="tl-body-title">${escapeHTML(n.text)}</div><div class="tl-body-meta">${escapeHTML(n.at || 'Ahora')}${n.read ? '' : ' · nuevo'}</div></div>
+      </button><button type="button" class="notification-dismiss" data-dismiss-notification="${escapeHTML(n.id)}" title="Descartar" aria-label="Descartar"><i class="ti ti-x"></i></button>
+    </div>`;
+    const documentHTML = documentAlerts.length ? documentAlerts.map(n => notificationItem(n, 'document')).join('') : '<div class="fp-sub">Sin alertas documentales.</div>';
+    const noCloseHTML = noClose.length ? noClose.map(n => notificationItem(n, 'noclose')).join('') : '<div class="fp-sub">Sin turnos pendientes de cierre.</div>';
+    const ticketNotifsHTML = mine.length ? mine.map(n => notificationItem(n, 'ticket')).join('') : '<div class="fp-sub">No tienes notificaciones de tickets.</div>';
     document.getElementById('modal-title').textContent = 'Notificaciones';
     document.getElementById('modal-subtitle').textContent = 'Tickets asignados, respuestas y actividad reciente.';
     form.innerHTML = `
     <div class="settings-block-title" style="margin-bottom:8px"><i class="ti ti-file-alert"></i> Seguimiento documental${documentAlerts.filter(n => !n.read).length ? ` <span class="b b-red">${documentAlerts.filter(n => !n.read).length}</span>` : ''}</div>
-    <div class="tl-list">${documentHTML}</div>
+    <div class="notification-list">${documentHTML}</div>
     <div class="settings-block-title" style="margin:16px 0 8px"><i class="ti ti-clock-exclamation"></i> Turnos sin marcación de salida${noClose.filter(n => !n.read).length ? ` <span class="b b-red">${noClose.filter(n => !n.read).length}</span>` : ''}</div>
-    <div class="tl-list">${noCloseHTML}</div>
+    <div class="notification-list">${noCloseHTML}</div>
     <div class="settings-block-title" style="margin:16px 0 8px"><i class="ti ti-ticket"></i> Mis tickets</div>
-    <div class="tl-list">${ticketNotifsHTML}</div>
-    <div class="settings-block-title" style="margin:16px 0 8px"><i class="ti ti-bell"></i> Actividad general</div>
-    <div class="tl-list">${alerts.map(item => `<div class="tl-item">
-      <div class="tl-dot y"><i class="ti ${item.icon}" style="font-size:10px"></i></div>
-      <div class="tl-body"><div class="tl-body-title">${escapeHTML(item.title || 'Notificación')}</div><div class="tl-body-meta">${escapeHTML(item.meta || '')}</div></div>
-    </div>`).join('') || '<div class="fp-sub">Sin actividad reciente.</div>'}</div>
-    <div class="modal-foot"><button class="dev-btn" type="button" data-mark-all-notif>Marcar todo leído</button><button class="dev-btn primary" type="button" id="cancel-form">Cerrar</button></div>`;
+    <div class="notification-list">${ticketNotifsHTML}</div>
+    <div class="modal-foot"><button class="dev-btn" type="button" data-dismiss-read-notif>Limpiar leídas</button><button class="dev-btn" type="button" data-mark-all-notif>Marcar todo leído</button><button class="dev-btn primary" type="button" id="cancel-form">Cerrar</button></div>`;
     document.getElementById('cancel-form').onclick = closeModal;
     const modal = document.getElementById('app-modal');
     modal.classList.remove('wide');
@@ -9397,6 +9418,20 @@ function toggleMode(forceDark) {
       updateNotifDot();
       closeModal();
       openQuickerDocs(openDocumentAlert.dataset.quickerId);
+      return;
+    }
+    const dismissNotification = event.target.closest('[data-dismiss-notification]');
+    if (dismissNotification) {
+      const id = dismissNotification.dataset.dismissNotification;
+      state.prefs.dismissedNotifications = [...new Set([...(state.prefs.dismissedNotifications || []), id])].slice(-200);
+      saveState('Notificación descartada', { render:false }); openNotificationsPanel();
+      return;
+    }
+    const dismissReadNotifications = event.target.closest('[data-dismiss-read-notif]');
+    if (dismissReadNotifications) {
+      const readIds = myNotifications().filter(n => n.read).map(n => n.id);
+      state.prefs.dismissedNotifications = [...new Set([...(state.prefs.dismissedNotifications || []), ...readIds])].slice(-200);
+      saveState('Notificaciones leídas eliminadas', { render:false }); openNotificationsPanel();
       return;
     }
     const markAllNotif = event.target.closest('[data-mark-all-notif]');
