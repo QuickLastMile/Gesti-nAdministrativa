@@ -3594,6 +3594,11 @@ function toggleMode(forceDark) {
       box.className = 'functional-panel';
       page.prepend(box);
     }
+    // El HTML inicial conserva maquetas visuales antiguas. Al renderizar cada
+    // módulo dejamos únicamente el panel conectado al estado real/Supabase.
+    Array.from(page.children).forEach(child => {
+      if (child !== box) child.remove();
+    });
     box.innerHTML = `
       <div class="fp-head">
         <div><div class="fp-title">${title}</div><div class="fp-sub">${subtitle}</div></div>
